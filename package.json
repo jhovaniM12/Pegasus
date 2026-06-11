@@ -1,0 +1,42 @@
+{
+  "name": "pegasus",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.15.4",
+  "scripts": {
+    "build": "pnpm --filter @pegasus/core build && pnpm --filter @pegasus/functions build",
+    "typecheck": "pnpm -r typecheck",
+    "dev": "pnpm --filter @pegasus/functions dev",
+    "dev:web": "pnpm --filter @pegasus/web dev",
+    "dev:all": "pnpm --filter @pegasus/functions dev & pnpm --filter @pegasus/web dev",
+    "dev:vercel": "pnpm build && vercel dev",
+    "typeorm": "pnpm --filter @pegasus/core typeorm",
+    "migration:generate": "pnpm --filter @pegasus/core migration:generate",
+    "migration:run": "pnpm --filter @pegasus/core migration:run",
+    "migration:revert": "pnpm --filter @pegasus/core migration:revert",
+    "migration:show": "pnpm --filter @pegasus/core migration:show",
+    "db:ping": "pnpm --filter @pegasus/core db:ping",
+    "db:seed": "pnpm --filter @pegasus/core db:seed",
+    "db:seed:root": "pnpm --filter @pegasus/core db:seed:root",
+    "db:seed:ciudades": "pnpm --filter @pegasus/core db:seed:ciudades",
+    "db:seed:sexes": "pnpm --filter @pegasus/core db:seed:sexes",
+    "db:seed:gaits": "pnpm --filter @pegasus/core db:seed:gaits",
+    "db:seed:equine-types": "pnpm --filter @pegasus/core db:seed:equine-types",
+    "db:seed:groupings": "pnpm --filter @pegasus/core db:seed:groupings",
+    "db:seed:titles": "pnpm --filter @pegasus/core db:seed:titles",
+    "db:seed:grades": "pnpm --filter @pegasus/core db:seed:grades",
+    "db:seed:categories": "pnpm --filter @pegasus/core db:seed:categories",
+    "db:seed:fairs": "pnpm --filter @pegasus/core db:seed:fairs",
+    "db:seed:fair-entries": "pnpm --filter @pegasus/core db:seed:fair-entries",
+    "db:seed:people": "pnpm --filter @pegasus/core db:seed:people",
+    "db:seed:fair-staff": "pnpm --filter @pegasus/core db:seed:fair-staff",
+    "db:seed:fair-results": "pnpm --filter @pegasus/core db:seed:fair-results"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.29",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "vercel": "^44.2.7"
+  }
+}

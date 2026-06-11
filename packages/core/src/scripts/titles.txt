@@ -1,0 +1,46 @@
+CODIGO_TITULO	NOMBRE_TITULO
+1	Jefe de Raza
+2	Yegua con Mejor descendencia
+3	Ejemplar Nacional
+4	Campeón de Campeones
+5	Campeona de Campeonas
+6	Gran Campeón
+7	Gran Campeona
+8	Gran Campeón Reservado
+9	Gran Campeona Reservada
+10	Fuera de Concurso
+11	Mejor Grupo de Yeguas para Cría
+12	Mejor Grupo de Yeguas con Cría
+13	Mejor Potro o Potranca Adiestrado(a) a la Cuerda
+14	Campeón Joven o Campeona Joven
+15	Mejor Caballo Castrado
+16	Mejor Mular
+17	Primero
+18	Segundo
+19	Tercero
+20	Cuarto
+21	Quinto
+22	Mejor Criador
+23	Mejor Expositor
+24	Mejor Mular
+25	Campeón Asnal Criollo Macho
+26	Campeón Reservado Asnal Criollo Macho
+27	Campeón Asnal Criollo Hembra
+28	Campeón Reservado Asnal Criollo Hembra
+29	Jefe de Raza Asnal
+30	Mejor Descendencia Hembra Asnal
+31	Mejor Grupo Burras con Cría
+32	Mejor Grupo Burras para Cría
+33	PRIMER PUESTO
+34	SEGUNDO PUESTO
+35	TERCER PUESTO
+36	CUARTO PUESTO
+37	QUINTO PUESTO
+38	PRIMER PUESTO DESCENDENCIA
+39	SEGUNDO PUESTO DESCENDENCIA
+40	TERCER PUESTO DESCENDENCIA
+41	CUARTO PUESTO DESCENDENCIA
+42	QUINTO PUESTO DESCENDENCIA
+43	MEJOR EJEMPLAR ABIERTA JNP
+44	Fuera de Concurso
+45	Fuera de Concurso

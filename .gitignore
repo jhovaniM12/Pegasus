@@ -1,0 +1,12 @@
+node_modules
+dist
+.sst
+.vercel
+.agents
+.codex
+.pnpm-store
+.env
+.env.*
+!.env.example
+coverage
+*.tsbuildinfo

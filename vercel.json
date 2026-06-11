@@ -1,0 +1,12 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "pnpm install",
+  "buildCommand": "pnpm build",
+  "framework": null,
+  "functions": {
+    "api/**": {
+      "maxDuration": 30,
+      "memory": 1024
+    }
+  }
+}
