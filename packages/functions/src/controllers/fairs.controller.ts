@@ -21,6 +21,10 @@ const fairEntriesQuerySchema = z.object({
   categoryId: z.string().uuid("El identificador de categoría debe ser un UUID válido.").optional()
 });
 
+const fairResultsQuerySchema = z.object({
+  categoryId: z.string().uuid("El identificador de categoría debe ser un UUID válido.").optional()
+});
+
 export async function listFairsController(c: Context) {
   return respondWithPaginatedList(c, listFairs, toFairDto);
 }
@@ -55,10 +59,13 @@ export async function getFairEntriesSummaryController(c: Context) {
 
 export async function listFairResultsController(c: Context) {
   const { id } = uuidParamSchema.parse(c.req.param());
+  const { categoryId } = fairResultsQuerySchema.parse({
+    categoryId: c.req.query("categoryId")
+  });
 
   return respondWithPaginatedList(
     c,
-    (pagination) => listFairResults(id, pagination),
+    (pagination) => listFairResults(id, { ...pagination, categoryId }),
     toFairResultDto
   );
 }

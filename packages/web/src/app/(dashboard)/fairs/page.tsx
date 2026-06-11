@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Table,
@@ -11,30 +10,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-
-type Fair = {
-  id: string;
-  name: string;
-  city?: {
-    name?: string;
-  };
-  grade?: {
-    name?: string;
-  };
-};
+import { useFairs } from "@/hooks/use-fairs";
 
 export default function FairsPage() {
-  const [fairs, setFairs] = useState<Fair[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/fairs")
-      .then((res) => res.json())
-      .then((data) => {
-        setFairs(data.data || []);
-        setLoading(false);
-      });
-  }, []);
+  const { fairs, loading } = useFairs();
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">

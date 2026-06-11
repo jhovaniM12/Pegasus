@@ -57,7 +57,7 @@ export async function getFairEntriesSummary(
 
 export async function listFairResults(
   fairId: string,
-  params: PaginationParams
+  params: PaginationParams & { categoryId?: string }
 ): Promise<PaginatedResult<FairResult>> {
   await getFairOrThrow(fairId);
   const dataSource = await getDataSource();

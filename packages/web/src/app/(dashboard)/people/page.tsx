@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import {
   Table,
   TableBody,
@@ -9,19 +8,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { usePeople } from "@/hooks/use-people";
 
 export default function PeoplePage() {
-  const [people, setPeople] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/people")
-      .then((res) => res.json())
-      .then((data) => {
-        setPeople(data.data || []);
-        setLoading(false);
-      });
-  }, []);
+  const { people, loading } = usePeople();
 
   return (
     <div className="space-y-6">

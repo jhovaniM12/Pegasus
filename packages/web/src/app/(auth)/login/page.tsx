@@ -72,7 +72,7 @@ export default function LoginPage() {
           </div>
 
           <div className="mb-8">
-            <h1 className="text-4xl font-semibold tracking-normal text-slate-950">Pegasus Root</h1>
+            <h1 className="text-4xl font-semibold tracking-normal text-slate-950">Pegasus</h1>
             <p className="mt-3 text-sm leading-6 text-slate-600">
               Ingresa tus credenciales para acceder al panel de control.
             </p>
@@ -138,7 +138,7 @@ export default function LoginPage() {
           <div className="max-w-md rounded-lg border border-white/15 bg-white/12 p-6 text-white shadow-2xl backdrop-blur-md">
             <p className="text-sm font-medium uppercase tracking-[0.2em] text-white/70">Control operativo</p>
             <p className="mt-3 text-2xl font-semibold leading-tight">
-              Gestión ecuestre con datos centralizados y acceso seguro.
+              Gestión con datos centralizados y acceso seguro.
             </p>
           </div>
         </div>

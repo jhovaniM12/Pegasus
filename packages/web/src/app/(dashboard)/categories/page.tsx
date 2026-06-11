@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ChevronLeft, ChevronRight, ListFilter } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -19,92 +19,25 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useCategories, useCategoryGaits } from "@/hooks/use-categories";
+import type { Category } from "@/types/categories";
 
 const PAGE_SIZE = 20;
 const ALL_GAITS_VALUE = "all";
-
-type Category = {
-  id: string;
-  name: string;
-  minAgeMonths: number;
-  maxAgeMonths: number;
-  sex: {
-    name: string;
-  } | null;
-  gait: {
-    id: string;
-    name: string;
-  } | null;
-};
-
-type GaitOption = {
-  id: string;
-  name: string | null;
-};
-
-type PaginationMeta = {
-  page: number;
-  limit: number;
-  total: number;
-  totalPages: number;
-};
-
-type CategoriesResponse = {
-  data?: Category[];
-  meta?: PaginationMeta;
-};
-
-type GaitsResponse = {
-  data?: GaitOption[];
-};
-
-const emptyMeta: PaginationMeta = {
-  page: 1,
-  limit: PAGE_SIZE,
-  total: 0,
-  totalPages: 0,
-};
 
 function formatAgeRange(category: Category): string {
   return `${category.minAgeMonths} - ${category.maxAgeMonths} meses`;
 }
 
 export default function CategoriesPage() {
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [gaits, setGaits] = useState<GaitOption[]>([]);
   const [selectedGaitId, setSelectedGaitId] = useState(ALL_GAITS_VALUE);
-  const [meta, setMeta] = useState<PaginationMeta>(emptyMeta);
   const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/categories/gaits")
-      .then((res) => res.json())
-      .then((data: GaitsResponse) => {
-        setGaits(data.data || []);
-      });
-  }, []);
-
-  useEffect(() => {
-    const query = new URLSearchParams({
-      page: String(page),
-      limit: String(PAGE_SIZE),
-    });
-
-    if (selectedGaitId !== ALL_GAITS_VALUE) {
-      query.set("gaitId", selectedGaitId);
-    }
-
-    fetch(`/api/categories?${query.toString()}`)
-      .then((res) => res.json())
-      .then((data: CategoriesResponse) => {
-        setCategories(data.data || []);
-        setMeta(data.meta || emptyMeta);
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-  }, [page, selectedGaitId]);
+  const { gaits } = useCategoryGaits();
+  const { categories, meta, loading } = useCategories({
+    page,
+    limit: PAGE_SIZE,
+    gaitId: selectedGaitId === ALL_GAITS_VALUE ? undefined : selectedGaitId,
+  });
 
   const firstItem = meta.total === 0 ? 0 : (meta.page - 1) * meta.limit + 1;
   const lastItem = Math.min(meta.page * meta.limit, meta.total);
@@ -115,14 +48,12 @@ export default function CategoriesPage() {
       ? "Todos los andares"
       : gaits.find((gait) => gait.id === selectedGaitId)?.name || "Sin andar";
   const goToPage = (nextPage: number) => {
-    setLoading(true);
     setPage(nextPage);
   };
 
   const changeGaitFilter = (value: string | null) => {
     setSelectedGaitId(value ?? ALL_GAITS_VALUE);
     setPage(1);
-    setLoading(true);
   };
 
   return (

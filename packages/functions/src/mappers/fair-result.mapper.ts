@@ -10,6 +10,8 @@ import { toSyncableDto, type SyncableDto } from "./syncable.mapper.js";
 
 export type FairEntrySummaryDto = SyncableDto & {
   registrationNumber: string;
+  riderName: string;
+  riderDocumentNumber: string;
 };
 
 export type FairResultDto = SyncableDto & {
@@ -30,7 +32,9 @@ export function toFairResultDto(result: FairResult): FairResultDto {
     score: Number(result.score),
     fairEntry: {
       ...toSyncableDto(result.fairEntry),
-      registrationNumber: result.fairEntry.registrationNumber
+      registrationNumber: result.fairEntry.registrationNumber,
+      riderName: result.fairEntry.riderName,
+      riderDocumentNumber: result.fairEntry.riderDocumentNumber
     },
     grade: toGradeSummaryDto(result.grade),
     category: toCategoryDto(result.category),

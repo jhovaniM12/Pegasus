@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { use } from "react";
 import Link from "next/link";
 import { ArrowLeft, ChevronLeft, ChevronRight, Search } from "lucide-react";
@@ -24,85 +24,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useFairDetail, useFairEntries, useFairResults, useFairStaff } from "@/hooks/use-fairs";
 
 const ENTRIES_PAGE_SIZE = 20;
-
-type FairDetail = {
-  id: string;
-  name: string | null;
-  startDate: string | null;
-  endDate: string | null;
-  city: {
-    name: string | null;
-  } | null;
-  grade: {
-    name: string | null;
-  } | null;
-};
-
-type FairEntry = {
-  id: string;
-  registrationNumber: string;
-  trackPosition: number;
-  riderName: string;
-  riderDocumentNumber: string;
-  participate: boolean;
-  fairSequence: number;
-  category: {
-    id: string;
-    name: string | null;
-  } | null;
-};
-
-type FairEntriesCategorySummary = {
-  category: {
-    id: string;
-    name: string | null;
-    minAgeMonths: number;
-    maxAgeMonths: number;
-  };
-  totalEntries: number;
-};
-
-type FairEntriesGaitSummary = {
-  gait: {
-    id: string;
-    name: string | null;
-  };
-  totalEntries: number;
-  categories: FairEntriesCategorySummary[];
-};
-
-type FairResult = {
-  id: string;
-  entryNumber: number | string | null;
-  position: number | string | null;
-  category: {
-    name: string | null;
-  } | null;
-  title: {
-    name: string | null;
-  } | null;
-};
-
-type PaginationMeta = {
-  page: number;
-  limit: number;
-  total: number;
-  totalPages: number;
-};
-
-type PaginatedResponse<T> = {
-  data?: T[];
-  meta?: PaginationMeta;
-};
-
-const emptyEntriesMeta: PaginationMeta = {
-  page: 1,
-  limit: ENTRIES_PAGE_SIZE,
-  total: 0,
-  totalPages: 0,
-};
+const RESULTS_PAGE_SIZE = 20;
+const STAFF_PAGE_SIZE = 20;
 
 function formatDate(value: string | null): string {
   if (!value) {
@@ -174,57 +100,29 @@ function EntriesSteps({
 
 export default function FairDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const [fair, setFair] = useState<FairDetail | null>(null);
-  const [entriesSummary, setEntriesSummary] = useState<FairEntriesGaitSummary[]>([]);
+  const { fair, entriesSummary, loading } = useFairDetail(id);
   const [selectedGaitId, setSelectedGaitId] = useState<string | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
-  const [entries, setEntries] = useState<FairEntry[]>([]);
-  const [entriesMeta, setEntriesMeta] = useState<PaginationMeta>(emptyEntriesMeta);
   const [entriesPage, setEntriesPage] = useState(1);
   const [entriesSearchDraft, setEntriesSearchDraft] = useState("");
   const [entriesSearch, setEntriesSearch] = useState("");
-  const [entriesLoading, setEntriesLoading] = useState(false);
-  const [results, setResults] = useState<FairResult[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    Promise.all([
-      fetch(`/api/fairs/${id}`).then((res) => res.json()),
-      fetch(`/api/fairs/${id}/entries/summary`).then((res) => res.json()),
-      fetch(`/api/fairs/${id}/results`).then((res) => res.json()),
-    ]).then(([fairData, entriesSummaryData, resultsData]) => {
-      setFair(fairData.data || fairData);
-      setEntriesSummary(entriesSummaryData.data || []);
-      setResults(resultsData.data || []);
-      setLoading(false);
-    });
-  }, [id]);
-
-  useEffect(() => {
-    if (!selectedCategoryId) {
-      return;
-    }
-
-    const query = new URLSearchParams({
-      page: String(entriesPage),
-      limit: String(ENTRIES_PAGE_SIZE),
-      categoryId: selectedCategoryId,
-    });
-
-    if (entriesSearch) {
-      query.set("q", entriesSearch);
-    }
-
-    fetch(`/api/fairs/${id}/entries?${query.toString()}`)
-      .then((res) => res.json())
-      .then((entriesData: PaginatedResponse<FairEntry>) => {
-        setEntries(entriesData.data || []);
-        setEntriesMeta(entriesData.meta || emptyEntriesMeta);
-      })
-      .finally(() => {
-        setEntriesLoading(false);
-      });
-  }, [id, entriesPage, entriesSearch, selectedCategoryId]);
+  const [resultsPage, setResultsPage] = useState(1);
+  const [staffPage, setStaffPage] = useState(1);
+  const { entries, meta: entriesMeta, loading: entriesLoading } = useFairEntries(id, {
+    page: entriesPage,
+    limit: ENTRIES_PAGE_SIZE,
+    categoryId: selectedCategoryId,
+    search: entriesSearch,
+  });
+  const { results, meta: resultsMeta, loading: resultsLoading } = useFairResults(id, {
+    page: resultsPage,
+    limit: RESULTS_PAGE_SIZE,
+    categoryId: selectedCategoryId,
+  });
+  const { staff, meta: staffMeta, loading: staffLoading } = useFairStaff(id, {
+    page: staffPage,
+    limit: STAFF_PAGE_SIZE,
+  });
 
   const entriesTotal = entriesSummary.reduce((total, gait) => total + gait.totalEntries, 0);
   const selectedGait = entriesSummary.find((gait) => gait.gait.id === selectedGaitId) ?? null;
@@ -240,7 +138,6 @@ export default function FairDetailPage({ params }: { params: Promise<{ id: strin
       return;
     }
 
-    setEntriesLoading(true);
     setEntriesPage(1);
     setEntriesSearch(nextSearch);
   };
@@ -250,21 +147,21 @@ export default function FairDetailPage({ params }: { params: Promise<{ id: strin
       return;
     }
 
-    setEntriesLoading(true);
     setEntriesSearchDraft("");
     setEntriesPage(1);
     setEntriesSearch("");
   };
 
   const goToEntriesPage = (page: number) => {
-    setEntriesLoading(true);
     setEntriesPage(page);
   };
 
-  const resetEntriesTable = () => {
-    setEntries([]);
-    setEntriesMeta(emptyEntriesMeta);
-    setEntriesLoading(false);
+  const goToResultsPage = (page: number) => {
+    setResultsPage(page);
+  };
+
+  const goToStaffPage = (page: number) => {
+    setStaffPage(page);
   };
 
   const selectGait = (gaitId: string) => {
@@ -273,7 +170,7 @@ export default function FairDetailPage({ params }: { params: Promise<{ id: strin
     setEntriesSearchDraft("");
     setEntriesSearch("");
     setEntriesPage(1);
-    resetEntriesTable();
+    setResultsPage(1);
   };
 
   const selectCategory = (categoryId: string) => {
@@ -281,7 +178,7 @@ export default function FairDetailPage({ params }: { params: Promise<{ id: strin
     setEntriesSearchDraft("");
     setEntriesSearch("");
     setEntriesPage(1);
-    setEntriesLoading(true);
+    setResultsPage(1);
   };
 
   const backToGaits = () => {
@@ -290,7 +187,7 @@ export default function FairDetailPage({ params }: { params: Promise<{ id: strin
     setEntriesSearchDraft("");
     setEntriesSearch("");
     setEntriesPage(1);
-    resetEntriesTable();
+    setResultsPage(1);
   };
 
   const backToCategories = () => {
@@ -298,13 +195,21 @@ export default function FairDetailPage({ params }: { params: Promise<{ id: strin
     setEntriesSearchDraft("");
     setEntriesSearch("");
     setEntriesPage(1);
-    resetEntriesTable();
+    setResultsPage(1);
   };
 
   const firstEntry = entriesMeta.total === 0 ? 0 : (entriesMeta.page - 1) * entriesMeta.limit + 1;
   const lastEntry = Math.min(entriesMeta.page * entriesMeta.limit, entriesMeta.total);
   const canGoPreviousEntryPage = entriesMeta.page > 1 && !entriesLoading;
   const canGoNextEntryPage = entriesMeta.page < entriesMeta.totalPages && !entriesLoading;
+  const firstResult = resultsMeta.total === 0 ? 0 : (resultsMeta.page - 1) * resultsMeta.limit + 1;
+  const lastResult = Math.min(resultsMeta.page * resultsMeta.limit, resultsMeta.total);
+  const canGoPreviousResultPage = resultsMeta.page > 1 && !resultsLoading;
+  const canGoNextResultPage = resultsMeta.page < resultsMeta.totalPages && !resultsLoading;
+  const firstStaff = staffMeta.total === 0 ? 0 : (staffMeta.page - 1) * staffMeta.limit + 1;
+  const lastStaff = Math.min(staffMeta.page * staffMeta.limit, staffMeta.total);
+  const canGoPreviousStaffPage = staffMeta.page > 1 && !staffLoading;
+  const canGoNextStaffPage = staffMeta.page < staffMeta.totalPages && !staffLoading;
 
   if (loading) {
     return <div className="p-8 text-center">Cargando feria...</div>;
@@ -342,7 +247,7 @@ export default function FairDetailPage({ params }: { params: Promise<{ id: strin
         <TabsList>
           <TabsTrigger value="info">Información General</TabsTrigger>
           <TabsTrigger value="entries">Inscritos ({entriesTotal})</TabsTrigger>
-          <TabsTrigger value="results">Resultados ({results.length})</TabsTrigger>
+          <TabsTrigger value="staff">Staff ({staffMeta.total})</TabsTrigger>
         </TabsList>
         <TabsContent value="info" className="mt-4">
           <Card>
@@ -573,42 +478,159 @@ export default function FairDetailPage({ params }: { params: Promise<{ id: strin
                     </Button>
                   </div>
                 </div>
+                <div className="border-t border-slate-200 p-6">
+                  <div>
+                    <h3 className="text-base font-semibold">Resultados de la categoría</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Puestos y puntajes obtenidos por los montadores en esta categoría.
+                    </p>
+                  </div>
+                  <div className="mt-4">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Registro</TableHead>
+                          <TableHead>Montador</TableHead>
+                          <TableHead>Documento</TableHead>
+                          <TableHead>Título</TableHead>
+                          <TableHead className="text-right">Puesto</TableHead>
+                          <TableHead className="text-right">Puntaje</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {resultsLoading ? (
+                          <TableRow>
+                            <TableCell colSpan={6} className="text-center">Cargando resultados...</TableCell>
+                          </TableRow>
+                        ) : results.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={6} className="text-center">
+                              No hay resultados para esta categoría
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          results.map((result) => (
+                            <TableRow key={result.id}>
+                              <TableCell className="font-medium">
+                                {result.fairEntry.registrationNumber || "—"}
+                              </TableCell>
+                              <TableCell>{result.fairEntry.riderName || "—"}</TableCell>
+                              <TableCell>{result.fairEntry.riderDocumentNumber || "—"}</TableCell>
+                              <TableCell>{result.title?.name || "—"}</TableCell>
+                              <TableCell className="text-right">{result.positionObtained || "—"}</TableCell>
+                              <TableCell className="text-right">{result.score.toFixed(2)}</TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <div className="mt-4 flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-sm text-slate-500">
+                      Mostrando {firstResult} - {lastResult} de {resultsMeta.total}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={!canGoPreviousResultPage}
+                        onClick={() => goToResultsPage(Math.max(1, resultsPage - 1))}
+                      >
+                        <ChevronLeft className="size-4" />
+                        Anterior
+                      </Button>
+                      <span className="min-w-24 text-center text-sm font-medium text-slate-600">
+                        Página {resultsMeta.page} de {Math.max(resultsMeta.totalPages, 1)}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={!canGoNextResultPage}
+                        onClick={() => goToResultsPage(resultsPage + 1)}
+                      >
+                        Siguiente
+                        <ChevronRight className="size-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </div>
         </TabsContent>
-        <TabsContent value="results" className="mt-4">
+        <TabsContent value="staff" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle>Resultados de la Feria</CardTitle>
+              <CardTitle>Personal de la Feria</CardTitle>
+              <CardDescription>
+                Consulta los datos de contacto y el rol del personal asignado al evento.
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>N° Ejemplar</TableHead>
-                    <TableHead>Categoría</TableHead>
-                    <TableHead>Título</TableHead>
-                    <TableHead>Puesto</TableHead>
+                    <TableHead>Nombre</TableHead>
+                    <TableHead>Apellido</TableHead>
+                    <TableHead>Teléfono</TableHead>
+                    <TableHead>Celular</TableHead>
+                    <TableHead>Correo</TableHead>
+                    <TableHead>Rol</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {results.length === 0 ? (
+                  {staffLoading ? (
                     <TableRow>
-                      <TableCell colSpan={4} className="text-center">No hay resultados</TableCell>
+                      <TableCell colSpan={6} className="text-center">Cargando personal...</TableCell>
+                    </TableRow>
+                  ) : staff.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center">
+                        No hay personal registrado para esta feria
+                      </TableCell>
                     </TableRow>
                   ) : (
-                    results.map((result) => (
-                      <TableRow key={result.id}>
-                        <TableCell className="font-medium">{result.entryNumber}</TableCell>
-                        <TableCell>{result.category?.name || "—"}</TableCell>
-                        <TableCell>{result.title?.name || "—"}</TableCell>
-                        <TableCell>{result.position || "—"}</TableCell>
+                    staff.map((staffMember) => (
+                      <TableRow key={staffMember.id}>
+                        <TableCell className="font-medium">{staffMember.person.name || "—"}</TableCell>
+                        <TableCell>{staffMember.person.lastName || "—"}</TableCell>
+                        <TableCell>{staffMember.person.telephone || "—"}</TableCell>
+                        <TableCell>{staffMember.person.phone || "—"}</TableCell>
+                        <TableCell>{staffMember.person.email || "—"}</TableCell>
+                        <TableCell>{staffMember.role.name || "—"}</TableCell>
                       </TableRow>
                     ))
                   )}
                 </TableBody>
               </Table>
+              <div className="flex flex-col gap-3 border-t border-slate-200 px-1 py-4 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-slate-500">
+                  Mostrando {firstStaff} - {lastStaff} de {staffMeta.total}
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!canGoPreviousStaffPage}
+                    onClick={() => goToStaffPage(Math.max(1, staffPage - 1))}
+                  >
+                    <ChevronLeft className="size-4" />
+                    Anterior
+                  </Button>
+                  <span className="min-w-24 text-center text-sm font-medium text-slate-600">
+                    Página {staffMeta.page} de {Math.max(staffMeta.totalPages, 1)}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!canGoNextStaffPage}
+                    onClick={() => goToStaffPage(staffPage + 1)}
+                  >
+                    Siguiente
+                    <ChevronRight className="size-4" />
+                  </Button>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
