@@ -1,12 +1,31 @@
+import axios from "axios";
+
 export class ApiService {
   protected async get<T>(url: string): Promise<T> {
-    const response = await fetch(url);
-
-    if (!response.ok) {
+    try {
+      const response = await axios.get<T>(url);
+      return response.data;
+    } catch (error) {
       throw new Error(`Error al consultar ${url}.`);
     }
+  }
 
-    return response.json() as Promise<T>;
+  protected async post<T>(url: string, body?: unknown): Promise<T> {
+    try {
+      const response = await axios.post<T>(url, body);
+      return response.data;
+    } catch (error) {
+      throw new Error(`Error al enviar ${url}.`);
+    }
+  }
+
+  protected async patch<T>(url: string, body?: unknown): Promise<T> {
+    try {
+      const response = await axios.patch<T>(url, body);
+      return response.data;
+    } catch (error) {
+      throw new Error(`Error al actualizar ${url}.`);
+    }
   }
 
   protected buildQuery(params: Record<string, string | number | null | undefined>): string {
@@ -21,4 +40,3 @@ export class ApiService {
     return query.toString();
   }
 }
-

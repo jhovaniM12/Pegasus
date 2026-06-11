@@ -31,10 +31,8 @@ function formatAgeRange(category: Category): string {
 
 export default function CategoriesPage() {
   const [selectedGaitId, setSelectedGaitId] = useState(ALL_GAITS_VALUE);
-  const [page, setPage] = useState(1);
   const { gaits } = useCategoryGaits();
-  const { categories, meta, loading } = useCategories({
-    page,
+  const { categories, meta, loading, page, setPage } = useCategories({
     limit: PAGE_SIZE,
     gaitId: selectedGaitId === ALL_GAITS_VALUE ? undefined : selectedGaitId,
   });
@@ -53,7 +51,6 @@ export default function CategoriesPage() {
 
   const changeGaitFilter = (value: string | null) => {
     setSelectedGaitId(value ?? ALL_GAITS_VALUE);
-    setPage(1);
   };
 
   return (

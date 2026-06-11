@@ -2,9 +2,10 @@ import type { Context } from "hono";
 import { buildPaginationMeta, success } from "../lib/http.js";
 import { parsePaginationQuery } from "../lib/pagination.js";
 import { toPersonDto } from "../mappers/person.mapper.js";
+import { toUserDto } from "../mappers/user.mapper.js";
 import { uuidParamSchema } from "../schemas/common.schema.js";
-import { peopleQuerySchema } from "../schemas/people.schema.js";
-import { getPersonById, listPeople } from "../services/people.service.js";
+import { assignAccessCodeSchema, peopleQuerySchema } from "../schemas/people.schema.js";
+import { assignPersonAccessCode, getPersonById, listPeople } from "../services/people.service.js";
 
 export async function listPeopleController(c: Context) {
   const pagination = parsePaginationQuery(c.req.query());
@@ -24,4 +25,12 @@ export async function getPersonController(c: Context) {
   const person = await getPersonById(id);
 
   return c.json(success(toPersonDto(person)));
+}
+
+export async function assignPersonAccessCodeController(c: Context) {
+  const { id } = uuidParamSchema.parse(c.req.param());
+  const body = assignAccessCodeSchema.parse(await c.req.json());
+  const user = await assignPersonAccessCode(id, body.accessCode);
+
+  return c.json(success(toUserDto(user)));
 }

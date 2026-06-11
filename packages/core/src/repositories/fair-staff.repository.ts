@@ -22,3 +22,31 @@ export async function findFairStaffByFairId(
 
   return { items, total, page: params.page, limit: params.limit };
 }
+
+export async function findFairStaffByPersonId(
+  dataSource: DataSource,
+  personId: string
+): Promise<FairStaff[]> {
+  return dataSource.getRepository(FairStaff).find({
+    where: { personId },
+    relations: { fair: true, person: true, role: true },
+    order: { createdAt: "ASC" }
+  });
+}
+
+export async function findFairStaffByPersonIds(
+  dataSource: DataSource,
+  personIds: string[]
+): Promise<FairStaff[]> {
+  if (personIds.length === 0) {
+    return [];
+  }
+
+  return dataSource
+    .getRepository(FairStaff)
+    .createQueryBuilder("staff")
+    .innerJoinAndSelect("staff.role", "role")
+    .where("staff.person_id IN (:...personIds)", { personIds })
+    .orderBy("staff.created_at", "ASC")
+    .getMany();
+}

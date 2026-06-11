@@ -1,4 +1,5 @@
 import {
+  findUserByAccessCodeHash,
   findUserByEmail,
   findUserById,
   getDataSource,
@@ -7,11 +8,16 @@ import {
   type User
 } from "@pegasus/core";
 import { ForbiddenError, UnauthorizedError } from "../lib/errors.js";
+import { hashAccessCode } from "../lib/access-code.js";
 import { createSessionToken } from "../lib/session.js";
 
 export type LoginInput = {
   email: string;
   password: string;
+};
+
+export type AccessCodeLoginInput = {
+  accessCode: string;
 };
 
 export type LoginResult = {
@@ -55,7 +61,34 @@ export async function loginRootUser(input: LoginInput): Promise<LoginResult> {
   };
 }
 
-export async function getActiveRootUser(userId: string): Promise<User> {
+export async function loginByAccessCode(input: AccessCodeLoginInput): Promise<LoginResult> {
+  const dataSource = await getDataSource();
+  const accessCodeHash = hashAccessCode(input.accessCode);
+  const user = await findUserByAccessCodeHash(dataSource, accessCodeHash);
+
+  if (!user) {
+    throw new UnauthorizedError("Código de acceso inválido.");
+  }
+
+  if (!user.isActive) {
+    throw new UnauthorizedError("Usuario inactivo.");
+  }
+
+  if (!["JUDGE", "TECHNICAL_DIRECTOR", "VETERINARIAN"].includes(user.role)) {
+    throw new ForbiddenError("El rol no tiene acceso por código habilitado.");
+  }
+
+  const lastLoginAt = new Date();
+  await updateUserLastLogin(dataSource, user.id, lastLoginAt);
+  user.lastLoginAt = lastLoginAt;
+
+  return {
+    user,
+    token: createSessionToken(user.id, user.role)
+  };
+}
+
+export async function getActiveUser(userId: string): Promise<User> {
   const dataSource = await getDataSource();
   const user = await findUserById(dataSource, userId);
 
@@ -63,6 +96,29 @@ export async function getActiveRootUser(userId: string): Promise<User> {
     throw new UnauthorizedError("Sesión inválida.");
   }
 
+  if (!user.isActive) {
+    throw new UnauthorizedError("Usuario inactivo.");
+  }
+
+  return user;
+}
+
+export async function getActiveStaffUser(userId: string): Promise<User> {
+  const user = await getActiveUser(userId);
+
+  if (!["JUDGE", "TECHNICAL_DIRECTOR", "VETERINARIAN"].includes(user.role)) {
+    throw new ForbiddenError("El rol no tiene acceso a este dashboard.");
+  }
+
+  if (!user.personId) {
+    throw new ForbiddenError("El usuario no está asociado a una persona.");
+  }
+
+  return user;
+}
+
+export async function getActiveRootUser(userId: string): Promise<User> {
+  const user = await getActiveUser(userId);
   assertRootUser(user);
 
   return user;

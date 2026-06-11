@@ -59,6 +59,24 @@ export type FairEntriesGaitSummary = {
   categories: FairEntriesCategorySummary[];
 };
 
+export type StaffCategorySummary = {
+  fair: {
+    id: string;
+    name: string | null;
+  };
+  gait: {
+    id: string;
+    name: string | null;
+  };
+  category: {
+    id: string;
+    name: string | null;
+    minAgeMonths: number;
+    maxAgeMonths: number;
+  };
+  totalEntries: number;
+};
+
 export async function findFairEntriesByFairId(
   dataSource: DataSource,
   fairId: string,
@@ -148,4 +166,74 @@ export async function summarizeFairEntriesByGait(
   }
 
   return Array.from(summaryByGait.values());
+}
+
+export async function findStaffCategoriesByPersonId(
+  dataSource: DataSource,
+  personId: string
+): Promise<StaffCategorySummary[]> {
+  const rows = await dataSource
+    .getRepository(FairEntry)
+    .createQueryBuilder("entry")
+    .innerJoin("entry.fair", "fair")
+    .innerJoin("entry.category", "category")
+    .innerJoin("category.gait", "gait")
+    .innerJoin("fair_staff", "staff", "staff.fair_id = entry.fair_id")
+    .select("fair.id", "fairId")
+    .addSelect("fair.name", "fairName")
+    .addSelect("gait.id", "gaitId")
+    .addSelect("gait.name", "gaitName")
+    .addSelect("category.id", "categoryId")
+    .addSelect("category.name", "categoryName")
+    .addSelect("category.minAgeMonths", "minAgeMonths")
+    .addSelect("category.maxAgeMonths", "maxAgeMonths")
+    .addSelect("COUNT(entry.id)", "totalEntries")
+    .where("staff.person_id = :personId", { personId })
+    .groupBy("fair.id")
+    .addGroupBy("fair.name")
+    .addGroupBy("gait.id")
+    .addGroupBy("gait.name")
+    .addGroupBy("category.id")
+    .addGroupBy("category.name")
+    .addGroupBy("category.minAgeMonths")
+    .addGroupBy("category.maxAgeMonths")
+    .orderBy("fair.name", "ASC")
+    .addOrderBy("category.name", "ASC")
+    .getRawMany<{
+      fairId: string;
+      fairName: string | null;
+      gaitId: string;
+      gaitName: string | null;
+      categoryId: string;
+      categoryName: string | null;
+      minAgeMonths: string;
+      maxAgeMonths: string;
+      totalEntries: string;
+    }>();
+
+  return rows.map((row) => ({
+    fair: {
+      id: row.fairId,
+      name: row.fairName
+    },
+    gait: {
+      id: row.gaitId,
+      name: row.gaitName
+    },
+    category: {
+      id: row.categoryId,
+      name: row.categoryName,
+      minAgeMonths: readRawNumber(row, [
+        "minAgeMonths",
+        "minagemonths",
+        "category_min_age_months"
+      ]),
+      maxAgeMonths: readRawNumber(row, [
+        "maxAgeMonths",
+        "maxagemonths",
+        "category_max_age_months"
+      ])
+    },
+    totalEntries: Number(row.totalEntries)
+  }));
 }

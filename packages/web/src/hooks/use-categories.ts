@@ -12,7 +12,6 @@ const emptyMeta: PaginationMeta = {
 };
 
 type UseCategoriesParams = {
-  page: number;
   limit: number;
   gaitId?: string;
 };
@@ -30,15 +29,16 @@ export function useCategoryGaits() {
 }
 
 export function useCategories(params: UseCategoriesParams) {
+  const [page, setPage] = useState(1);
   const [categories, setCategories] = useState<Category[]>([]);
   const [meta, setMeta] = useState<PaginationMeta>({ ...emptyMeta, limit: params.limit });
   const [loadedKey, setLoadedKey] = useState("");
-  const requestKey = [params.gaitId || "", params.limit, params.page].join(":");
+  const requestKey = [params.gaitId || "", params.limit, page].join(":");
 
   useEffect(() => {
     categoriesService
       .listCategories({
-        page: params.page,
+        page,
         limit: params.limit,
         gaitId: params.gaitId,
       })
@@ -47,7 +47,11 @@ export function useCategories(params: UseCategoriesParams) {
         setMeta(data.meta || { ...emptyMeta, limit: params.limit });
         setLoadedKey(requestKey);
       });
-  }, [params.gaitId, params.limit, params.page, requestKey]);
+  }, [params.gaitId, params.limit, page, requestKey]);
 
-  return { categories, meta, loading: loadedKey !== requestKey };
+  useEffect(() => {
+    setPage(1);
+  }, [params.gaitId]);
+
+  return { categories, meta, loading: loadedKey !== requestKey, page, setPage };
 }

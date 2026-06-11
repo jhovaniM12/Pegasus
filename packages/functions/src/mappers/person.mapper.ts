@@ -1,5 +1,6 @@
 import type { Person } from "@pegasus/core";
 import { toSyncableDto, type SyncableDto } from "./syncable.mapper.js";
+import type { PersonWithAccessRole } from "../services/people.service.js";
 
 export type PersonDto = SyncableDto & {
   name: string;
@@ -11,9 +12,13 @@ export type PersonDto = SyncableDto & {
   phone: string | null;
   avantelPhone: string | null;
   email: string | null;
+  accessRole: string | null;
+  accessRoleLabel: string | null;
 };
 
-export function toPersonDto(person: Person): PersonDto {
+export function toPersonDto(person: Person | PersonWithAccessRole): PersonDto {
+  const accessRole = "accessRole" in person ? person.accessRole : null;
+
   return {
     ...toSyncableDto(person),
     name: person.name,
@@ -24,6 +29,8 @@ export function toPersonDto(person: Person): PersonDto {
     telephone: person.telephone,
     phone: person.phone,
     avantelPhone: person.avantelPhone,
-    email: person.email
+    email: person.email,
+    accessRole: accessRole?.role ?? null,
+    accessRoleLabel: accessRole?.label ?? null
   };
 }

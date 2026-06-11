@@ -2,7 +2,14 @@ import { Column, Entity, JoinColumn, ManyToOne } from "typeorm";
 import { PegasusBaseEntity } from "./base.entity.js";
 import { Person } from "./person.entity.js";
 
-export type UserRole = "ROOT" | "ADMIN" | "JUDGE" | "STAFF" | "VIEWER";
+export type UserRole =
+  | "ROOT"
+  | "ADMIN"
+  | "JUDGE"
+  | "TECHNICAL_DIRECTOR"
+  | "VETERINARIAN"
+  | "STAFF"
+  | "VIEWER";
 
 @Entity({ name: "users" })
 export class User extends PegasusBaseEntity {
@@ -18,6 +25,9 @@ export class User extends PegasusBaseEntity {
 
   @Column({ name: "password_hash", type: "varchar", nullable: true })
   passwordHash!: string | null;
+
+  @Column({ name: "access_code_hash", type: "varchar", nullable: true })
+  accessCodeHash!: string | null;
 
   @Column({ name: "role", type: "varchar" })
   role!: UserRole;

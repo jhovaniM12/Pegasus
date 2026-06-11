@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { Poppins } from "next/font/google";
 import "./globals.css";
+import { NetworkStatusProvider } from "@/components/network-status";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { ToastProvider } from "@/components/ui/toast";
 
 const poppins = Poppins({
   variable: "--font-poppins",
@@ -26,7 +28,11 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <TooltipProvider>
-          {children}
+          <ToastProvider>
+            <NetworkStatusProvider>
+              {children}
+            </NetworkStatusProvider>
+          </ToastProvider>
         </TooltipProvider>
       </body>
     </html>

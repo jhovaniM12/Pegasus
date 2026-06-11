@@ -103,24 +103,18 @@ export default function FairDetailPage({ params }: { params: Promise<{ id: strin
   const { fair, entriesSummary, loading } = useFairDetail(id);
   const [selectedGaitId, setSelectedGaitId] = useState<string | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
-  const [entriesPage, setEntriesPage] = useState(1);
   const [entriesSearchDraft, setEntriesSearchDraft] = useState("");
   const [entriesSearch, setEntriesSearch] = useState("");
-  const [resultsPage, setResultsPage] = useState(1);
-  const [staffPage, setStaffPage] = useState(1);
-  const { entries, meta: entriesMeta, loading: entriesLoading } = useFairEntries(id, {
-    page: entriesPage,
+  const { entries, meta: entriesMeta, loading: entriesLoading, page: entriesPage, setPage: setEntriesPage } = useFairEntries(id, {
     limit: ENTRIES_PAGE_SIZE,
     categoryId: selectedCategoryId,
     search: entriesSearch,
   });
-  const { results, meta: resultsMeta, loading: resultsLoading } = useFairResults(id, {
-    page: resultsPage,
+  const { results, meta: resultsMeta, loading: resultsLoading, page: resultsPage, setPage: setResultsPage } = useFairResults(id, {
     limit: RESULTS_PAGE_SIZE,
     categoryId: selectedCategoryId,
   });
-  const { staff, meta: staffMeta, loading: staffLoading } = useFairStaff(id, {
-    page: staffPage,
+  const { staff, meta: staffMeta, loading: staffLoading, page: staffPage, setPage: setStaffPage } = useFairStaff(id, {
     limit: STAFF_PAGE_SIZE,
   });
 
@@ -134,11 +128,10 @@ export default function FairDetailPage({ params }: { params: Promise<{ id: strin
 
     const nextSearch = entriesSearchDraft.trim();
 
-    if (nextSearch === entriesSearch && entriesPage === 1) {
+    if (nextSearch === entriesSearch) {
       return;
     }
 
-    setEntriesPage(1);
     setEntriesSearch(nextSearch);
   };
 
@@ -148,7 +141,6 @@ export default function FairDetailPage({ params }: { params: Promise<{ id: strin
     }
 
     setEntriesSearchDraft("");
-    setEntriesPage(1);
     setEntriesSearch("");
   };
 
@@ -169,16 +161,12 @@ export default function FairDetailPage({ params }: { params: Promise<{ id: strin
     setSelectedCategoryId(null);
     setEntriesSearchDraft("");
     setEntriesSearch("");
-    setEntriesPage(1);
-    setResultsPage(1);
   };
 
   const selectCategory = (categoryId: string) => {
     setSelectedCategoryId(categoryId);
     setEntriesSearchDraft("");
     setEntriesSearch("");
-    setEntriesPage(1);
-    setResultsPage(1);
   };
 
   const backToGaits = () => {
@@ -186,16 +174,12 @@ export default function FairDetailPage({ params }: { params: Promise<{ id: strin
     setSelectedCategoryId(null);
     setEntriesSearchDraft("");
     setEntriesSearch("");
-    setEntriesPage(1);
-    setResultsPage(1);
   };
 
   const backToCategories = () => {
     setSelectedCategoryId(null);
     setEntriesSearchDraft("");
     setEntriesSearch("");
-    setEntriesPage(1);
-    setResultsPage(1);
   };
 
   const firstEntry = entriesMeta.total === 0 ? 0 : (entriesMeta.page - 1) * entriesMeta.limit + 1;

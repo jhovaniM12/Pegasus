@@ -20,19 +20,16 @@ const emptyMeta: PaginationMeta = {
 
 type UseFairEntriesParams = {
   categoryId: string | null;
-  page: number;
   limit: number;
   search?: string;
 };
 
 type UseFairResultsParams = {
   categoryId: string | null;
-  page: number;
   limit: number;
 };
 
 type UseFairStaffParams = {
-  page: number;
   limit: number;
 };
 
@@ -74,11 +71,12 @@ export function useFairDetail(fairId: string) {
 }
 
 export function useFairEntries(fairId: string, params: UseFairEntriesParams) {
+  const [page, setPage] = useState(1);
   const [entries, setEntries] = useState<FairEntry[]>([]);
   const [meta, setMeta] = useState<PaginationMeta>({ ...emptyMeta, limit: params.limit });
   const [loadedKey, setLoadedKey] = useState("");
   const requestKey = params.categoryId
-    ? [fairId, params.categoryId, params.limit, params.page, params.search || ""].join(":")
+    ? [fairId, params.categoryId, params.limit, page, params.search || ""].join(":")
     : "";
 
   useEffect(() => {
@@ -88,7 +86,7 @@ export function useFairEntries(fairId: string, params: UseFairEntriesParams) {
 
     fairsService
       .listEntries(fairId, {
-        page: params.page,
+        page: page,
         limit: params.limit,
         categoryId: params.categoryId,
         search: params.search,
@@ -98,21 +96,28 @@ export function useFairEntries(fairId: string, params: UseFairEntriesParams) {
         setMeta(data.meta || { ...emptyMeta, limit: params.limit });
         setLoadedKey(requestKey);
       });
-  }, [fairId, params.categoryId, params.limit, params.page, params.search, requestKey]);
+  }, [fairId, params.categoryId, params.limit, page, params.search, requestKey]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [fairId, params.categoryId, params.search]);
 
   return {
     entries: params.categoryId ? entries : [],
     meta: params.categoryId ? meta : { ...emptyMeta, limit: params.limit },
     loading: Boolean(params.categoryId) && loadedKey !== requestKey,
+    page,
+    setPage,
   };
 }
 
 export function useFairResults(fairId: string, params: UseFairResultsParams) {
+  const [page, setPage] = useState(1);
   const [results, setResults] = useState<FairResult[]>([]);
   const [meta, setMeta] = useState<PaginationMeta>({ ...emptyMeta, limit: params.limit });
   const [loadedKey, setLoadedKey] = useState("");
   const requestKey = params.categoryId
-    ? [fairId, params.categoryId, params.limit, params.page].join(":")
+    ? [fairId, params.categoryId, params.limit, page].join(":")
     : "";
 
   useEffect(() => {
@@ -122,7 +127,7 @@ export function useFairResults(fairId: string, params: UseFairResultsParams) {
 
     fairsService
       .listResults(fairId, {
-        page: params.page,
+        page: page,
         limit: params.limit,
         categoryId: params.categoryId,
       })
@@ -131,25 +136,32 @@ export function useFairResults(fairId: string, params: UseFairResultsParams) {
         setMeta(data.meta || { ...emptyMeta, limit: params.limit });
         setLoadedKey(requestKey);
       });
-  }, [fairId, params.categoryId, params.limit, params.page, requestKey]);
+  }, [fairId, params.categoryId, params.limit, page, requestKey]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [fairId, params.categoryId]);
 
   return {
     results: params.categoryId ? results : [],
     meta: params.categoryId ? meta : { ...emptyMeta, limit: params.limit },
     loading: Boolean(params.categoryId) && loadedKey !== requestKey,
+    page,
+    setPage,
   };
 }
 
 export function useFairStaff(fairId: string, params: UseFairStaffParams) {
+  const [page, setPage] = useState(1);
   const [staff, setStaff] = useState<FairStaff[]>([]);
   const [meta, setMeta] = useState<PaginationMeta>({ ...emptyMeta, limit: params.limit });
   const [loadedKey, setLoadedKey] = useState("");
-  const requestKey = [fairId, params.limit, params.page].join(":");
+  const requestKey = [fairId, params.limit, page].join(":");
 
   useEffect(() => {
     fairsService
       .listStaff(fairId, {
-        page: params.page,
+        page: page,
         limit: params.limit,
       })
       .then((data) => {
@@ -157,7 +169,11 @@ export function useFairStaff(fairId: string, params: UseFairStaffParams) {
         setMeta(data.meta || { ...emptyMeta, limit: params.limit });
         setLoadedKey(requestKey);
       });
-  }, [fairId, params.limit, params.page, requestKey]);
+  }, [fairId, params.limit, page, requestKey]);
 
-  return { staff, meta, loading: loadedKey !== requestKey };
+  useEffect(() => {
+    setPage(1);
+  }, [fairId]);
+
+  return { staff, meta, loading: loadedKey !== requestKey, page, setPage };
 }

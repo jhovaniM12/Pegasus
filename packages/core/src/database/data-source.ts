@@ -28,6 +28,7 @@ import { CreateFairStaffTable1717430400007 } from "../migrations/1717430400007-C
 import { CreateFairResultsTable1717430400008 } from "../migrations/1717430400008-CreateFairResultsTable.js";
 import { AlterFairResultsUniqueConstraint1717430400009 } from "../migrations/1717430400009-AlterFairResultsUniqueConstraint.js";
 import { CreateUsersTable1717430400010 } from "../migrations/1717430400010-CreateUsersTable.js";
+import { AddUserAccessCode1717430400011 } from "../migrations/1717430400011-AddUserAccessCode.js";
 import { loadLocalEnv } from "../shared/load-env.js";
 
 loadLocalEnv();
@@ -72,7 +73,8 @@ export const AppDataSource = new DataSource({
     CreateFairStaffTable1717430400007,
     CreateFairResultsTable1717430400008,
     AlterFairResultsUniqueConstraint1717430400009,
-    CreateUsersTable1717430400010
+    CreateUsersTable1717430400010,
+    AddUserAccessCode1717430400011
   ]
 });
 
