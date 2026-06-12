@@ -23,8 +23,10 @@
   "dependencies": {
     "@hono/node-server": "^1.14.4",
     "@pegasus/core": "workspace:*",
+    "@pusher/push-notifications-server": "^1.2.7",
     "hono": "^4.7.11",
     "reflect-metadata": "^0.2.2",
+    "typeorm": "^0.3.24",
     "zod": "^3.25.48"
   },
   "devDependencies": {

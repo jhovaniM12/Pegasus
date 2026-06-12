@@ -28,6 +28,15 @@ export class ApiService {
     }
   }
 
+  protected async put<T>(url: string, body?: unknown): Promise<T> {
+    try {
+      const response = await axios.put<T>(url, body);
+      return response.data;
+    } catch (error) {
+      throw new Error(`Error al guardar ${url}.`);
+    }
+  }
+
   protected buildQuery(params: Record<string, string | number | null | undefined>): string {
     const query = new URLSearchParams();
 

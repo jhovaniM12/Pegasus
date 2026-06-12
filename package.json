@@ -31,7 +31,8 @@
     "db:seed:fair-entries": "pnpm --filter @pegasus/core db:seed:fair-entries",
     "db:seed:people": "pnpm --filter @pegasus/core db:seed:people",
     "db:seed:fair-staff": "pnpm --filter @pegasus/core db:seed:fair-staff",
-    "db:seed:fair-results": "pnpm --filter @pegasus/core db:seed:fair-results"
+    "db:seed:fair-results": "pnpm --filter @pegasus/core db:seed:fair-results",
+    "db:seed:disqualification-reasons": "pnpm --filter @pegasus/core db:seed:disqualification-reasons"
   },
   "devDependencies": {
     "@types/node": "^22.15.29",

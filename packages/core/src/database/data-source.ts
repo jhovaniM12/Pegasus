@@ -8,14 +8,23 @@ import {
   FairEntry,
   FairResult,
   FairStaff,
+  DisqualificationReason,
+  FaConsolidatedResult,
+  FaJudgeEntryDecision,
+  FaJudgeForm,
+  FairCategoryStage,
   Gait,
   Grade,
   Grouping,
+  JudgingParticipant,
+  NotificationOutbox,
   Person,
   Role,
   Sex,
   Title,
-  User
+  User,
+  VeterinaryCheck,
+  WorkflowEvent
 } from "../entities/index.js";
 import { CreateInitialSchema1717430400000 } from "../migrations/1717430400000-CreateInitialSchema.js";
 import { ExpandGradesNomenclature1717430400001 } from "../migrations/1717430400001-ExpandGradesNomenclature.js";
@@ -29,6 +38,8 @@ import { CreateFairResultsTable1717430400008 } from "../migrations/1717430400008
 import { AlterFairResultsUniqueConstraint1717430400009 } from "../migrations/1717430400009-AlterFairResultsUniqueConstraint.js";
 import { CreateUsersTable1717430400010 } from "../migrations/1717430400010-CreateUsersTable.js";
 import { AddUserAccessCode1717430400011 } from "../migrations/1717430400011-AddUserAccessCode.js";
+import { CreateStagedFlowTables1717430400012 } from "../migrations/1717430400012-CreateStagedFlowTables.js";
+import { AddNotificationInboxFields1717430400013 } from "../migrations/1717430400013-AddNotificationInboxFields.js";
 import { loadLocalEnv } from "../shared/load-env.js";
 
 loadLocalEnv();
@@ -53,14 +64,23 @@ export const AppDataSource = new DataSource({
     FairEntry,
     FairResult,
     FairStaff,
+    DisqualificationReason,
+    FaConsolidatedResult,
+    FaJudgeEntryDecision,
+    FaJudgeForm,
+    FairCategoryStage,
     Gait,
     Grade,
     Grouping,
+    JudgingParticipant,
+    NotificationOutbox,
     Person,
     Role,
     Sex,
     Title,
-    User
+    User,
+    VeterinaryCheck,
+    WorkflowEvent
   ],
   migrations: [
     CreateInitialSchema1717430400000,
@@ -74,7 +94,9 @@ export const AppDataSource = new DataSource({
     CreateFairResultsTable1717430400008,
     AlterFairResultsUniqueConstraint1717430400009,
     CreateUsersTable1717430400010,
-    AddUserAccessCode1717430400011
+    AddUserAccessCode1717430400011,
+    CreateStagedFlowTables1717430400012,
+    AddNotificationInboxFields1717430400013
   ]
 });
 

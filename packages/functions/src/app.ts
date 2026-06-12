@@ -9,6 +9,7 @@ import { fairsRoutes } from "./routes/fairs.routes.js";
 import { healthRoutes } from "./routes/health.routes.js";
 import { peopleRoutes } from "./routes/people.routes.js";
 import { staffRoutes } from "./routes/staff.routes.js";
+import { stagedFlowRoutes } from "./routes/staged-flow.routes.js";
 
 export const app = new Hono().basePath("/api");
 
@@ -36,3 +37,4 @@ app.route("/", fairsRoutes);
 app.route("/", categoriesRoutes);
 app.route("/", peopleRoutes);
 app.route("/", staffRoutes);
+app.route("/", stagedFlowRoutes);

@@ -38,7 +38,8 @@
     "db:seed:fair-entries": "tsx src/scripts/seed-fair-entries-fedequinas.ts",
     "db:seed:people": "tsx src/scripts/seed-people-fedequinas.ts",
     "db:seed:fair-staff": "tsx src/scripts/seed-fair-staff-fedequinas.ts",
-    "db:seed:fair-results": "tsx src/scripts/seed-fair-results-fedequinas.ts"
+    "db:seed:fair-results": "tsx src/scripts/seed-fair-results-fedequinas.ts",
+    "db:seed:disqualification-reasons": "tsx src/scripts/seed-disqualification-reasons.ts"
   },
   "dependencies": {
     "ioredis": "^5.6.1",
