@@ -139,7 +139,7 @@ export function ConnectionIndicator({ className = "" }: { className?: string }) 
   return (
     <div
       className={cn(
-        "flex h-10 items-center gap-2 rounded-lg border px-3 text-sm font-medium",
+        "flex h-10 w-10 items-center justify-center rounded-lg border",
         isOnline
           ? "border-emerald-200 bg-emerald-50 text-emerald-700"
           : "border-red-200 bg-red-50 text-red-700",
@@ -148,7 +148,6 @@ export function ConnectionIndicator({ className = "" }: { className?: string }) 
       title={isOnline ? "Conectado a internet" : "Sin conexión a internet"}
     >
       <Icon className="size-4 shrink-0" />
-      <span className="hidden md:inline">{isOnline ? "Online" : "Offline"}</span>
     </div>
   );
 }

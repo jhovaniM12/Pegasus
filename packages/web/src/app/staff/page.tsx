@@ -1,10 +1,31 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CalendarDays, ChevronDown, Gauge, LogOut, UserCircle, Users } from "lucide-react";
+import {
+  CalendarDays,
+  ChevronDown,
+  ClipboardList,
+  Eye,
+  Gauge,
+  Gavel,
+  LayoutDashboard,
+  LogOut,
+  Play,
+  Stethoscope,
+  UserCircle,
+  Users,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { ConnectionIndicator } from "@/components/network-status";
+import { StageStatusBadge } from "@/components/stage-status-badge";
+import { ConfirmActionDialog } from "@/components/confirm-action-dialog";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { NotificationInbox } from "@/components/notification-inbox";
+import { PushNotificationPrompt } from "@/components/push-notification-prompt";
+import { useToast } from "@/components/ui/toast";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,35 +35,146 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { CategoryCardSkeleton } from "@/components/loaders";
+import { stagedFlowService } from "@/services/staged-flow.service";
+import type { StagedCategory } from "@/types/staged-flow";
 
-type StaffCategory = {
-  fair: {
-    id: string;
-    name: string | null;
-  };
-  gait: {
-    id: string;
-    name: string | null;
-  };
-  category: {
-    id: string;
-    name: string | null;
-    minAgeMonths: number;
-    maxAgeMonths: number;
-  };
-  totalEntries: number;
-};
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type CurrentUser = {
+  id: string;
   personName: string | null;
   email: string | null;
   role: string;
   roleLabel: string;
 };
 
-function formatAgeRange(minAgeMonths: number, maxAgeMonths: number): string {
-  return `${minAgeMonths} - ${maxAgeMonths} meses`;
+type CardColor = "emerald" | "blue" | "amber" | "secondary" | "default";
+
+type NavigateAction = {
+  kind: "navigate";
+  label: string;
+  href: string;
+  color: CardColor;
+  icon: LucideIcon;
+};
+
+type ConfirmAction = {
+  kind: "confirm";
+  label: string;
+  title: string;
+  description: string;
+  color: CardColor;
+  icon: LucideIcon;
+  call: () => Promise<StagedCategory>;
+};
+
+type CardAction = NavigateAction | ConfirmAction;
+
+function actionButtonClass(color: CardColor): string {
+  switch (color) {
+    case "emerald":   return "bg-emerald-600 hover:bg-emerald-700 text-white";
+    case "blue":      return "bg-blue-600 hover:bg-blue-700 text-white";
+    case "amber":     return "bg-amber-500 hover:bg-amber-600 text-white";
+    case "secondary": return "bg-slate-600 hover:bg-slate-700 text-white";
+    case "default":   return "bg-slate-900 hover:bg-slate-800 text-white";
+  }
 }
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatAgeRange(min: number, max: number): string {
+  return `${min} - ${max} meses`;
+}
+
+/**
+ * Determines whether the bottom card button is a navigation link or a
+ * state-changing action that requires a confirmation dialog.
+ *
+ * Actions that mutate state (pre-ring / judging start) always require
+ * confirmation. Read-only views navigate directly.
+ */
+function getCardAction(role: string | undefined, item: StagedCategory): CardAction {
+  const href = `/staff/categories/${item.stageId}`;
+  const categoryName = item.category.name ?? "esta categoría";
+  const fairName = item.fair.name ?? "la feria";
+
+  if (role === "TECHNICAL_DIRECTOR") {
+    if (item.status === "NOT_STARTED") {
+      return {
+        kind: "confirm",
+        color: "emerald",
+        icon: Play,
+        label: "Iniciar pre-pista",
+        title: "Iniciar pre-pista",
+        description: `Se iniciará la revisión veterinaria de "${categoryName}" en ${fairName}. El veterinario recibirá una notificación.`,
+        call: () =>
+          stagedFlowService.startPreRing(item.stageId).then((r) => {
+            if (!r.data) throw new Error("Sin datos en la respuesta.");
+            return r.data;
+          }),
+      };
+    }
+
+    if (item.status === "PRE_RING_CLOSED") {
+      return {
+        kind: "confirm",
+        color: "blue",
+        icon: Gavel,
+        label: "Iniciar juzgamiento",
+        title: "Iniciar juzgamiento",
+        description: `Comenzará el juzgamiento con los ejemplares aprobados de "${categoryName}". Los jueces recibirán una notificación.`,
+        call: () =>
+          stagedFlowService.startJudging(item.stageId).then((r) => {
+            if (!r.data) throw new Error("Sin datos en la respuesta.");
+            return r.data;
+          }),
+      };
+    }
+
+    const dtActiveStatuses: StagedCategory["status"][] = [
+      "JUDGING_STARTED",
+      "FA_CONSOLIDATED",
+      "F1_IN_PROGRESS",
+      "F1_CONSOLIDATED",
+      "F2_IN_PROGRESS",
+      "TIE_BREAK_IN_PROGRESS",
+    ];
+    if (dtActiveStatuses.includes(item.status))
+      return { kind: "navigate", color: "default", icon: LayoutDashboard, href, label: "Gestión" };
+    return { kind: "navigate", color: "secondary", icon: Eye, href, label: "Ver gestión" };
+  }
+
+  if (role === "VETERINARIAN") {
+    if (item.status === "PRE_RING_STARTED") return { kind: "navigate", color: "amber", icon: Stethoscope, href, label: "Checkeo veterinario" };
+    return { kind: "navigate", color: "secondary", icon: Eye, href, label: "Ver categoría" };
+  }
+
+  if (role === "JUDGE") {
+    if (item.status === "JUDGING_STARTED") {
+      if (item.judge?.faFormStatus === "CLOSED") {
+        return { kind: "navigate", color: "secondary", icon: Eye, href, label: "Ver categoría" };
+      }
+      return { kind: "navigate", color: "blue", icon: ClipboardList, href, label: "Formato FA" };
+    }
+    const judgeRoundStatuses: StagedCategory["status"][] = [
+      "F1_IN_PROGRESS",
+      "F2_IN_PROGRESS",
+      "TIE_BREAK_IN_PROGRESS",
+    ];
+    if (judgeRoundStatuses.includes(item.status)) {
+      const canJudgeRound = item.judge?.roundFormStatus === "PENDING" || item.judge?.roundFormStatus === "STARTED";
+      return canJudgeRound
+        ? { kind: "navigate", color: "blue", icon: Gavel, href, label: "Juzgar ronda" }
+        : { kind: "navigate", color: "secondary", icon: Eye, href, label: "Ver categoría" };
+    }
+    return { kind: "navigate", color: "secondary", icon: Eye, href, label: "Ver categoría" };
+  }
+
+  return { kind: "navigate", color: "secondary", icon: Eye, href, label: "Ver categoría" };
+}
+
+// ─── StaffUserMenu ────────────────────────────────────────────────────────────
 
 function StaffUserMenu({
   currentUser,
@@ -80,11 +212,6 @@ function StaffUserMenu({
           <DropdownMenuLabel>
             <span className="block truncate text-sm font-semibold text-slate-950">{displayName}</span>
             <span className="mt-1 block text-xs font-normal text-slate-500">{roleLabel}</span>
-            {currentUser?.email && currentUser.email !== currentUser.personName && (
-              <span className="mt-1 block truncate text-xs font-normal text-slate-500">
-                {currentUser.email}
-              </span>
-            )}
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem className="cursor-pointer" variant="destructive" onClick={onLogout}>
@@ -97,40 +224,58 @@ function StaffUserMenu({
   );
 }
 
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
 export default function StaffPage() {
   const router = useRouter();
-  const [categories, setCategories] = useState<StaffCategory[]>([]);
+  const { toast } = useToast();
+  const [categories, setCategories] = useState<StagedCategory[]>([]);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState<(ConfirmAction & { open: boolean }) | null>(null);
 
   useEffect(() => {
-    Promise.all([
-      fetch("/api/auth/me"),
-      fetch("/api/staff/categories"),
-    ])
+    Promise.all([fetch("/api/auth/me"), fetch("/api/staff/staged-categories")])
       .then(async ([userResponse, categoriesResponse]) => {
-        if (!userResponse.ok || !categoriesResponse.ok) {
-          throw new Error("No autorizado");
-        }
-
+        if (!userResponse.ok || !categoriesResponse.ok) throw new Error("No autorizado");
         const userPayload = (await userResponse.json()) as { data?: CurrentUser };
-        const categoriesPayload = (await categoriesResponse.json()) as { data?: StaffCategory[] };
-
+        const categoriesPayload = (await categoriesResponse.json()) as { data?: StagedCategory[] };
         setCurrentUser(userPayload.data ?? null);
         setCategories(categoriesPayload.data ?? []);
       })
-      .catch(() => {
-        router.push("/login/staff");
-      })
-      .finally(() => {
-        setLoading(false);
-      });
+      .catch(() => router.push("/login/staff"))
+      .finally(() => setLoading(false));
   }, [router]);
 
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/login/staff");
     router.refresh();
+  };
+
+  const openConfirm = (action: ConfirmAction) => {
+    setConfirmDialog({ ...action, open: true });
+  };
+
+  const handleConfirm = async () => {
+    if (!confirmDialog) return;
+    setBusy(true);
+    try {
+      const updated = await confirmDialog.call();
+      // Update the card in-place without full reload.
+      setCategories((prev) => prev.map((c) => (c.stageId === updated.stageId ? updated : c)));
+      toast({ title: "Acción completada.", variant: "success" });
+      setConfirmDialog(null);
+    } catch (error) {
+      toast({
+        title: "Error al ejecutar la acción.",
+        description: error instanceof Error ? error.message : "Intenta nuevamente.",
+        variant: "error",
+      });
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -142,6 +287,8 @@ export default function StaffPage() {
             <h1 className="text-xl font-semibold tracking-normal text-slate-950">Categorías asignadas</h1>
           </div>
           <div className="hidden items-center gap-3 sm:flex">
+            <PushNotificationPrompt userId={currentUser?.id} />
+            <NotificationInbox />
             <ConnectionIndicator />
             <StaffUserMenu currentUser={currentUser} onLogout={logout} className="max-w-72" />
           </div>
@@ -150,6 +297,7 @@ export default function StaffPage() {
 
       <main className="mx-auto w-full max-w-7xl px-4 py-6 md:px-6 lg:py-8">
         <div className="mb-4 flex items-center gap-3 sm:hidden">
+          <NotificationInbox />
           <ConnectionIndicator className="shrink-0" />
           <StaffUserMenu currentUser={currentUser} onLogout={logout} className="w-full bg-white" />
         </div>
@@ -157,65 +305,117 @@ export default function StaffPage() {
         {loading ? (
           <div className="grid gap-4 lg:grid-cols-2">
             {Array.from({ length: 6 }).map((_, index) => (
-              <div
-                key={index}
-                className="h-44 animate-pulse rounded-lg border border-slate-200 bg-white"
-              />
+              <CategoryCardSkeleton key={index} />
             ))}
           </div>
         ) : categories.length === 0 ? (
           <div className="rounded-lg border border-slate-200 bg-white px-6 py-12 text-center">
-            <p className="text-sm font-medium text-slate-700">No hay categorías asignadas.</p>
+            <p className="text-sm font-medium text-slate-700">No hay categorías asignadas por ahora.</p>
           </div>
         ) : (
           <div className="grid gap-4 lg:grid-cols-2">
-            {categories.map((item) => (
-              <article
-                key={`${item.fair.id}-${item.category.id}`}
-                className="flex min-h-44 flex-col justify-between rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
-              >
-                <div className="space-y-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                        <CalendarDays className="size-3.5" />
-                        <span className="truncate">{item.fair.name ?? "Feria sin nombre"}</span>
+            {categories.map((item) => {
+              const action = getCardAction(currentUser?.role, item);
+
+              return (
+                <article
+                  key={item.stageId}
+                  className="flex min-h-52 flex-col justify-between rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
+                >
+                  <div className="space-y-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                          <CalendarDays className="size-3.5" />
+                          <span className="truncate">{item.fair.name ?? "Feria sin nombre"}</span>
+                        </div>
+                        <h2 className="mt-3 text-sm font-semibold leading-5 text-slate-950">
+                          {item.category.name ?? "Categoría sin nombre"}
+                        </h2>
+                        <StageStatusBadge status={item.status} className="mt-2" />
                       </div>
-                      <h2 className="mt-3 text-sm font-semibold leading-5 text-slate-950">
-                        {item.category.name ?? "Categoría sin nombre"}
-                      </h2>
+                      <Badge variant="secondary" className="w-fit shrink-0 rounded-md">
+                        {item.gait.name ?? "Sin andar"}
+                      </Badge>
                     </div>
-                    <Badge variant="secondary" className="w-fit shrink-0 rounded-md">
-                      {item.gait.name ?? "Sin andar"}
-                    </Badge>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-3">
+                        <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
+                          <Gauge className="size-3.5" />
+                          Edad
+                        </div>
+                        <p className="mt-1 text-sm font-semibold text-slate-950">
+                          {formatAgeRange(item.category.minAgeMonths, item.category.maxAgeMonths)}
+                        </p>
+                      </div>
+                      <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-3">
+                        <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
+                          <Users className="size-3.5" />
+                          Inscritos
+                        </div>
+                        <p className="mt-1 text-sm font-semibold text-slate-950">{item.totalEntries}</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div className="rounded-md bg-emerald-50 px-2 py-2 text-xs text-emerald-700">
+                        <span className="block text-sm font-semibold">{item.veterinary.approved}</span>
+                        Aprobados
+                      </div>
+                      <div className="rounded-md bg-slate-100 px-2 py-2 text-xs text-slate-600">
+                        <span className="block text-sm font-semibold">{item.veterinary.pending}</span>
+                        Pendientes
+                      </div>
+                      <div className="rounded-md bg-blue-50 px-2 py-2 text-xs text-blue-700">
+                        <span className="block text-sm font-semibold">
+                          {item.judging.closedForms}/{item.judging.totalJudges}
+                        </span>
+                        FA cerrados
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-3">
-                      <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
-                        <Gauge className="size-3.5" />
-                        Edad
-                      </div>
-                      <p className="mt-1 text-sm font-semibold text-slate-950">
-                        {formatAgeRange(item.category.minAgeMonths, item.category.maxAgeMonths)}
-                      </p>
-                    </div>
-                    <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-3">
-                      <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
-                        <Users className="size-3.5" />
-                        Inscritos
-                      </div>
-                      <p className="mt-1 text-sm font-semibold text-slate-950">
-                        {item.totalEntries}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </article>
-            ))}
+                  {/* Bottom action: confirm dialog for state mutations, Link for views */}
+                  {action.kind === "confirm" ? (
+                    <Button
+                      className={`mt-5 w-full rounded-md ${actionButtonClass(action.color)}`}
+                      disabled={busy}
+                      onClick={() => openConfirm(action)}
+                    >
+                      <action.icon className="size-4" />
+                      {action.label}
+                    </Button>
+                  ) : (
+                    <Button
+                      className={`mt-5 w-full rounded-md ${actionButtonClass(action.color)}`}
+                      nativeButton={false}
+                      render={<Link href={action.href} />}
+                    >
+                      <action.icon className="size-4" />
+                      {action.label}
+                    </Button>
+                  )}
+                </article>
+              );
+            })}
           </div>
         )}
       </main>
+
+      {confirmDialog && (
+        <ConfirmActionDialog
+          open={confirmDialog.open}
+          onOpenChange={(open) => {
+            if (!open && !busy) setConfirmDialog(null);
+          }}
+          title={confirmDialog.title}
+          description={confirmDialog.description}
+          confirmText={confirmDialog.label}
+          busy={busy}
+          onConfirm={handleConfirm}
+        />
+      )}
     </div>
   );
 }
