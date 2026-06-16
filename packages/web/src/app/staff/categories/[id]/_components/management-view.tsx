@@ -10,17 +10,21 @@ import {
   Gavel,
   MinusCircle,
   Stethoscope,
+  Timer,
   Trophy,
   UserX,
   XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FaConsolidatedDetail } from "./fa-consolidated-detail";
+import { RoundsSummarySection } from "./rounds-summary-section";
+import { formatFaFormDuration, formatRoundFormTime } from "./round-form-timing";
 import type {
   JudgeFormStatus,
   ManagementJudgeForm,
   ManagementState,
   ManagementVetCheck,
+  RoundManagementItem,
   VeterinaryCheckStatus,
 } from "@/types/staged-flow";
 
@@ -124,7 +128,13 @@ function VetCheckRow({ check }: { check: ManagementVetCheck }) {
   );
 }
 
-function JudgeFormRow({ form }: { form: ManagementJudgeForm }) {
+function JudgeFormRow({
+  form,
+  judgingStartedAt
+}: {
+  form: ManagementJudgeForm;
+  judgingStartedAt: string | null;
+}) {
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-slate-200/60 bg-slate-50/30 p-4 transition-colors hover:border-slate-300/80 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0">
@@ -135,11 +145,19 @@ function JudgeFormRow({ form }: { form: ManagementJudgeForm }) {
           <p className="truncate text-sm font-semibold text-slate-800">{form.judgeName}</p>
         </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
-          {form.closedAt && (
-            <span className="flex items-center gap-1">
-              <Clock className="size-3 text-slate-400" />
-              {formatDate(form.closedAt)}
-            </span>
+          {form.status === "CLOSED" && form.closedAt && (
+            <>
+              <span className="flex items-center gap-1">
+                <Clock className="size-3 text-slate-400" />
+                {formatRoundFormTime(form.closedAt)}
+              </span>
+              {formatFaFormDuration(form, { judgingStartedAt }) && (
+                <span className="inline-flex items-center gap-1 rounded border border-slate-200/40 bg-slate-100 px-1.5 py-0.5 font-medium text-slate-600">
+                  <Timer className="size-3" />
+                  {formatFaFormDuration(form, { judgingStartedAt })}
+                </span>
+              )}
+            </>
           )}
           <span className="rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-600 border border-slate-200/30">
             {form.selectedCount} selecciones
@@ -249,7 +267,10 @@ function FaSection({ management }: { management: ManagementState }) {
   const { closedForms, totalJudges } = summary.judging;
   const disqualifiedParticipants = participants.filter((p) => p.status === "DISQUALIFIED");
   const isConsolidated =
-    summary.status === "FA_CONSOLIDATED" || summary.status === "JUDGING_CLOSED" || consolidated.length > 0;
+    summary.status === "FA_CONSOLIDATED" ||
+    summary.status === "JUDGING_CLOSED" ||
+    summary.status === "JUDGING_DESERTED" ||
+    consolidated.length > 0;
   const [showDetail, setShowDetail] = useState(false);
 
   if (showDetail) {
@@ -257,6 +278,7 @@ function FaSection({ management }: { management: ManagementState }) {
       <FaConsolidatedDetail
         judgeForms={judgeForms}
         consolidated={consolidated}
+        judgingStartedAt={summary.judgingStartedAt}
         onBack={() => setShowDetail(false)}
       />
     );
@@ -303,7 +325,9 @@ function FaSection({ management }: { management: ManagementState }) {
         ) : (
           judgeForms
             .sort((a, b) => a.judgeName.localeCompare(b.judgeName))
-            .map((form) => <JudgeFormRow key={form.id} form={form} />)
+            .map((form) => (
+              <JudgeFormRow key={form.id} form={form} judgingStartedAt={summary.judgingStartedAt} />
+            ))
         )}
       </div>
 
@@ -342,11 +366,18 @@ function FaSection({ management }: { management: ManagementState }) {
 
 // ─── ManagementView ───────────────────────────────────────────────────────────
 
-export function ManagementView({ management }: { management: ManagementState }) {
+export function ManagementView({
+  management,
+  rounds = [],
+}: {
+  management: ManagementState;
+  rounds?: RoundManagementItem[];
+}) {
   return (
     <div className="space-y-5">
       <PreRingSection management={management} />
       <FaSection management={management} />
+      <RoundsSummarySection rounds={rounds} />
     </div>
   );
 }

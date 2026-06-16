@@ -5,16 +5,16 @@ import { Check } from "lucide-react"
 const stages: { status: StageStatus[]; label: string }[] = [
   { status: ["PRE_RING_STARTED"], label: "Pre-pista" },
   { status: ["PRE_RING_CLOSED"], label: "Aprobación" },
-  { status: ["JUDGING_STARTED"], label: "Juzgamiento" },
-  { status: ["FA_CONSOLIDATED", "JUDGING_CLOSED"], label: "Consolidado" },
+  { status: ["JUDGING_STARTED", "FA_CONSOLIDATED"], label: "FA" },
+  { status: ["F1_IN_PROGRESS", "F1_CONSOLIDATED", "F2_IN_PROGRESS", "TIE_BREAK_IN_PROGRESS"], label: "F1 / F2" },
+  { status: ["JUDGING_CLOSED", "JUDGING_DESERTED"], label: "Resultado" },
 ]
 
 export function FlowProgress({ currentStatus }: { currentStatus: StageStatus }) {
   const currentStageIndex = stages.findIndex((stage) => stage.status.includes(currentStatus))
 
   // Si no ha iniciado (NOT_STARTED), el índice será -1, así que no hay etapa completada ni en progreso.
-  // Si está en FA_CONSOLIDATED o JUDGING_CLOSED, todas están completadas.
-  const isFinished = currentStatus === "FA_CONSOLIDATED" || currentStatus === "JUDGING_CLOSED"
+  const isFinished = currentStatus === "JUDGING_CLOSED" || currentStatus === "JUDGING_DESERTED"
 
   return (
     <div className="flex w-full items-center">

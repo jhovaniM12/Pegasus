@@ -1,23 +1,6 @@
 import { ArrowLeft, CheckCircle2, Timer, Trophy } from "lucide-react";
+import { formatFaFormDuration, formatRoundFormTime } from "./round-form-timing";
 import type { ManagementJudgeForm } from "@/types/staged-flow";
-
-function formatTime(iso: string | null): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
-}
-
-function formatDuration(startedAt: string | null, closedAt: string | null): string | null {
-  if (!startedAt || !closedAt) return null;
-  const ms = new Date(closedAt).getTime() - new Date(startedAt).getTime();
-  if (ms < 0) return null;
-  const totalSeconds = Math.floor(ms / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  if (minutes > 0) return `${minutes}m ${seconds}s`;
-  return `${seconds}s`;
-}
 
 function TrackChip({ position, variant = "neutral" }: { position: number; variant?: "neutral" | "final" }) {
   return (
@@ -36,10 +19,16 @@ function TrackChip({ position, variant = "neutral" }: { position: number; varian
 type FaConsolidatedDetailProps = {
   judgeForms: ManagementJudgeForm[];
   consolidated: Array<{ id: string; trackPosition: number; votesCount: number; finalPosition: number | null }>;
+  judgingStartedAt: string | null;
   onBack: () => void;
 };
 
-export function FaConsolidatedDetail({ judgeForms, consolidated, onBack }: FaConsolidatedDetailProps) {
+export function FaConsolidatedDetail({
+  judgeForms,
+  consolidated,
+  judgingStartedAt,
+  onBack
+}: FaConsolidatedDetailProps) {
   const sortedFinalists = [...consolidated].sort(
     (a, b) => (a.finalPosition ?? 999) - (b.finalPosition ?? 999)
   );
@@ -74,17 +63,17 @@ export function FaConsolidatedDetail({ judgeForms, consolidated, onBack }: FaCon
                   <span className="font-normal text-slate-500">({form.selectedCount} selecciones)</span>
                 </p>
                 <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-400">
-                  <span>{formatTime(form.closedAt)}</span>
+                  <span>{formatRoundFormTime(form.closedAt)}</span>
                   {form.status === "CLOSED" && (
                     <span className="inline-flex items-center gap-1 text-emerald-600">
                       <CheckCircle2 className="size-3" />
                       Cerrado
                     </span>
                   )}
-                  {formatDuration(form.startedAt, form.closedAt) && (
-                    <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-600 border border-slate-200/40">
+                  {formatFaFormDuration(form, { judgingStartedAt }) && (
+                    <span className="inline-flex items-center gap-1 rounded border border-slate-200/40 bg-slate-100 px-1.5 py-0.5 font-medium text-slate-600">
                       <Timer className="size-3" />
-                      {formatDuration(form.startedAt, form.closedAt)}
+                      {formatFaFormDuration(form, { judgingStartedAt })}
                     </span>
                   )}
                 </div>

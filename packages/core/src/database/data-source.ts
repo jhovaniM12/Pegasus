@@ -17,6 +17,13 @@ import {
   Grade,
   Grouping,
   JudgingParticipant,
+  JudgingRound,
+  JudgingRoundForm,
+  JudgingRoundFormDesertedPosition,
+  JudgingRoundEntry,
+  JudgingRoundResult,
+  JudgingRoundDesertedResult,
+  TieBreakTest,
   NotificationOutbox,
   Person,
   Role,
@@ -40,6 +47,8 @@ import { CreateUsersTable1717430400010 } from "../migrations/1717430400010-Creat
 import { AddUserAccessCode1717430400011 } from "../migrations/1717430400011-AddUserAccessCode.js";
 import { CreateStagedFlowTables1717430400012 } from "../migrations/1717430400012-CreateStagedFlowTables.js";
 import { AddNotificationInboxFields1717430400013 } from "../migrations/1717430400013-AddNotificationInboxFields.js";
+import { CreateJudgingRoundsTables1717430400014 } from "../migrations/1717430400014-CreateJudgingRoundsTables.js";
+import { AddDesertedSupport1717430400015 } from "../migrations/1717430400015-AddDesertedSupport.js";
 import { loadLocalEnv } from "../shared/load-env.js";
 
 loadLocalEnv();
@@ -56,6 +65,14 @@ export const AppDataSource = new DataSource({
   database: databaseUrl ? undefined : process.env.DB_NAME ?? "pegasus",
   synchronize: false,
   logging: process.env.TYPEORM_LOGGING === "true",
+  // Pool de conexiones explícito: mantiene conexiones calientes y limita
+  // el tiempo de espera para adquirir una conexión libre.
+  extra: {
+    max: 5,
+    min: 1,
+    idleTimeoutMillis: 30_000,
+    connectionTimeoutMillis: 5_000,
+  },
   entities: [
     Category,
     City,
@@ -73,6 +90,13 @@ export const AppDataSource = new DataSource({
     Grade,
     Grouping,
     JudgingParticipant,
+    JudgingRound,
+    JudgingRoundForm,
+    JudgingRoundFormDesertedPosition,
+    JudgingRoundEntry,
+    JudgingRoundResult,
+    JudgingRoundDesertedResult,
+    TieBreakTest,
     NotificationOutbox,
     Person,
     Role,
@@ -96,7 +120,9 @@ export const AppDataSource = new DataSource({
     CreateUsersTable1717430400010,
     AddUserAccessCode1717430400011,
     CreateStagedFlowTables1717430400012,
-    AddNotificationInboxFields1717430400013
+    AddNotificationInboxFields1717430400013,
+    CreateJudgingRoundsTables1717430400014,
+    AddDesertedSupport1717430400015
   ]
 });
 

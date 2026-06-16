@@ -4,21 +4,31 @@ import {
   beamsTokenController,
   closeFaController,
   closePreRingController,
+  desertCompetitionController,
+  closeResultsController,
+  closeRoundFormController,
   consolidateFaController,
+  consolidateRoundController,
   disqualifyParticipantController,
   getFaController,
   getManagementController,
+  getRoundController,
+  getRoundsManagementController,
   listDisqualificationReasonsController,
   listNotificationsController,
   listStagedCategoriesController,
   listVeterinaryChecksController,
   markAllNotificationsReadController,
   markNotificationReadController,
+  openNextRoundController,
+  openTieBreakController,
   resetStageForTestingController,
   startFaController,
   startJudgingController,
   startPreRingController,
+  startRoundFormController,
   updateFaDecisionsController,
+  updateRoundFormController,
   updateVeterinaryCheckController
 } from "../controllers/staged-flow.controller.js";
 
@@ -54,3 +64,15 @@ stagedFlowRoutes.post(
 stagedFlowRoutes.post("/staff/fair-categories/:id/fa/close", closeFaController);
 stagedFlowRoutes.get("/staff/fair-categories/:id/management", getManagementController);
 stagedFlowRoutes.post("/staff/fair-categories/:id/fa/consolidate", consolidateFaController);
+
+// Rondas F1 / F2 / desempate y resultado oficial
+stagedFlowRoutes.post("/staff/fair-categories/:id/rounds/open", openNextRoundController);
+stagedFlowRoutes.get("/staff/fair-categories/:id/rounds/current", getRoundController);
+stagedFlowRoutes.post("/staff/fair-categories/:id/rounds/form/start", startRoundFormController);
+stagedFlowRoutes.put("/staff/fair-categories/:id/rounds/form/entries", updateRoundFormController);
+stagedFlowRoutes.post("/staff/fair-categories/:id/rounds/form/close", closeRoundFormController);
+stagedFlowRoutes.post("/staff/fair-categories/:id/rounds/consolidate", consolidateRoundController);
+stagedFlowRoutes.post("/staff/fair-categories/:id/rounds/tie-break/open", openTieBreakController);
+stagedFlowRoutes.get("/staff/fair-categories/:id/rounds/management", getRoundsManagementController);
+stagedFlowRoutes.post("/staff/fair-categories/:id/results/close", closeResultsController);
+stagedFlowRoutes.post("/staff/fair-categories/:id/results/desert", desertCompetitionController);

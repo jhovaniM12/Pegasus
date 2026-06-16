@@ -16,11 +16,24 @@ import { VetCheckCard } from "./_components/vet-check-card";
 import { FaParticipantCard } from "./_components/fa-participant-card";
 import { FaClosedState } from "./_components/fa-closed-state";
 import { ManagementView } from "./_components/management-view";
+import { JudgeRoundWorkspace } from "./_components/judge-round-workspace";
+import { DirectorRounds } from "./_components/director-rounds";
 import type {
   FaState,
   ManagementState,
+  RoundState,
+  RoundsManagement,
   StagedCategory,
+  TieBreakTestType,
 } from "@/types/staged-flow";
+
+const JUDGE_ROUND_STATUSES: StagedCategory["status"][] = [
+  "F1_IN_PROGRESS",
+  "F1_CONSOLIDATED",
+  "F2_IN_PROGRESS",
+  "TIE_BREAK_IN_PROGRESS",
+  "JUDGING_CLOSED",
+];
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -41,6 +54,8 @@ export default function StaffCategoryPage() {
   const [summary, setSummary] = useState<StagedCategory | null>(null);
   const [fa, setFa] = useState<FaState | null>(null);
   const [management, setManagement] = useState<ManagementState | null>(null);
+  const [round, setRound] = useState<RoundState | null>(null);
+  const [roundsManagement, setRoundsManagement] = useState<RoundsManagement | null>(null);
   const [reasonByParticipantId, setReasonByParticipantId] = useState<Record<string, string>>({});
   const [disqualifyExpandedIds, setDisqualifyExpandedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -71,13 +86,17 @@ export default function StaffCategoryPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const userResponse = await fetch("/api/auth/me");
+      // Fetch user y categorías en paralelo — eliminamos la waterfall de requests.
+      const [userResponse, categories] = await Promise.all([
+        fetch("/api/auth/me"),
+        stagedFlowService.listCategories(),
+      ]);
+
       if (!userResponse.ok) throw new Error("No autorizado");
       const userPayload = (await userResponse.json()) as { data?: CurrentUser };
       const user = userPayload.data ?? null;
       setCurrentUser(user);
 
-      const categories = await stagedFlowService.listCategories();
       const current = categories.data?.find((item) => item.stageId === stageId) ?? null;
       setSummary(current);
 
@@ -85,11 +104,26 @@ export default function StaffCategoryPage() {
         const response = await stagedFlowService.listVeterinaryChecks(stageId);
         setChecks(response.data ?? []);
       } else if (user?.role === "JUDGE") {
-        const response = await stagedFlowService.getFa(stageId);
-        setFa(response.data ?? null);
+        if (current?.status === "JUDGING_STARTED") {
+          const response = await stagedFlowService.getFa(stageId);
+          setFa(response.data ?? null);
+          setRound(null);
+        } else if (current && JUDGE_ROUND_STATUSES.includes(current.status)) {
+          const response = await stagedFlowService.getRound(stageId);
+          setRound(response.data ?? null);
+          setFa(null);
+        } else {
+          // FA consolidado o fases sin tarjeta de juez: solo lectura del resumen.
+          setFa(null);
+          setRound(null);
+        }
       } else if (user?.role === "TECHNICAL_DIRECTOR") {
-        const response = await stagedFlowService.getManagement(stageId);
-        setManagement(response.data ?? null);
+        const [managementResponse, roundsResponse] = await Promise.all([
+          stagedFlowService.getManagement(stageId),
+          stagedFlowService.getRoundsManagement(stageId),
+        ]);
+        setManagement(managementResponse.data ?? null);
+        setRoundsManagement(roundsResponse.data ?? null);
       }
     } catch {
       router.push("/login/staff");
@@ -163,6 +197,28 @@ export default function StaffCategoryPage() {
     },
     [fa, stageId, summary?.status]
   );
+
+  const handleOpenTieBreak = (testTypes: TieBreakTestType[]) => {
+    runAction(
+      "Abrir desempate",
+      "Se abrirá una ronda de desempate solo para los ejemplares empatados. Los jueces volverán a emitir su tarjeta.",
+      () => stagedFlowService.openTieBreak(stageId, testTypes)
+    );
+  };
+
+  const showDirectorRounds =
+    summary != null &&
+    ([
+      "FA_CONSOLIDATED",
+      "F1_IN_PROGRESS",
+      "F1_CONSOLIDATED",
+      "F2_IN_PROGRESS",
+      "TIE_BREAK_IN_PROGRESS",
+      "JUDGING_DESERTED",
+      "JUDGING_CLOSED"
+    ] as StagedCategory["status"][]).includes(
+      summary.status
+    );
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -238,6 +294,22 @@ export default function StaffCategoryPage() {
                 <CheckCheck className="size-4" />
                 Consolidar FA
               </Button>
+              <Button
+                size="lg"
+                className="w-full bg-slate-700 hover:bg-slate-800 text-white disabled:bg-slate-700/50"
+                disabled={busy || summary.status === "JUDGING_CLOSED" || summary.status === "JUDGING_DESERTED"}
+                onClick={() =>
+                  runAction(
+                    "Declarar competencia desierta",
+                    "La categoría quedará cerrada sin ejemplares premiables. Esta acción es irreversible para el flujo actual.",
+                    () => stagedFlowService.desertCompetition(stageId),
+                    "destructive"
+                  )
+                }
+              >
+                <Lock className="size-4" />
+                Declarar desierta
+              </Button>
             </div>
 
             <div className="rounded-md border border-red-200 bg-red-50 p-3">
@@ -265,7 +337,18 @@ export default function StaffCategoryPage() {
               </div>
             </div>
 
-            {management && <ManagementView management={management} />}
+            {showDirectorRounds && roundsManagement && (
+              <DirectorRounds
+                stageId={stageId}
+                summary={summary}
+                rounds={roundsManagement.rounds}
+                busy={busy}
+                runAction={runAction}
+                onOpenTieBreak={handleOpenTieBreak}
+              />
+            )}
+
+            {management && <ManagementView management={management} rounds={roundsManagement?.rounds ?? []} />}
           </section>
         )}
 
@@ -341,13 +424,12 @@ export default function StaffCategoryPage() {
                     disabled={
                       busy ||
                       summary.status !== "JUDGING_STARTED" ||
-                      fa.form.status !== "STARTED" ||
-                      fa.form.selectedCount < 1
+                      fa.form.status !== "STARTED"
                     }
                     onClick={() =>
                       runAction(
                         "Cerrar Formato FA",
-                        "Una vez cerrado, no podrás modificar tus selecciones. Debes tener al menos un ejemplar seleccionado. El director técnico será notificado.",
+                        "Una vez cerrado, no podrás modificar tus selecciones. Puedes cerrar con cero seleccionados si corresponde al criterio de juzgamiento.",
                         () => stagedFlowService.closeFa(stageId)
                       )
                     }
@@ -369,26 +451,58 @@ export default function StaffCategoryPage() {
               </div>
             )}
 
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {fa.participants.map((participant) => (
-                <FaParticipantCard
-                  key={participant.id}
-                  participant={participant}
-                  selected={selectedIds.has(participant.id)}
-                  editable={summary.status === "JUDGING_STARTED" && fa.form.status === "STARTED"}
-                  disqualifyExpanded={disqualifyExpandedIds.has(participant.id)}
-                  selectedReasonId={reasonByParticipantId[participant.id] ?? ""}
-                  reasons={fa.disqualificationReasons}
-                  onToggle={toggleFaSelection}
-                  onExpandDisqualify={toggleDisqualifyPanel}
-                  onReasonChange={(id, reasonId) =>
-                    setReasonByParticipantId((prev) => ({ ...prev, [id]: reasonId }))
-                  }
-                  onDisqualify={handleDisqualifyParticipant}
-                />
-              ))}
-            </div>
+            {fa.form.status !== "PENDING" && (
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {fa.participants.map((participant) => (
+                  <FaParticipantCard
+                    key={participant.id}
+                    participant={participant}
+                    selected={selectedIds.has(participant.id)}
+                    editable={summary.status === "JUDGING_STARTED" && fa.form.status === "STARTED"}
+                    disqualifyExpanded={disqualifyExpandedIds.has(participant.id)}
+                    selectedReasonId={reasonByParticipantId[participant.id] ?? ""}
+                    reasons={fa.disqualificationReasons}
+                    onToggle={toggleFaSelection}
+                    onExpandDisqualify={toggleDisqualifyPanel}
+                    onReasonChange={(id, reasonId) =>
+                      setReasonByParticipantId((prev) => ({ ...prev, [id]: reasonId }))
+                    }
+                    onDisqualify={handleDisqualifyParticipant}
+                  />
+                ))}
+              </div>
+            )}
           </section>
+        )}
+
+        {/* ── JUEZ: FA consolidado, esperando ronda ─────────────────────── */}
+        {currentUser?.role === "JUDGE" && summary.status === "FA_CONSOLIDATED" && (
+          <section className="mt-4 rounded-lg border border-dashed border-slate-300 bg-white px-6 py-8 text-center">
+            <p className="text-base font-semibold text-slate-900">FA consolidado</p>
+            <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
+              El Director Técnico está por abrir la siguiente ronda (F1 o F2). Espera la notificación.
+            </p>
+          </section>
+        )}
+
+        {currentUser?.role === "JUDGE" && summary.status === "JUDGING_DESERTED" && (
+          <section className="mt-4 rounded-lg border border-slate-300 bg-white px-6 py-8 text-center">
+            <p className="text-base font-semibold text-slate-900">Competencia desierta</p>
+            <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
+              El Director Técnico cerró esta categoría sin ejemplares premiables.
+            </p>
+          </section>
+        )}
+
+        {/* ── JUEZ: rondas F1 / F2 / desempate ──────────────────────────── */}
+        {currentUser?.role === "JUDGE" && round && (
+          <JudgeRoundWorkspace
+            stageId={stageId}
+            round={round}
+            busy={busy}
+            onLocalUpdate={setRound}
+            runAction={runAction}
+          />
         )}
       </main>
 

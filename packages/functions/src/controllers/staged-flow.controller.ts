@@ -19,10 +19,25 @@ import {
   updateFaDecisions,
   updateVeterinaryCheck
 } from "../services/staged-flow.service.js";
+import {
+  closeResults,
+  consolidateRound,
+  closeRoundForm,
+  desertCompetition,
+  getRound,
+  getRoundsManagement,
+  openNextRound,
+  openTieBreak,
+  startRoundForm,
+  updateRoundForm
+} from "../services/judging/round.service.js";
 import { getActiveStaffUser } from "../services/auth.service.js";
 import {
   disqualifyParticipantSchema,
+  desertCompetitionSchema,
+  openTieBreakSchema,
   updateFaDecisionsSchema,
+  updateRoundFormSchema,
   updateVeterinaryCheckSchema
 } from "../schemas/staged-flow.schema.js";
 import {
@@ -135,6 +150,73 @@ export async function consolidateFaController(c: Context) {
   const result = await consolidateFa(user, requiredParam(c, "id"));
   flushNotifications();
   return c.json(success(result));
+}
+
+// ─── Rondas F1 / F2 / desempate ──────────────────────────────────────────────
+
+export async function openNextRoundController(c: Context) {
+  const user = await getStaffUser(c);
+  const result = await openNextRound(user, requiredParam(c, "id"));
+  flushNotifications();
+  return c.json(success(result));
+}
+
+export async function getRoundController(c: Context) {
+  const user = await getStaffUser(c);
+  return c.json(success(await getRound(user, requiredParam(c, "id"))));
+}
+
+export async function startRoundFormController(c: Context) {
+  const user = await getStaffUser(c);
+  return c.json(success(await startRoundForm(user, requiredParam(c, "id"))));
+}
+
+export async function updateRoundFormController(c: Context) {
+  const user = await getStaffUser(c);
+  const body = updateRoundFormSchema.parse(await c.req.json());
+  return c.json(success(await updateRoundForm(user, requiredParam(c, "id"), body)));
+}
+
+export async function closeRoundFormController(c: Context) {
+  const user = await getStaffUser(c);
+  const result = await closeRoundForm(user, requiredParam(c, "id"));
+  flushNotifications();
+  return c.json(success(result));
+}
+
+export async function consolidateRoundController(c: Context) {
+  const user = await getStaffUser(c);
+  const result = await consolidateRound(user, requiredParam(c, "id"));
+  flushNotifications();
+  return c.json(success(result));
+}
+
+export async function openTieBreakController(c: Context) {
+  const user = await getStaffUser(c);
+  const body = openTieBreakSchema.parse(await c.req.json());
+  const result = await openTieBreak(user, requiredParam(c, "id"), body);
+  flushNotifications();
+  return c.json(success(result));
+}
+
+export async function closeResultsController(c: Context) {
+  const user = await getStaffUser(c);
+  const result = await closeResults(user, requiredParam(c, "id"));
+  flushNotifications();
+  return c.json(success(result));
+}
+
+export async function desertCompetitionController(c: Context) {
+  const user = await getStaffUser(c);
+  const body = desertCompetitionSchema.parse(await c.req.json().catch(() => ({})));
+  const result = await desertCompetition(user, requiredParam(c, "id"), body);
+  flushNotifications();
+  return c.json(success(result));
+}
+
+export async function getRoundsManagementController(c: Context) {
+  const user = await getStaffUser(c);
+  return c.json(success(await getRoundsManagement(user, requiredParam(c, "id"))));
 }
 
 export async function resetStageForTestingController(c: Context) {

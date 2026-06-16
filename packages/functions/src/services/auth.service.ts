@@ -11,6 +11,30 @@ import { ForbiddenError, UnauthorizedError } from "../lib/errors.js";
 import { hashAccessCode } from "../lib/access-code.js";
 import { createSessionToken } from "../lib/session.js";
 
+// ─── User cache ───────────────────────────────────────────────────────────────
+// Evita un SELECT a la BD en cada request protegido. TTL corto para que
+// cambios de estado (isActive) se propaguen rápidamente.
+const USER_CACHE_TTL_MS = 30_000;
+const userCache = new Map<string, { user: User; expiresAt: number }>();
+
+function getCachedUser(userId: string): User | null {
+  const entry = userCache.get(userId);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    userCache.delete(userId);
+    return null;
+  }
+  return entry.user;
+}
+
+function setCachedUser(user: User): void {
+  userCache.set(user.id, { user, expiresAt: Date.now() + USER_CACHE_TTL_MS });
+}
+
+export function invalidateUserCache(userId: string): void {
+  userCache.delete(userId);
+}
+
 export type LoginInput = {
   email: string;
   password: string;
@@ -54,6 +78,7 @@ export async function loginRootUser(input: LoginInput): Promise<LoginResult> {
   const lastLoginAt = new Date();
   await updateUserLastLogin(dataSource, user.id, lastLoginAt);
   user.lastLoginAt = lastLoginAt;
+  invalidateUserCache(user.id);
 
   return {
     user,
@@ -81,6 +106,7 @@ export async function loginByAccessCode(input: AccessCodeLoginInput): Promise<Lo
   const lastLoginAt = new Date();
   await updateUserLastLogin(dataSource, user.id, lastLoginAt);
   user.lastLoginAt = lastLoginAt;
+  invalidateUserCache(user.id);
 
   return {
     user,
@@ -89,6 +115,9 @@ export async function loginByAccessCode(input: AccessCodeLoginInput): Promise<Lo
 }
 
 export async function getActiveUser(userId: string): Promise<User> {
+  const cached = getCachedUser(userId);
+  if (cached) return cached;
+
   const dataSource = await getDataSource();
   const user = await findUserById(dataSource, userId);
 
@@ -100,6 +129,7 @@ export async function getActiveUser(userId: string): Promise<User> {
     throw new UnauthorizedError("Usuario inactivo.");
   }
 
+  setCachedUser(user);
   return user;
 }
 

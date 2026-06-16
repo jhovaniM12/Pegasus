@@ -4,8 +4,11 @@ import type {
   FaState,
   ManagementState,
   NotificationInboxState,
+  RoundState,
+  RoundsManagement,
   StaffNotification,
   StagedCategory,
+  TieBreakTestType,
   VeterinaryCheck,
   VeterinaryCheckStatus,
 } from "@/types/staged-flow";
@@ -81,6 +84,59 @@ class StagedFlowService extends ApiService {
 
   async consolidateFa(stageId: string): Promise<ApiResponse<StagedCategory>> {
     return this.post<ApiResponse<StagedCategory>>(`/api/staff/fair-categories/${stageId}/fa/consolidate`);
+  }
+
+  // ─── Rondas F1 / F2 / desempate ────────────────────────────────────────────
+
+  async openNextRound(stageId: string): Promise<ApiResponse<StagedCategory>> {
+    return this.post<ApiResponse<StagedCategory>>(`/api/staff/fair-categories/${stageId}/rounds/open`);
+  }
+
+  async getRound(stageId: string): Promise<ApiResponse<RoundState>> {
+    return this.get<ApiResponse<RoundState>>(`/api/staff/fair-categories/${stageId}/rounds/current`);
+  }
+
+  async startRoundForm(stageId: string): Promise<ApiResponse<RoundState>> {
+    return this.post<ApiResponse<RoundState>>(`/api/staff/fair-categories/${stageId}/rounds/form/start`);
+  }
+
+  async updateRoundForm(
+    stageId: string,
+    body: {
+      selectedParticipantIds?: string[];
+      positions?: Array<{ participantId: string; position: number }>;
+      desertedPositions?: number[];
+    }
+  ): Promise<ApiResponse<RoundState>> {
+    return this.put<ApiResponse<RoundState>>(`/api/staff/fair-categories/${stageId}/rounds/form/entries`, body);
+  }
+
+  async closeRoundForm(stageId: string): Promise<ApiResponse<RoundState>> {
+    return this.post<ApiResponse<RoundState>>(`/api/staff/fair-categories/${stageId}/rounds/form/close`);
+  }
+
+  async consolidateRound(stageId: string): Promise<ApiResponse<StagedCategory>> {
+    return this.post<ApiResponse<StagedCategory>>(`/api/staff/fair-categories/${stageId}/rounds/consolidate`);
+  }
+
+  async openTieBreak(stageId: string, testTypes: TieBreakTestType[]): Promise<ApiResponse<StagedCategory>> {
+    return this.post<ApiResponse<StagedCategory>>(`/api/staff/fair-categories/${stageId}/rounds/tie-break/open`, {
+      testTypes,
+    });
+  }
+
+  async closeResults(stageId: string): Promise<ApiResponse<StagedCategory>> {
+    return this.post<ApiResponse<StagedCategory>>(`/api/staff/fair-categories/${stageId}/results/close`);
+  }
+
+  async desertCompetition(stageId: string, reason?: string): Promise<ApiResponse<StagedCategory>> {
+    return this.post<ApiResponse<StagedCategory>>(`/api/staff/fair-categories/${stageId}/results/desert`, {
+      reason: reason?.trim() || null
+    });
+  }
+
+  async getRoundsManagement(stageId: string): Promise<ApiResponse<RoundsManagement>> {
+    return this.get<ApiResponse<RoundsManagement>>(`/api/staff/fair-categories/${stageId}/rounds/management`);
   }
 
   async getBeamsToken(): Promise<ApiResponse<unknown>> {

@@ -132,7 +132,16 @@ function getCardAction(role: string | undefined, item: StagedCategory): CardActi
       };
     }
 
-    if (item.status === "JUDGING_STARTED") return { kind: "navigate", color: "default", icon: LayoutDashboard, href, label: "Gestión" };
+    const dtActiveStatuses: StagedCategory["status"][] = [
+      "JUDGING_STARTED",
+      "FA_CONSOLIDATED",
+      "F1_IN_PROGRESS",
+      "F1_CONSOLIDATED",
+      "F2_IN_PROGRESS",
+      "TIE_BREAK_IN_PROGRESS",
+    ];
+    if (dtActiveStatuses.includes(item.status))
+      return { kind: "navigate", color: "default", icon: LayoutDashboard, href, label: "Gestión" };
     return { kind: "navigate", color: "secondary", icon: Eye, href, label: "Ver gestión" };
   }
 
@@ -142,7 +151,23 @@ function getCardAction(role: string | undefined, item: StagedCategory): CardActi
   }
 
   if (role === "JUDGE") {
-    if (item.status === "JUDGING_STARTED") return { kind: "navigate", color: "blue", icon: ClipboardList, href, label: "Formato FA" };
+    if (item.status === "JUDGING_STARTED") {
+      if (item.judge?.faFormStatus === "CLOSED") {
+        return { kind: "navigate", color: "secondary", icon: Eye, href, label: "Ver categoría" };
+      }
+      return { kind: "navigate", color: "blue", icon: ClipboardList, href, label: "Formato FA" };
+    }
+    const judgeRoundStatuses: StagedCategory["status"][] = [
+      "F1_IN_PROGRESS",
+      "F2_IN_PROGRESS",
+      "TIE_BREAK_IN_PROGRESS",
+    ];
+    if (judgeRoundStatuses.includes(item.status)) {
+      const canJudgeRound = item.judge?.roundFormStatus === "PENDING" || item.judge?.roundFormStatus === "STARTED";
+      return canJudgeRound
+        ? { kind: "navigate", color: "blue", icon: Gavel, href, label: "Juzgar ronda" }
+        : { kind: "navigate", color: "secondary", icon: Eye, href, label: "Ver categoría" };
+    }
     return { kind: "navigate", color: "secondary", icon: Eye, href, label: "Ver categoría" };
   }
 

@@ -7,7 +7,12 @@ const statusLabels: Record<StageStatus, string> = {
   PRE_RING_CLOSED: "Pre-pista cerrada",
   JUDGING_STARTED: "Juzgamiento iniciado",
   FA_CONSOLIDATED: "FA consolidado",
-  JUDGING_CLOSED: "Juzgamiento cerrado",
+  F1_IN_PROGRESS: "F1 en progreso",
+  F1_CONSOLIDATED: "F1 consolidado",
+  F2_IN_PROGRESS: "F2 en progreso",
+  TIE_BREAK_IN_PROGRESS: "Desempate en curso",
+  JUDGING_DESERTED: "Competencia desierta",
+  JUDGING_CLOSED: "Resultado oficial",
 }
 
 const statusVariants: Record<StageStatus, "default" | "secondary" | "destructive" | "outline" | "success" | "warning"> = {
@@ -16,7 +21,12 @@ const statusVariants: Record<StageStatus, "default" | "secondary" | "destructive
   PRE_RING_CLOSED: "warning", // Amarillo/Atención sin bloqueo
   JUDGING_STARTED: "default", // Azul
   FA_CONSOLIDATED: "success", // Verde
-  JUDGING_CLOSED: "secondary", // Gris oscuro/Neutro
+  F1_IN_PROGRESS: "default", // Azul
+  F1_CONSOLIDATED: "success", // Verde
+  F2_IN_PROGRESS: "default", // Azul
+  TIE_BREAK_IN_PROGRESS: "warning", // Atención: empate
+  JUDGING_DESERTED: "outline", // Gris: sin premiación
+  JUDGING_CLOSED: "success", // Verde: resultado oficial
 }
 
 // Map custom variants to tailwind classes if the badge component doesn't support them natively

@@ -1,5 +1,4 @@
 import {
-  Category,
   DisqualificationReason,
   FaConsolidatedResult,
   FaJudgeEntryDecision,
@@ -9,42 +8,31 @@ import {
   FairStaff,
   getDataSource,
   JudgingParticipant,
+  JudgingRound,
+  JudgingRoundForm,
   NotificationOutbox,
   Role,
   User,
   type FairCategoryStageStatus,
-  type JudgeEntryDecision,
-  type UserRole,
+  type JudgingRoundFormStatus,
+  type JudgingRoundType,
   type VeterinaryCheckStatus,
   VeterinaryCheck,
   WorkflowEvent
 } from "@pegasus/core";
 import type { DataSource, EntityManager } from "typeorm";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../lib/errors.js";
-
-const ROLE_TO_EXTERNAL_ID: Partial<Record<UserRole, string>> = {
-  JUDGE: "2",
-  TECHNICAL_DIRECTOR: "3",
-  VETERINARIAN: "Z"
-};
-
-const ROLE_LABELS: Record<string, string> = {
-  JUDGE: "Juez",
-  TECHNICAL_DIRECTOR: "Director tecnico",
-  VETERINARIAN: "Veterinario"
-};
-
-type StageAction =
-  | "PRE_RING_STARTED"
-  | "PRE_RING_CLOSED"
-  | "JUDGING_STARTED"
-  | "FA_STARTED"
-  | "JUDGE_FA_CLOSED"
-  | "JUDGING_PARTICIPANT_DISQUALIFIED"
-  | "FA_CONSOLIDATED"
-  | "JUDGING_CLOSED";
-
-type StaffRoleExternalId = "2" | "3" | "Z";
+import {
+  ROLE_LABELS,
+  assertStageAccess,
+  assertUserRole,
+  getStageOrThrow,
+  getUsersByFairRole,
+  queueRoleNotifications,
+  recordEvent,
+  roleExternalIdForUser,
+  stageNotificationContext
+} from "./judging/shared.js";
 
 export type StagedCategoryDto = {
   stageId: string;
@@ -55,75 +43,12 @@ export type StagedCategoryDto = {
   totalEntries: number;
   veterinary: { pending: number; approved: number; rejected: number; absent: number };
   judging: { totalJudges: number; closedForms: number; selected: number; discarded: number; disqualified: number };
+  judge?: {
+    faFormStatus: "PENDING" | "STARTED" | "CLOSED" | null;
+    roundFormStatus: JudgingRoundFormStatus | null;
+    currentRoundType: JudgingRoundType | null;
+  };
 };
-
-function assertUserRole(user: User, roles: UserRole[]): void {
-  if (!roles.includes(user.role)) {
-    throw new ForbiddenError("El rol no puede ejecutar esta accion.");
-  }
-}
-
-function roleExternalIdForUser(user: User): string {
-  const externalId = ROLE_TO_EXTERNAL_ID[user.role];
-
-  if (!externalId) {
-    throw new ForbiddenError("El rol no esta habilitado para este flujo.");
-  }
-
-  return externalId;
-}
-
-async function getStageOrThrow(manager: EntityManager, stageId: string): Promise<FairCategoryStage> {
-  const stage = await manager.getRepository(FairCategoryStage).findOne({
-    where: { id: stageId },
-    relations: { fair: true, category: { gait: true } }
-  });
-
-  if (!stage) {
-    throw new NotFoundError(`No se encontro la etapa con id "${stageId}".`);
-  }
-
-  return stage;
-}
-
-async function assertStaffInFair(
-  manager: EntityManager,
-  user: User,
-  fairId: string,
-  allowedRoleExternalIds?: StaffRoleExternalId[]
-): Promise<void> {
-  if (!user.personId) {
-    throw new ForbiddenError("El usuario no esta asociado a una persona.");
-  }
-
-  const staff = await manager.getRepository(FairStaff).findOne({
-    where: { personId: user.personId, fairId },
-    relations: { role: true }
-  });
-
-  if (!staff?.role.externalId) {
-    throw new ForbiddenError("El usuario no esta asignado como staff de esta feria.");
-  }
-
-  const expectedRole = roleExternalIdForUser(user);
-
-  if (staff.role.externalId !== expectedRole) {
-    throw new ForbiddenError("El rol del usuario no coincide con su asignacion de staff.");
-  }
-
-  if (allowedRoleExternalIds && !allowedRoleExternalIds.includes(staff.role.externalId as StaffRoleExternalId)) {
-    throw new ForbiddenError("El rol no puede ejecutar esta accion.");
-  }
-}
-
-async function assertStageAccess(
-  manager: EntityManager,
-  user: User,
-  stage: FairCategoryStage,
-  allowedRoleExternalIds?: StaffRoleExternalId[]
-): Promise<void> {
-  await assertStaffInFair(manager, user, stage.fairId, allowedRoleExternalIds);
-}
 
 async function getEntries(manager: EntityManager, stage: FairCategoryStage): Promise<FairEntry[]> {
   return manager.getRepository(FairEntry).find({
@@ -157,126 +82,6 @@ async function ensureVeterinaryChecks(manager: EntityManager, stage: FairCategor
   }
 }
 
-async function getUsersByFairRole(
-  manager: EntityManager,
-  fairId: string,
-  roleExternalId: StaffRoleExternalId
-): Promise<User[]> {
-  return manager
-    .getRepository(User)
-    .createQueryBuilder("user")
-    .innerJoin(FairStaff, "staff", "staff.person_id = user.person_id")
-    .innerJoin(Role, "role", "role.id = staff.role_id")
-    .where("staff.fair_id = :fairId", { fairId })
-    .andWhere("role.external_id = :roleExternalId", { roleExternalId })
-    .andWhere("user.is_active = true")
-    .getMany();
-}
-
-async function recordEvent(
-  manager: EntityManager,
-  input: {
-    stageId: string;
-    userId: string | null;
-    eventType: StageAction;
-    fromStatus?: string | null;
-    toStatus?: string | null;
-    payload?: Record<string, unknown>;
-  }
-): Promise<void> {
-  await manager.getRepository(WorkflowEvent).save(
-    manager.getRepository(WorkflowEvent).create({
-      fairCategoryStageId: input.stageId,
-      userId: input.userId,
-      eventType: input.eventType,
-      fromStatus: input.fromStatus ?? null,
-      toStatus: input.toStatus ?? null,
-      payload: input.payload ?? null
-    })
-  );
-}
-
-async function queueNotification(
-  manager: EntityManager,
-  input: {
-    recipientUserId: string | null;
-    recipientRole?: string | null;
-    stageId: string;
-    type: StageAction;
-    title: string;
-    body: string;
-    payload?: Record<string, unknown>;
-  }
-): Promise<void> {
-  await manager.getRepository(NotificationOutbox).save(
-    manager.getRepository(NotificationOutbox).create({
-      recipientUserId: input.recipientUserId,
-      recipientRole: input.recipientRole ?? null,
-      fairCategoryStageId: input.stageId,
-      provider: "PUSHER_BEAMS",
-      type: input.type,
-      title: input.title,
-      body: input.body,
-      payload: input.payload ?? null,
-      status: "PENDING",
-      sentAt: null,
-      failedAt: null,
-      errorMessage: null
-    })
-  );
-}
-
-async function queueRoleNotifications(
-  manager: EntityManager,
-  stage: FairCategoryStage,
-  roleExternalId: StaffRoleExternalId,
-  input: {
-    type: StageAction;
-    title: string;
-    body: string;
-    payload?: Record<string, unknown>;
-  }
-): Promise<void> {
-  const users = await getUsersByFairRole(manager, stage.fairId, roleExternalId);
-
-  await Promise.all(
-    users.map((recipient) =>
-      queueNotification(manager, {
-        recipientUserId: recipient.id,
-        recipientRole: recipient.role,
-        stageId: stage.id,
-        type: input.type,
-        title: input.title,
-        body: input.body,
-        payload: input.payload
-      })
-    )
-  );
-}
-
-function stageNotificationContext(stage: FairCategoryStage) {
-  const categoryName = stage.category.name ?? "Categoria sin nombre";
-  const fairName = stage.fair.name ?? "Feria sin nombre";
-  const gaitName = stage.category.gait.name ?? "Sin andar";
-  const titleSuffix = categoryName;
-  const detail = `${categoryName} - ${gaitName} en ${fairName}`;
-
-  return {
-    categoryName,
-    fairName,
-    gaitName,
-    titleSuffix,
-    detail,
-    payload: {
-      stageId: stage.id,
-      categoryName,
-      fairName,
-      gaitName,
-      deepLink: `/staff/categories/${stage.id}`
-    }
-  };
-}
-
 async function getOrCreateStage(
   manager: EntityManager,
   fairId: string,
@@ -305,14 +110,17 @@ async function getOrCreateStage(
       faConsolidatedAt: null,
       faConsolidatedByUserId: null,
       judgingClosedAt: null,
-      judgingClosedByUserId: null
+      judgingClosedByUserId: null,
+      desertedAt: null,
+      desertedByUserId: null,
+      desertedReason: null
     })
   );
 
   return getStageOrThrow(manager, stage.id);
 }
 
-async function buildStageSummary(manager: EntityManager, stage: FairCategoryStage): Promise<StagedCategoryDto> {
+export async function buildStageSummary(manager: EntityManager, stage: FairCategoryStage): Promise<StagedCategoryDto> {
   const [totalEntries, checks, forms, decisions] = await Promise.all([
     manager.getRepository(FairEntry).count({
       where: { fairId: stage.fairId, categoryId: stage.categoryId }
@@ -357,6 +165,45 @@ async function buildStageSummary(manager: EntityManager, stage: FairCategoryStag
   };
 }
 
+async function enrichForJudge(
+  manager: EntityManager,
+  items: StagedCategoryDto[],
+  userId: string
+): Promise<StagedCategoryDto[]> {
+  return Promise.all(
+    items.map(async (item) => {
+      const [faForm, activeRound] = await Promise.all([
+        manager.getRepository(FaJudgeForm).findOne({
+          where: { fairCategoryStageId: item.stageId, judgeUserId: userId },
+          select: { status: true }
+        }),
+        manager.getRepository(JudgingRound).findOne({
+          where: { fairCategoryStageId: item.stageId, status: "OPEN" },
+          order: { createdAt: "DESC" },
+          select: { id: true, roundType: true }
+        })
+      ]);
+
+      let roundForm: Pick<JudgingRoundForm, "status"> | null = null;
+      if (activeRound) {
+        roundForm = await manager.getRepository(JudgingRoundForm).findOne({
+          where: { roundId: activeRound.id, judgeUserId: userId },
+          select: { status: true }
+        });
+      }
+
+      return {
+        ...item,
+        judge: {
+          faFormStatus: faForm?.status ?? null,
+          roundFormStatus: roundForm?.status ?? null,
+          currentRoundType: activeRound?.roundType ?? null
+        }
+      };
+    })
+  );
+}
+
 export async function listStagedCategories(user: User): Promise<StagedCategoryDto[]> {
   const dataSource = await getDataSource();
 
@@ -389,7 +236,13 @@ export async function listStagedCategories(user: User): Promise<StagedCategoryDt
       stages.push(await getOrCreateStage(manager, row.fairId, row.categoryId));
     }
 
-    return Promise.all(stages.map((stage) => buildStageSummary(manager, stage)));
+    const summaries = await Promise.all(stages.map((stage) => buildStageSummary(manager, stage)));
+
+    if (user.role === "JUDGE") {
+      return enrichForJudge(manager, summaries, user.id);
+    }
+
+    return summaries;
   });
 }
 
@@ -593,6 +446,9 @@ export async function startJudging(user: User, stageId: string): Promise<StagedC
     stage.status = "JUDGING_STARTED";
     stage.judgingStartedAt = new Date();
     stage.judgingStartedByUserId = user.id;
+    stage.desertedAt = null;
+    stage.desertedByUserId = null;
+    stage.desertedReason = null;
     await manager.getRepository(FairCategoryStage).save(stage);
     await recordEvent(manager, {
       stageId: stage.id,
@@ -670,6 +526,9 @@ export async function startFa(user: User, stageId: string) {
         userId: user.id,
         eventType: "FA_STARTED"
       });
+    } else if (form.status === "STARTED" && !form.startedAt) {
+      form.startedAt = stage.judgingStartedAt ?? new Date();
+      await manager.getRepository(FaJudgeForm).save(form);
     }
 
     return getFaForStage(manager, user, stage);
@@ -927,10 +786,6 @@ export async function closeFa(user: User, stageId: string) {
       where: { faJudgeFormId: form.id, decision: "SELECTED" }
     });
 
-    if (selectedCount < 1) {
-      throw new BadRequestError("Debes seleccionar al menos un ejemplar antes de cerrar el FA.");
-    }
-
     if (selectedCount > 10) {
       throw new BadRequestError("El FA excede el maximo de 10 seleccionados.");
     }
@@ -960,6 +815,9 @@ export async function closeFa(user: User, stageId: string) {
       await manager.getRepository(FaJudgeEntryDecision).save(discarded);
     }
 
+    if (!form.startedAt) {
+      form.startedAt = stage.judgingStartedAt ?? new Date();
+    }
     form.status = "CLOSED";
     form.closedAt = new Date();
     await manager.getRepository(FaJudgeForm).save(form);
@@ -1012,7 +870,11 @@ export async function getManagement(user: User, stageId: string) {
     ]);
 
     return {
-      summary: { ...summary, preRingClosedAt: stage.preRingClosedAt?.toISOString() ?? null },
+      summary: {
+        ...summary,
+        preRingClosedAt: stage.preRingClosedAt?.toISOString() ?? null,
+        judgingStartedAt: stage.judgingStartedAt?.toISOString() ?? null
+      },
       veterinaryChecks: checks.map((check) => ({
         id: check.id,
         trackPosition: check.fairEntry.trackPosition,
@@ -1106,33 +968,47 @@ export async function consolidateFa(user: User, stageId: string): Promise<Staged
     );
 
     const previousStatus = stage.status;
-    stage.status = "JUDGING_CLOSED";
-    stage.faConsolidatedAt = new Date();
-    stage.faConsolidatedByUserId = user.id;
-    stage.judgingClosedAt = stage.faConsolidatedAt;
-    stage.judgingClosedByUserId = user.id;
+    const survivors = rows.length;
+    const now = new Date();
+    if (survivors === 0) {
+      stage.status = "JUDGING_DESERTED";
+      stage.desertedAt = now;
+      stage.desertedByUserId = user.id;
+      stage.desertedReason = "Ningún ejemplar alcanzó selección en el Formato FA.";
+    } else {
+      // FA es solo la selección inicial: NO cierra el juzgamiento. A partir de aquí el
+      // Director Técnico abre la siguiente ronda reglamentaria (F1 si hay más de 8
+      // sobrevivientes, F2 en caso contrario). Ver `judging/round.service.ts`.
+      stage.status = "FA_CONSOLIDATED";
+      stage.faConsolidatedAt = now;
+      stage.faConsolidatedByUserId = user.id;
+    }
     await manager.getRepository(FairCategoryStage).save(stage);
     await recordEvent(manager, {
       stageId: stage.id,
       userId: user.id,
-      eventType: "FA_CONSOLIDATED",
+      eventType: survivors === 0 ? "COMPETITION_DESERTED" : "FA_CONSOLIDATED",
       fromStatus: previousStatus,
-      toStatus: "FA_CONSOLIDATED"
-    });
-    await recordEvent(manager, {
-      stageId: stage.id,
-      userId: user.id,
-      eventType: "JUDGING_CLOSED",
-      fromStatus: "FA_CONSOLIDATED",
-      toStatus: stage.status
+      toStatus: stage.status,
+      payload: survivors === 0 ? { reason: stage.desertedReason } : undefined
     });
     const notification = stageNotificationContext(stage);
-    await queueRoleNotifications(manager, stage, "2", {
-      type: "FA_CONSOLIDATED",
-      title: `FA consolidado - ${notification.titleSuffix}`,
-      body: `El Formato FA de ${notification.detail} fue consolidado y el juzgamiento quedo cerrado.`,
-      payload: notification.payload
-    });
+    if (survivors === 0) {
+      await queueRoleNotifications(manager, stage, "2", {
+        type: "COMPETITION_DESERTED",
+        title: `Competencia desierta - ${notification.titleSuffix}`,
+        body: `La categoría ${notification.detail} fue declarada desierta tras consolidar FA.`,
+        payload: notification.payload
+      });
+    } else {
+      const nextRound = survivors > 8 ? "F1 (cabeza de lote)" : "F2 (tarjeta final)";
+      await queueRoleNotifications(manager, stage, "2", {
+        type: "FA_CONSOLIDATED",
+        title: `FA consolidado - ${notification.titleSuffix}`,
+        body: `El Formato FA de ${notification.detail} fue consolidado (${survivors} ejemplares). Sigue ${nextRound}.`,
+        payload: notification.payload
+      });
+    }
 
     return buildStageSummary(manager, await getStageOrThrow(manager, stage.id));
   });
@@ -1148,6 +1024,8 @@ export async function resetStageForTesting(user: User, stageId: string): Promise
 
     await manager.getRepository(NotificationOutbox).delete({ fairCategoryStageId: stage.id });
     await manager.getRepository(WorkflowEvent).delete({ fairCategoryStageId: stage.id });
+    // Las rondas (F1/F2/desempate) cascadean a formularios, entradas, resultados y pruebas.
+    await manager.getRepository(JudgingRound).delete({ fairCategoryStageId: stage.id });
     await manager.getRepository(FaConsolidatedResult).delete({ fairCategoryStageId: stage.id });
     await manager
       .getRepository(FaJudgeEntryDecision)
@@ -1177,6 +1055,9 @@ export async function resetStageForTesting(user: User, stageId: string): Promise
     stage.faConsolidatedByUserId = null;
     stage.judgingClosedAt = null;
     stage.judgingClosedByUserId = null;
+    stage.desertedAt = null;
+    stage.desertedByUserId = null;
+    stage.desertedReason = null;
     await manager.getRepository(FairCategoryStage).save(stage);
 
     return buildStageSummary(manager, await getStageOrThrow(manager, stage.id));

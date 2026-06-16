@@ -24,7 +24,8 @@ type FaClosedStateProps = {
  * the Technical Director to advance the flow.
  */
 export function FaClosedState({ closedAt, selectedCount, stageStatus }: FaClosedStateProps) {
-  const consolidated = stageStatus === "FA_CONSOLIDATED" || stageStatus === "JUDGING_CLOSED";
+  const consolidated =
+    stageStatus === "FA_CONSOLIDATED" || stageStatus === "JUDGING_CLOSED" || stageStatus === "JUDGING_DESERTED";
 
   return (
     <div className="space-y-4">

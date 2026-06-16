@@ -35,73 +35,95 @@ export function FaParticipantCard({
   return (
     <article
       className={cn(
-        "overflow-hidden rounded-xl border transition-all duration-150",
+        "relative overflow-hidden rounded-xl border transition-all duration-150 p-4",
         disqualified
-          ? "border-slate-200 bg-slate-50 opacity-60"
-          : selected
-            ? "border-amber-400 bg-amber-400 shadow-md shadow-amber-100"
-            : "border-slate-200 bg-white shadow-sm"
+          ? "border-slate-200 bg-slate-50/60 opacity-60"
+          : !editable && selected
+            ? "border-slate-300 bg-slate-100"
+            : selected
+              ? "border-amber-500 bg-amber-50/40 shadow-sm"
+              : "border-slate-200 bg-white hover:border-slate-300 shadow-sm"
       )}
     >
-      <div className="flex items-stretch">
-        {/* Repetir pista — visual estático, sin funcionalidad por ahora */}
-        <div
-          className={cn(
-            "flex w-12 shrink-0 items-center justify-center",
-            disqualified ? "bg-slate-300" : "bg-slate-700"
-          )}
-        >
-          <RotateCcw className="size-4 text-white" />
+      <div className="flex items-center justify-between gap-4">
+        {/* Repetir pista — botón discreto redondo en el extremo izquierdo */}
+        <div className="flex shrink-0 items-center justify-center">
+          <div
+            className={cn(
+              "flex size-9 items-center justify-center rounded-full border text-slate-500 transition-colors",
+              disqualified || (!editable && selected)
+                ? "border-slate-100 bg-slate-50 text-slate-300"
+                : "border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-600 cursor-pointer"
+            )}
+            title="Repetir pista (visual)"
+          >
+            <RotateCcw className="size-4" />
+          </div>
         </div>
 
-        {/* Centro — tap para seleccionar / deseleccionar */}
+        {/* Centro — botón para seleccionar / deseleccionar */}
         <button
           type="button"
           disabled={!editable || disqualified}
           onClick={() => onToggle(participant.id)}
           className={cn(
-            "flex flex-1 flex-col items-center justify-center py-4 transition-all",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-300",
+            "flex flex-1 flex-col items-center justify-center py-2 transition-all",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-500",
             editable && !disqualified ? "cursor-pointer active:scale-95" : "cursor-default"
           )}
         >
           <span
             className={cn(
-              "text-3xl font-bold leading-none",
-              disqualified ? "text-slate-400" : selected ? "text-white" : "text-slate-900"
+              "text-3xl font-extrabold tracking-tight leading-none",
+              disqualified
+                ? "text-slate-400"
+                : !editable && selected
+                  ? "text-slate-500"
+                  : selected
+                    ? "text-amber-950"
+                    : "text-slate-900"
             )}
           >
             {participant.trackPosition}
           </span>
           <span
             className={cn(
-              "mt-1.5 text-xs font-semibold",
-              disqualified ? "text-slate-400" : selected ? "text-amber-100" : "text-slate-400"
+              "mt-2.5 inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider transition-colors",
+              disqualified
+                ? "bg-slate-100 text-slate-500"
+                : !editable && selected
+                  ? "bg-slate-200 text-slate-600"
+                  : selected
+                    ? "bg-amber-100 text-amber-800"
+                    : "bg-slate-100 text-slate-500 group-hover:bg-slate-200"
             )}
           >
             {disqualified ? "Descalificado" : selected ? "Seleccionado" : "Seleccionar"}
           </span>
         </button>
 
-        {/* Descalificar */}
-        <button
-          type="button"
-          disabled={!editable || disqualified}
-          onClick={() => onExpandDisqualify(participant.id)}
-          className={cn(
-            "flex w-12 shrink-0 items-center justify-center transition-colors",
-            disqualified
-              ? "bg-red-200 cursor-default"
-              : "bg-red-500 hover:bg-red-600 active:bg-red-700 cursor-pointer"
-          )}
-        >
-          <X className="size-4 text-white" />
-        </button>
+        {/* Descalificar — botón discreto redondo en el extremo derecho */}
+        <div className="flex shrink-0 items-center justify-center">
+          <button
+            type="button"
+            disabled={!editable || disqualified}
+            onClick={() => onExpandDisqualify(participant.id)}
+            className={cn(
+              "flex size-9 items-center justify-center rounded-full border transition-all duration-150",
+              !editable || disqualified
+                ? "border-slate-100 bg-slate-50 text-slate-300 cursor-default"
+                : "border-red-100 bg-red-50 hover:bg-red-100 text-red-600 active:scale-95 cursor-pointer"
+            )}
+            title="Descalificar participante"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
       </div>
 
       {/* Panel de descalificación expandible */}
       {disqualifyExpanded && editable && !disqualified && (
-        <div className="space-y-2 border-t border-slate-100 bg-white p-3">
+        <div className="mt-4 space-y-3 border-t border-slate-100 pt-3">
           <p className="text-xs font-semibold text-slate-600">Motivo de descalificación</p>
           <select
             value={selectedReasonId}
@@ -119,7 +141,7 @@ export function FaParticipantCard({
             <button
               type="button"
               onClick={() => onExpandDisqualify(participant.id)}
-              className="flex-1 rounded-lg border border-slate-200 bg-white py-2 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50"
+              className="flex-1 rounded-lg border border-slate-200 bg-white py-2 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 cursor-pointer"
             >
               Cancelar
             </button>
@@ -127,7 +149,7 @@ export function FaParticipantCard({
               type="button"
               disabled={!selectedReason}
               onClick={() => selectedReason && onDisqualify(participant.id, selectedReason.id)}
-              className="flex-1 rounded-lg bg-red-600 py-2 text-xs font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex-1 rounded-lg bg-red-600 py-2 text-xs font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
             >
               Confirmar
             </button>
@@ -137,9 +159,9 @@ export function FaParticipantCard({
 
       {/* Motivo visible si ya fue descalificado */}
       {disqualified && participant.disqualificationReason && (
-        <div className="bg-white px-4 pb-3 pt-2">
+        <div className="mt-3 border-t border-slate-100 pt-3">
           <p className="rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
-            {participant.disqualificationReason.name}
+            Motivo: {participant.disqualificationReason.name}
           </p>
         </div>
       )}

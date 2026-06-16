@@ -11,6 +11,11 @@ export type FairCategoryStageStatus =
   | "PRE_RING_CLOSED"
   | "JUDGING_STARTED"
   | "FA_CONSOLIDATED"
+  | "F1_IN_PROGRESS"
+  | "F1_CONSOLIDATED"
+  | "F2_IN_PROGRESS"
+  | "TIE_BREAK_IN_PROGRESS"
+  | "JUDGING_DESERTED"
   | "JUDGING_CLOSED";
 
 export type VeterinaryCheckStatus = "PENDING" | "APPROVED" | "REJECTED" | "ABSENT";
@@ -72,6 +77,15 @@ export class FairCategoryStage extends PegasusBaseEntity {
 
   @Column({ name: "judging_closed_by_user_id", type: "uuid", nullable: true })
   judgingClosedByUserId!: string | null;
+
+  @Column({ name: "deserted_at", type: "timestamp", nullable: true })
+  desertedAt!: Date | null;
+
+  @Column({ name: "deserted_by_user_id", type: "uuid", nullable: true })
+  desertedByUserId!: string | null;
+
+  @Column({ name: "deserted_reason", type: "text", nullable: true })
+  desertedReason!: string | null;
 }
 
 @Unique("UQ_veterinary_checks_stage_entry", ["fairCategoryStageId", "fairEntryId"])
