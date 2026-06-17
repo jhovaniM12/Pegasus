@@ -161,6 +161,19 @@ export class JudgingParticipant extends PegasusBaseEntity {
   @Column({ name: "disqualified_by_judge_form_id", type: "uuid", nullable: true })
   disqualifiedByJudgeFormId!: string | null;
 
+  @Column({ name: "disqualified_by_user_id", type: "uuid", nullable: true })
+  disqualifiedByUserId!: string | null;
+
+  @ManyToOne(() => User, { nullable: true })
+  @JoinColumn({ name: "disqualified_by_user_id" })
+  disqualifiedByUser!: User | null;
+
+  @Column({ name: "disqualified_in_round_id", type: "uuid", nullable: true })
+  disqualifiedInRoundId!: string | null;
+
+  @Column({ name: "disqualified_in_round_form_id", type: "uuid", nullable: true })
+  disqualifiedInRoundFormId!: string | null;
+
   @Column({ name: "disqualification_reason_id", type: "uuid", nullable: true })
   disqualificationReasonId!: string | null;
 

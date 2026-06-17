@@ -19,6 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TableRowsSkeleton } from "@/components/loaders";
 import { useCategories, useCategoryGaits } from "@/hooks/use-categories";
 import type { Category } from "@/types/categories";
 
@@ -103,9 +104,7 @@ export default function CategoriesPage() {
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow>
-                <TableCell colSpan={4} className="text-center">Cargando...</TableCell>
-              </TableRow>
+              <TableRowsSkeleton columns={4} />
             ) : categories.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={4} className="text-center">No hay categorías registradas</TableCell>

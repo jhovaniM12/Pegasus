@@ -1,12 +1,22 @@
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
+
+type CategoryCardSkeletonProps = {
+  /** Stagger index for entrance animation (0-based). */
+  index?: number;
+};
 
 /**
  * Skeleton placeholder that mirrors the exact layout of a staff category card.
- * Used while the category list is being fetched on the staff home page.
  */
-export function CategoryCardSkeleton() {
+export function CategoryCardSkeleton({ index = 0 }: CategoryCardSkeletonProps) {
   return (
-    <article className="flex min-h-52 flex-col justify-between rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+    <article
+      className={cn(
+        "flex min-h-52 flex-col justify-between rounded-lg border border-slate-200 bg-white p-5 shadow-sm content-reveal",
+      )}
+      style={{ animationDelay: `${index * 75}ms` }}
+    >
       <div className="space-y-4">
         {/* Header row: fair name + gait badge */}
         <div className="flex items-start justify-between gap-3">

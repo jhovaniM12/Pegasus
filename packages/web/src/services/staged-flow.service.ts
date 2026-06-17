@@ -4,6 +4,7 @@ import type {
   FaState,
   ManagementState,
   NotificationInboxState,
+  RoundReminderHistoryItem,
   RoundState,
   RoundsManagement,
   StaffNotification,
@@ -109,6 +110,45 @@ class StagedFlowService extends ApiService {
     }
   ): Promise<ApiResponse<RoundState>> {
     return this.put<ApiResponse<RoundState>>(`/api/staff/fair-categories/${stageId}/rounds/form/entries`, body);
+  }
+
+  async updateRoundEntryReminders(
+    stageId: string,
+    participantId: string,
+    reminders: Array<{ reminderId: string; effect: "SUMA" | "RESTA" }>
+  ): Promise<ApiResponse<RoundState>> {
+    return this.put<ApiResponse<RoundState>>(
+      `/api/staff/fair-categories/${stageId}/rounds/form/entries/${participantId}/reminders`,
+      { reminders }
+    );
+  }
+
+  async updateRoundEntryNote(
+    stageId: string,
+    participantId: string,
+    note: string | null
+  ): Promise<ApiResponse<RoundState>> {
+    return this.put<ApiResponse<RoundState>>(
+      `/api/staff/fair-categories/${stageId}/rounds/form/entries/${participantId}/note`,
+      { note }
+    );
+  }
+
+  async disqualifyRoundParticipant(
+    stageId: string,
+    participantId: string,
+    reasonId: string
+  ): Promise<ApiResponse<RoundState>> {
+    return this.post<ApiResponse<RoundState>>(
+      `/api/staff/fair-categories/${stageId}/rounds/form/entries/${participantId}/disqualify`,
+      { reasonId }
+    );
+  }
+
+  async getRoundReminderHistory(stageId: string): Promise<ApiResponse<RoundReminderHistoryItem[]>> {
+    return this.get<ApiResponse<RoundReminderHistoryItem[]>>(
+      `/api/staff/fair-categories/${stageId}/rounds/form/reminder-history`
+    );
   }
 
   async closeRoundForm(stageId: string): Promise<ApiResponse<RoundState>> {

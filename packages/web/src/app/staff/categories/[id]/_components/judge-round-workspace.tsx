@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { stagedFlowService } from "@/services/staged-flow.service";
 import type { RoundParticipant, RoundState, RoundType } from "@/types/staged-flow";
-import { RoundRankingBoard } from "./round-ranking-board";
-import { RoundSelectionGrid } from "./round-selection-grid";
+import { F2RankingBoard } from "./f2-ranking-board";
+import { F1SelectionBoard } from "./f1-selection-board";
+import { RoundDisqualifyDialog } from "./round-disqualify-dialog";
 
 const ROUND_TITLES: Record<RoundType, string> = {
   F1: "Tarjeta F1 — Cabeza de lote",
@@ -90,6 +91,8 @@ export function JudgeRoundWorkspace({
   const editable = round.round.status === "OPEN" && formStatus === "STARTED";
   const [localParticipants, setLocalParticipants] = useState(round.participants);
   const [localDesertedPositions, setLocalDesertedPositions] = useState(round.form?.desertedPositions ?? []);
+  const [disqualifyTarget, setDisqualifyTarget] = useState<RoundParticipant | null>(null);
+  const [disqualifyBusy, setDisqualifyBusy] = useState(false);
   const localParticipantsRef = useRef(round.participants);
   const localDesertedPositionsRef = useRef(round.form?.desertedPositions ?? []);
   const pendingRoundPayloadRef = useRef<RoundFormPayload | null>(null);
@@ -97,8 +100,16 @@ export function JudgeRoundWorkspace({
   const latestConfirmedRoundRef = useRef(round);
   const latestRoundRequestIdRef = useRef(0);
 
+  const eligibleParticipants = useMemo(
+    () => localParticipants.filter((participant) => participant.status === "ELIGIBLE"),
+    [localParticipants]
+  );
+
   const selectedIds = useMemo(
-    () => new Set(localParticipants.filter((p) => p.selected).map((p) => p.id)),
+    () =>
+      new Set(
+        localParticipants.filter((participant) => participant.selected && participant.status === "ELIGIBLE").map((p) => p.id)
+      ),
     [localParticipants]
   );
 
@@ -109,12 +120,39 @@ export function JudgeRoundWorkspace({
 
   const assignedByParticipant = useMemo(
     () =>
-      localParticipants
+      eligibleParticipants
         .filter((p) => p.position !== null)
         .map((p) => ({ participantId: p.id, position: p.position as number }))
         .sort((a, b) => a.position - b.position),
-    [localParticipants]
+    [eligibleParticipants]
   );
+
+  const confirmDisqualify = async (participantId: string, reasonId: string) => {
+    if (!editable) return;
+    setDisqualifyBusy(true);
+    try {
+      const response = await stagedFlowService.disqualifyRoundParticipant(stageId, participantId, reasonId);
+      if (response.data) {
+        latestConfirmedRoundRef.current = response.data;
+        localParticipantsRef.current = response.data.participants;
+        localDesertedPositionsRef.current = response.data.form?.desertedPositions ?? [];
+        setLocalParticipants(response.data.participants);
+        setLocalDesertedPositions(response.data.form?.desertedPositions ?? []);
+        setDisqualifyTarget(null);
+        onLocalUpdate(response.data);
+        toast({ title: "Ejemplar descalificado", variant: "success" });
+      }
+    } catch (error) {
+      toast({
+        title: "No se pudo descalificar",
+        description: error instanceof Error ? error.message : "Intenta nuevamente.",
+        variant: "error",
+      });
+      throw error;
+    } finally {
+      setDisqualifyBusy(false);
+    }
+  };
 
   useEffect(() => {
     latestConfirmedRoundRef.current = round;
@@ -178,9 +216,12 @@ export function JudgeRoundWorkspace({
   const toggleSelect = (participantId: string) => {
     if (!editable) return;
 
+    const participant = localParticipantsRef.current.find((item) => item.id === participantId);
+    if (!participant || participant.status === "DISQUALIFIED") return;
+
     const currentSelectedIds = localParticipantsRef.current
-      .filter((participant) => participant.selected)
-      .map((participant) => participant.id);
+      .filter((item) => item.selected && item.status === "ELIGIBLE")
+      .map((item) => item.id);
     const next = currentSelectedIds.includes(participantId)
       ? currentSelectedIds.filter((id) => id !== participantId)
       : [...currentSelectedIds, participantId];
@@ -212,20 +253,23 @@ export function JudgeRoundWorkspace({
 
   const getCurrentAssignments = () =>
     localParticipantsRef.current
-      .filter((participant) => participant.position !== null)
+      .filter((participant) => participant.status === "ELIGIBLE" && participant.position !== null)
       .map((participant) => ({ participantId: participant.id, position: participant.position as number }))
       .sort((a, b) => a.position - b.position);
 
   const assignParticipant = (participantId: string) => {
     if (!editable) return;
+    const participant = localParticipantsRef.current.find((item) => item.id === participantId);
+    if (!participant || participant.status === "DISQUALIFIED") return;
     const currentAssignments = getCurrentAssignments();
     const currentDesertedPositions = localDesertedPositionsRef.current;
     if (currentAssignments.some((row) => row.participantId === participantId)) return;
 
+    const eligibleCount = localParticipantsRef.current.filter((item) => item.status === "ELIGIBLE").length;
     const nextPosition = getNextAssignablePosition(
       currentAssignments,
       currentDesertedPositions,
-      localParticipantsRef.current.length
+      eligibleCount
     );
     if (!nextPosition) return;
 
@@ -267,15 +311,13 @@ export function JudgeRoundWorkspace({
     );
   };
 
-  const total = localParticipants.length;
-  const unrankedCount = total - assignedByParticipant.length;
+  const totalEligible = eligibleParticipants.length;
+  const unrankedCount = totalEligible - assignedByParticipant.length;
   const progressLabel = isSelectionRound
-    ? `${selectedIds.size} / ${round.maxSelections ?? total} seleccionados`
-    : `${assignedByParticipant.length} / ${total} con puesto · ${desertedPositions.size} desiertos premiables`;
+    ? `${selectedIds.size} / ${round.maxSelections ?? totalEligible} seleccionados`
+    : `${assignedByParticipant.length} / ${totalEligible} con puesto · ${desertedPositions.size} desiertos premiables`;
 
-  const canClose = isSelectionRound
-    ? true
-    : assignedByParticipant.length === total;
+  const canClose = isSelectionRound ? true : assignedByParticipant.length === totalEligible;
 
   // Estados de la ronda ajenos a la edición del juez.
   if (round.round.status !== "OPEN") {
@@ -363,25 +405,54 @@ export function JudgeRoundWorkspace({
       {formStatus && formStatus !== "PENDING" && (
         <div className="mt-4">
           {isSelectionRound ? (
-            <RoundSelectionGrid
-              participants={localParticipants}
+            <F1SelectionBoard
+              stageId={stageId}
+              round={{ ...round, participants: localParticipants }}
               editable={editable}
               selectedIds={selectedIds}
-              maxSelections={round.maxSelections ?? total}
+              maxSelections={round.maxSelections ?? totalEligible}
               onToggle={toggleSelect}
+              onLocalUpdate={(updated) => {
+                latestConfirmedRoundRef.current = updated;
+                localParticipantsRef.current = updated.participants;
+                setLocalParticipants(updated.participants);
+                onLocalUpdate(updated);
+              }}
+              onOpenDisqualify={setDisqualifyTarget}
             />
           ) : (
-            <RoundRankingBoard
-              participants={localParticipants}
+            <F2RankingBoard
+              stageId={stageId}
+              round={{ ...round, participants: localParticipants }}
               editable={editable}
               desertedPositions={[...desertedPositions]}
               onAssignParticipant={assignParticipant}
               onUnassignParticipant={unassignParticipant}
               onToggleDesertedPosition={toggleDesertedPosition}
+              onLocalUpdate={(updated) => {
+                latestConfirmedRoundRef.current = updated;
+                localParticipantsRef.current = updated.participants;
+                localDesertedPositionsRef.current = updated.form?.desertedPositions ?? [];
+                setLocalParticipants(updated.participants);
+                setLocalDesertedPositions(updated.form?.desertedPositions ?? []);
+                onLocalUpdate(updated);
+              }}
+              onOpenDisqualify={setDisqualifyTarget}
             />
           )}
         </div>
       )}
+
+      <RoundDisqualifyDialog
+        open={disqualifyTarget !== null}
+        participant={disqualifyTarget}
+        reasons={round.disqualificationReasons}
+        busy={disqualifyBusy}
+        onOpenChange={(open) => {
+          if (!open) setDisqualifyTarget(null);
+        }}
+        onConfirm={confirmDisqualify}
+      />
 
       {formStatus === "PENDING" && (
         <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50/40 px-6 py-8 text-center">

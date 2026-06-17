@@ -163,8 +163,10 @@ function SimpleToast({
     <div
       role="status"
       className={cn(
-        "flex items-start gap-3 rounded-lg border bg-white px-4 py-3 text-sm shadow-lg",
-        message.variant === "success" ? "border-emerald-200" : "border-red-200"
+        "flex items-start gap-3 rounded-lg border px-4 py-3 text-sm shadow-lg",
+        message.variant === "success"
+          ? "border-emerald-200 bg-emerald-50"
+          : "border-red-200 bg-red-50"
       )}
     >
       <Icon
@@ -174,16 +176,35 @@ function SimpleToast({
         )}
       />
       <div className="min-w-0 flex-1">
-        <p className="font-semibold leading-5">{message.title}</p>
+        <p
+          className={cn(
+            "font-semibold leading-5",
+            message.variant === "success" ? "text-emerald-900" : "text-red-900"
+          )}
+        >
+          {message.title}
+        </p>
         {message.description && (
-          <p className="mt-1 leading-5 text-slate-600">{message.description}</p>
+          <p
+            className={cn(
+              "mt-1 leading-5",
+              message.variant === "success" ? "text-emerald-800/80" : "text-red-800/80"
+            )}
+          >
+            {message.description}
+          </p>
         )}
       </div>
       <button
         type="button"
         aria-label="Cerrar"
         onClick={onDismiss}
-        className="ml-1 shrink-0 text-slate-400 hover:text-slate-600"
+        className={cn(
+          "ml-1 shrink-0 transition-colors",
+          message.variant === "success"
+            ? "text-emerald-500 hover:text-emerald-700"
+            : "text-red-400 hover:text-red-600"
+        )}
       >
         <X className="size-4" />
       </button>

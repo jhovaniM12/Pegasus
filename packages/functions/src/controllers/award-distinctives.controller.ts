@@ -10,8 +10,8 @@ import {
 } from "../services/award-distinctives.service.js";
 
 export async function listAwardDistinctivesController(c: Context) {
-  const session = getSessionFromCookie(c);
-  await getActiveRootUser(session.userId);
+  // Lectura para cualquier staff autenticado (juez, DT, veterinario, ROOT).
+  // El middleware requireStaffSession ya validó la sesión en /staff/*.
   const distinctives = await listAwardDistinctives();
   return c.json(success(distinctives));
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { Calendar, Home, List, Settings, Shield, Users } from "lucide-react";
+import { Bell, Calendar, Home, List, Settings, Shield, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -37,6 +37,11 @@ const navigationItems = [
     title: "Categorías",
     url: "/categories",
     icon: List,
+  },
+  {
+    title: "Recordatorios",
+    url: "/recordatorios",
+    icon: Bell,
   },
   {
     title: "Configuración",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -11,15 +11,17 @@ import {
   Gauge,
   Gavel,
   LayoutDashboard,
+  ListFilter,
   LogOut,
   Play,
   Stethoscope,
   UserCircle,
   Users,
+  X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { ConnectionIndicator } from "@/components/network-status";
-import { StageStatusBadge } from "@/components/stage-status-badge";
+import { StageStatusBadge, stageStatusLabels } from "@/components/stage-status-badge";
 import { ConfirmActionDialog } from "@/components/confirm-action-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,9 +37,26 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { CategoryCardSkeleton } from "@/components/loaders";
+import { CategoryCardSkeleton, ContentReveal, StaffFiltersSkeleton } from "@/components/loaders";
 import { stagedFlowService } from "@/services/staged-flow.service";
-import type { StagedCategory } from "@/types/staged-flow";
+import type { StageStatus, StagedCategory } from "@/types/staged-flow";
+
+const ALL_STATUS_VALUE = "all";
+const ALL_GAIT_VALUE = "all";
+
+const STAGE_STATUS_ORDER: StageStatus[] = [
+  "NOT_STARTED",
+  "PRE_RING_STARTED",
+  "PRE_RING_CLOSED",
+  "JUDGING_STARTED",
+  "FA_CONSOLIDATED",
+  "F1_IN_PROGRESS",
+  "F1_CONSOLIDATED",
+  "F2_IN_PROGRESS",
+  "TIE_BREAK_IN_PROGRESS",
+  "JUDGING_DESERTED",
+  "JUDGING_CLOSED",
+];
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -224,6 +243,138 @@ function StaffUserMenu({
   );
 }
 
+// ─── CategoryFilters ──────────────────────────────────────────────────────────
+
+function CategoryFilters({
+  categories,
+  statusFilter,
+  gaitFilter,
+  onStatusChange,
+  onGaitChange,
+  onClear,
+}: {
+  categories: StagedCategory[];
+  statusFilter: string;
+  gaitFilter: string;
+  onStatusChange: (value: string) => void;
+  onGaitChange: (value: string) => void;
+  onClear: () => void;
+}) {
+  const availableStatuses = useMemo(() => {
+    const present = new Set(categories.map((item) => item.status));
+    return STAGE_STATUS_ORDER.filter((status) => present.has(status));
+  }, [categories]);
+
+  const availableGaits = useMemo(() => {
+    const byId = new Map<string, string>();
+    for (const item of categories) {
+      if (!byId.has(item.gait.id)) {
+        byId.set(item.gait.id, item.gait.name ?? "Sin modalidad");
+      }
+    }
+    return Array.from(byId.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name, "es"));
+  }, [categories]);
+
+  const statusLabel =
+    statusFilter === ALL_STATUS_VALUE
+      ? "Estado"
+      : stageStatusLabels[statusFilter as StageStatus] ?? "Estado";
+
+  const gaitLabel =
+    gaitFilter === ALL_GAIT_VALUE
+      ? "Modalidad"
+      : availableGaits.find((gait) => gait.id === gaitFilter)?.name ?? "Modalidad";
+
+  const hasActiveFilters = statusFilter !== ALL_STATUS_VALUE || gaitFilter !== ALL_GAIT_VALUE;
+
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-2">
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button
+              type="button"
+              variant="outline"
+              className={`h-9 gap-2 rounded-md bg-white ${statusFilter !== ALL_STATUS_VALUE ? "border-slate-400" : ""}`}
+            >
+              <ListFilter className="size-3.5" />
+              <span className="max-w-[180px] truncate">{statusLabel}</span>
+              <ChevronDown className="size-3.5 text-slate-500" />
+            </Button>
+          }
+        />
+        <DropdownMenuContent align="start" className="w-56">
+          <DropdownMenuItem
+            className="cursor-pointer"
+            onClick={() => onStatusChange(ALL_STATUS_VALUE)}
+          >
+            Todos los estados
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          {availableStatuses.map((status) => (
+            <DropdownMenuItem
+              key={status}
+              className="cursor-pointer"
+              onClick={() => onStatusChange(status)}
+            >
+              {stageStatusLabels[status]}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button
+              type="button"
+              variant="outline"
+              className={`h-9 gap-2 rounded-md bg-white ${gaitFilter !== ALL_GAIT_VALUE ? "border-slate-400" : ""}`}
+            >
+              <ListFilter className="size-3.5" />
+              <span className="max-w-[220px] truncate">{gaitLabel}</span>
+              <ChevronDown className="size-3.5 text-slate-500" />
+            </Button>
+          }
+        />
+        <DropdownMenuContent align="start" className="w-72">
+          <DropdownMenuItem
+            className="cursor-pointer"
+            onClick={() => onGaitChange(ALL_GAIT_VALUE)}
+          >
+            Todas las modalidades
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          {availableGaits.map((gait) => (
+            <DropdownMenuItem
+              key={gait.id}
+              className="cursor-pointer"
+              onClick={() => onGaitChange(gait.id)}
+            >
+              {gait.name}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {hasActiveFilters && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-9 gap-1.5 text-slate-600"
+          onClick={onClear}
+        >
+          <X className="size-3.5" />
+          Limpiar filtros
+        </Button>
+      )}
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function StaffPage() {
@@ -234,6 +385,21 @@ export default function StaffPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<(ConfirmAction & { open: boolean }) | null>(null);
+  const [statusFilter, setStatusFilter] = useState(ALL_STATUS_VALUE);
+  const [gaitFilter, setGaitFilter] = useState(ALL_GAIT_VALUE);
+
+  const filteredCategories = useMemo(() => {
+    return categories.filter((item) => {
+      const matchesStatus = statusFilter === ALL_STATUS_VALUE || item.status === statusFilter;
+      const matchesGait = gaitFilter === ALL_GAIT_VALUE || item.gait.id === gaitFilter;
+      return matchesStatus && matchesGait;
+    });
+  }, [categories, statusFilter, gaitFilter]);
+
+  const clearFilters = () => {
+    setStatusFilter(ALL_STATUS_VALUE);
+    setGaitFilter(ALL_GAIT_VALUE);
+  };
 
   useEffect(() => {
     Promise.all([fetch("/api/auth/me"), fetch("/api/staff/staged-categories")])
@@ -303,18 +469,46 @@ export default function StaffPage() {
         </div>
 
         {loading ? (
-          <div className="grid gap-4 lg:grid-cols-2">
-            {Array.from({ length: 6 }).map((_, index) => (
-              <CategoryCardSkeleton key={index} />
-            ))}
-          </div>
+          <>
+            <StaffFiltersSkeleton />
+            <div className="grid gap-4 lg:grid-cols-2">
+              {Array.from({ length: 6 }).map((_, index) => (
+                <CategoryCardSkeleton key={index} index={index} />
+              ))}
+            </div>
+          </>
         ) : categories.length === 0 ? (
           <div className="rounded-lg border border-slate-200 bg-white px-6 py-12 text-center">
             <p className="text-sm font-medium text-slate-700">No hay categorías asignadas por ahora.</p>
           </div>
         ) : (
+          <ContentReveal>
+            <CategoryFilters
+              categories={categories}
+              statusFilter={statusFilter}
+              gaitFilter={gaitFilter}
+              onStatusChange={setStatusFilter}
+              onGaitChange={setGaitFilter}
+              onClear={clearFilters}
+            />
+
+            {filteredCategories.length === 0 ? (
+              <div className="rounded-lg border border-slate-200 bg-white px-6 py-12 text-center">
+                <p className="text-sm font-medium text-slate-700">
+                  No hay categorías que coincidan con los filtros seleccionados.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-4"
+                  onClick={clearFilters}
+                >
+                  Limpiar filtros
+                </Button>
+              </div>
+            ) : (
           <div className="grid gap-4 lg:grid-cols-2">
-            {categories.map((item) => {
+            {filteredCategories.map((item) => {
               const action = getCardAction(currentUser?.role, item);
 
               return (
@@ -400,6 +594,8 @@ export default function StaffPage() {
               );
             })}
           </div>
+            )}
+          </ContentReveal>
         )}
       </main>
 

@@ -131,18 +131,21 @@ export function DirectorRounds({
     );
   }
 
-  // F1 consolidado → abrir F2.
+  // F1 consolidado → abrir F2 (sin tabla de puestos: aún no es resultado oficial de categoría).
   if (status === "F1_CONSOLIDATED") {
+    const finalistCount = f1?.results.length ?? 0;
+
     return (
       <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-5">
-        {f1 && (
-          <OfficialResultBoard
-            results={f1.results}
-            desertedResults={f1.desertedResults}
-            showScoring={false}
-            title="F1 — Cabeza de lote"
-          />
-        )}
+        <div className="flex items-center gap-2">
+          <CheckCircle2 className="size-5 text-emerald-600" />
+          <h3 className="text-base font-semibold text-slate-950">F1 consolidado</h3>
+        </div>
+        <p className="text-sm text-slate-600">
+          La cabeza de lote quedó definida
+          {finalistCount > 0 ? ` con ${finalistCount} ejemplar${finalistCount === 1 ? "" : "es"}` : ""}.
+          Los puestos oficiales de la categoría se asignan en la tarjeta final F2.
+        </p>
         <Button
           className="w-full bg-blue-600 text-white hover:bg-blue-700"
           disabled={busy}
