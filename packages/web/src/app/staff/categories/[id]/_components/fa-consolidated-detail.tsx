@@ -29,9 +29,7 @@ export function FaConsolidatedDetail({
   judgingStartedAt,
   onBack
 }: FaConsolidatedDetailProps) {
-  const sortedFinalists = [...consolidated].sort(
-    (a, b) => (a.finalPosition ?? 999) - (b.finalPosition ?? 999)
-  );
+  const sortedFinalists = [...consolidated].sort((a, b) => a.trackPosition - b.trackPosition);
 
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -79,7 +77,7 @@ export function FaConsolidatedDetail({
                 </div>
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   {form.selections.length > 0 ? (
-                    form.selections.map((pos) => <TrackChip key={pos} position={pos} />)
+                    [...form.selections].sort((a, b) => a - b).map((pos) => <TrackChip key={pos} position={pos} />)
                   ) : (
                     <span className="text-xs text-slate-400">Sin selecciones.</span>
                   )}

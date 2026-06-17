@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, CheckCheck, Gavel, Lock, Play } from "lucide-react";
@@ -43,6 +43,12 @@ type CurrentUser = {
   personName: string | null;
 };
 
+function extractSelectedParticipantIds(state: FaState): string[] {
+  return state.participants
+    .filter((participant) => participant.decision?.decision === "SELECTED")
+    .map((participant) => participant.id);
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function StaffCategoryPage() {
@@ -53,6 +59,7 @@ export default function StaffCategoryPage() {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [summary, setSummary] = useState<StagedCategory | null>(null);
   const [fa, setFa] = useState<FaState | null>(null);
+  const [faSelectedIdsLocal, setFaSelectedIdsLocal] = useState<string[]>([]);
   const [management, setManagement] = useState<ManagementState | null>(null);
   const [round, setRound] = useState<RoundState | null>(null);
   const [roundsManagement, setRoundsManagement] = useState<RoundsManagement | null>(null);
@@ -60,6 +67,12 @@ export default function StaffCategoryPage() {
   const [disqualifyExpandedIds, setDisqualifyExpandedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  // Ref síncrona: fuente de verdad para calcular el siguiente toggle sin depender del ciclo de React.
+  const localSelectionRef = useRef<string[]>([]);
+  const isSyncingFaSelectionRef = useRef(false);
+  const pendingFaSelectionRef = useRef<string[] | null>(null);
+  const latestConfirmedFaSelectionRef = useRef<string[]>([]);
+  const latestFaRequestIdRef = useRef(0);
   const { toast } = useToast();
 
   const { checks, setChecks, updatingVetByEntryId, handleVetCheckUpdate } = useVeterinaryChecks({
@@ -149,26 +162,95 @@ export default function StaffCategoryPage() {
 
   // ─── FA handlers ─────────────────────────────────────────────────────────
 
-  const selectedIds = useMemo(
-    () =>
-      new Set(
-        fa?.participants
-          .filter((p) => p.decision?.decision === "SELECTED")
-          .map((p) => p.id) ?? []
-      ),
-    [fa]
-  );
+  const selectedIds = useMemo(() => new Set(faSelectedIdsLocal), [faSelectedIdsLocal]);
+
+  useEffect(() => {
+    if (!fa) {
+      localSelectionRef.current = [];
+      setFaSelectedIdsLocal([]);
+      latestConfirmedFaSelectionRef.current = [];
+      pendingFaSelectionRef.current = null;
+      isSyncingFaSelectionRef.current = false;
+      return;
+    }
+
+    const confirmedSelectedIds = extractSelectedParticipantIds(fa);
+    latestConfirmedFaSelectionRef.current = confirmedSelectedIds;
+
+    // Evita que una respuesta tardía pise el estado optimista en curso.
+    if (!isSyncingFaSelectionRef.current) {
+      localSelectionRef.current = confirmedSelectedIds;
+      setFaSelectedIdsLocal(confirmedSelectedIds);
+    }
+  }, [fa]);
+
+  const flushFaSelection = useCallback(async () => {
+    if (isSyncingFaSelectionRef.current) return;
+
+    const queuedSelection = pendingFaSelectionRef.current;
+    if (!queuedSelection) return;
+
+    pendingFaSelectionRef.current = null;
+    isSyncingFaSelectionRef.current = true;
+    const requestId = ++latestFaRequestIdRef.current;
+
+    try {
+      const response = await stagedFlowService.updateFaDecisions(stageId, queuedSelection);
+      if (requestId !== latestFaRequestIdRef.current) {
+        return;
+      }
+
+      if (response.data) {
+        const confirmedSelectedIds = extractSelectedParticipantIds(response.data);
+        latestConfirmedFaSelectionRef.current = confirmedSelectedIds;
+        // Solo sincroniza visualmente si no hay otra operación en cola.
+        if (!pendingFaSelectionRef.current) {
+          localSelectionRef.current = confirmedSelectedIds;
+          setFaSelectedIdsLocal(confirmedSelectedIds);
+        }
+        setFa(response.data);
+      }
+    } catch (_error) {
+      if (requestId === latestFaRequestIdRef.current) {
+        localSelectionRef.current = latestConfirmedFaSelectionRef.current;
+        setFaSelectedIdsLocal(latestConfirmedFaSelectionRef.current);
+        toast({
+          title: "No se pudo guardar la selección",
+          description: "Se restauró la última selección confirmada. Intenta nuevamente.",
+          variant: "error"
+        });
+      }
+    } finally {
+      isSyncingFaSelectionRef.current = false;
+      if (pendingFaSelectionRef.current) {
+        void flushFaSelection();
+      }
+    }
+  }, [stageId, toast]);
 
   const toggleFaSelection = useCallback(
     (participantId: string) => {
       if (!fa || summary?.status !== "JUDGING_STARTED" || fa.form.status !== "STARTED") return;
-      const isSelected = selectedIds.has(participantId);
+
+      // Leer siempre desde la ref síncrona para evitar estado stale en taps rápidos.
+      const current = localSelectionRef.current;
+      const isSelected = current.includes(participantId);
       const next = isSelected
-        ? Array.from(selectedIds).filter((id) => id !== participantId)
-        : [...Array.from(selectedIds), participantId];
-      stagedFlowService.updateFaDecisions(stageId, next).then((r) => setFa(r.data ?? fa));
+        ? current.filter((id) => id !== participantId)
+        : [...current, participantId];
+
+      if (next.length > 10) return;
+
+      // Actualizar ref y estado visual de forma atómica y síncrona.
+      localSelectionRef.current = next;
+      setFaSelectedIdsLocal(next);
+
+      // Cola de sincronización: si hay un request en vuelo, solo actualizamos el
+      // payload pendiente; flushFaSelection lo enviará al terminar.
+      pendingFaSelectionRef.current = next;
+      void flushFaSelection();
     },
-    [fa, selectedIds, stageId, summary?.status]
+    [fa, flushFaSelection, summary?.status]
   );
 
   const toggleDisqualifyPanel = useCallback((participantId: string) => {

@@ -30,6 +30,8 @@ export type TieBreakTestType =
 
 export type TieBreakTestStatus = "PENDING" | "ACTIVE" | "DONE";
 
+export const MAX_AWARD_POSITIONS = 5;
+
 @Unique("UQ_judging_rounds_stage_type_sequence", ["fairCategoryStageId", "roundType", "sequence"])
 @Entity({ name: "judging_rounds" })
 export class JudgingRound extends PegasusBaseEntity {
@@ -187,6 +189,25 @@ export class JudgingRoundDesertedResult extends PegasusBaseEntity {
 
   @Column({ name: "votes_count", type: "integer", default: 0 })
   votesCount!: number;
+}
+
+@Unique("UQ_award_distinctives_position", ["position"])
+@Entity({ name: "award_distinctives" })
+export class AwardDistinctive extends PegasusBaseEntity {
+  @Column({ name: "position", type: "integer" })
+  position!: number;
+
+  @Column({ name: "label", type: "varchar" })
+  label!: string;
+
+  @Column({ name: "color_name", type: "varchar" })
+  colorName!: string;
+
+  @Column({ name: "color_hex", type: "varchar", nullable: true })
+  colorHex!: string | null;
+
+  @Column({ name: "is_active", type: "boolean", default: true })
+  isActive!: boolean;
 }
 
 @Unique("UQ_tie_break_tests_round_type", ["roundId", "testType"])

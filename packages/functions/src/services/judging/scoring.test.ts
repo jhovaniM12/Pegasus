@@ -133,6 +133,45 @@ describe("computeF2 - casos borde", () => {
     expect(result.desertedResults).toEqual([{ finalPosition: 2, votesCount: 2 }]);
   });
 
+  it("salta el puesto desierto oficial al numerar los ejemplares premiados", () => {
+    const cards: JudgeCard[] = [
+      {
+        judgeUserId: "j1",
+        positions: [
+          { participantId: "A", position: 1 },
+          { participantId: "B", position: 2 },
+          { participantId: "C", position: 4 }
+        ],
+        desertedPositions: [3]
+      },
+      {
+        judgeUserId: "j2",
+        positions: [
+          { participantId: "A", position: 1 },
+          { participantId: "B", position: 2 },
+          { participantId: "C", position: 4 }
+        ],
+        desertedPositions: [3]
+      },
+      {
+        judgeUserId: "j3",
+        positions: [
+          { participantId: "A", position: 1 },
+          { participantId: "B", position: 2 },
+          { participantId: "C", position: 4 }
+        ],
+        desertedPositions: []
+      }
+    ];
+
+    const result = computeF2(cards, 3);
+
+    expect(result.desertedResults).toEqual([{ finalPosition: 3, votesCount: 2 }]);
+    expect(positionOf(result, "A")).toBe(1);
+    expect(positionOf(result, "B")).toBe(2);
+    expect(positionOf(result, "C")).toBe(4);
+  });
+
   it("no premia ejemplares sin mayoría mínima de consideración", () => {
     const cards: JudgeCard[] = [
       { judgeUserId: "j1", positions: [{ participantId: "A", position: 1 }], desertedPositions: [2, 3] },
@@ -146,5 +185,15 @@ describe("computeF2 - casos borde", () => {
       { finalPosition: 2, votesCount: 3 },
       { finalPosition: 3, votesCount: 3 }
     ]);
+  });
+
+  it("ignora puestos desiertos fuera del rango premiable 1..5", () => {
+    const cards: JudgeCard[] = [
+      { judgeUserId: "j1", positions: [{ participantId: "A", position: 1 }], desertedPositions: [6, 7] },
+      { judgeUserId: "j2", positions: [{ participantId: "A", position: 1 }], desertedPositions: [6] },
+      { judgeUserId: "j3", positions: [{ participantId: "A", position: 1 }], desertedPositions: [7] }
+    ];
+    const result = computeF2(cards, 3);
+    expect(result.desertedResults).toEqual([]);
   });
 });

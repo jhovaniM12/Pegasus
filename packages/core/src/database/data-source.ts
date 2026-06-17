@@ -5,6 +5,7 @@ import {
   City,
   EquineType,
   Fair,
+  AwardDistinctive,
   FairEntry,
   FairResult,
   FairStaff,
@@ -33,22 +34,25 @@ import {
   VeterinaryCheck,
   WorkflowEvent
 } from "../entities/index.js";
-import { CreateInitialSchema1717430400000 } from "../migrations/1717430400000-CreateInitialSchema.js";
-import { ExpandGradesNomenclature1717430400001 } from "../migrations/1717430400001-ExpandGradesNomenclature.js";
-import { DropFairsStatusColumn1717430400002 } from "../migrations/1717430400002-DropFairsStatusColumn.js";
-import { AddFairsRegisteredCount1717430400003 } from "../migrations/1717430400003-AddFairsRegisteredCount.js";
-import { CreateFairEntriesTable1717430400004 } from "../migrations/1717430400004-CreateFairEntriesTable.js";
-import { AddCategoryAgeCheck1717430400005 } from "../migrations/1717430400005-AddCategoryAgeCheck.js";
-import { AlterPeopleTable1717430400006 } from "../migrations/1717430400006-AlterPeopleTable.js";
-import { CreateFairStaffTable1717430400007 } from "../migrations/1717430400007-CreateFairStaffTable.js";
-import { CreateFairResultsTable1717430400008 } from "../migrations/1717430400008-CreateFairResultsTable.js";
-import { AlterFairResultsUniqueConstraint1717430400009 } from "../migrations/1717430400009-AlterFairResultsUniqueConstraint.js";
-import { CreateUsersTable1717430400010 } from "../migrations/1717430400010-CreateUsersTable.js";
-import { AddUserAccessCode1717430400011 } from "../migrations/1717430400011-AddUserAccessCode.js";
-import { CreateStagedFlowTables1717430400012 } from "../migrations/1717430400012-CreateStagedFlowTables.js";
-import { AddNotificationInboxFields1717430400013 } from "../migrations/1717430400013-AddNotificationInboxFields.js";
-import { CreateJudgingRoundsTables1717430400014 } from "../migrations/1717430400014-CreateJudgingRoundsTables.js";
-import { AddDesertedSupport1717430400015 } from "../migrations/1717430400015-AddDesertedSupport.js";
+import {
+  AddDesertedSupport1717430400015,
+  AddFairsRegisteredCount1717430400003,
+  AddNotificationInboxFields1717430400013,
+  AddUserAccessCode1717430400011,
+  AlterFairResultsUniqueConstraint1717430400009,
+  AlterPeopleTable1717430400006,
+  CreateAwardDistinctives1717430400016,
+  CreateFairEntriesTable1717430400004,
+  CreateFairResultsTable1717430400008,
+  CreateFairStaffTable1717430400007,
+  CreateInitialSchema1717430400000,
+  CreateJudgingRoundsTables1717430400014,
+  CreateStagedFlowTables1717430400012,
+  CreateUsersTable1717430400010,
+  DropFairsStatusColumn1717430400002,
+  ExpandGradesNomenclature1717430400001,
+  AddCategoryAgeCheck1717430400005
+} from "../migrations/index.js";
 import { loadLocalEnv } from "../shared/load-env.js";
 
 loadLocalEnv();
@@ -78,6 +82,7 @@ export const AppDataSource = new DataSource({
     City,
     EquineType,
     Fair,
+    AwardDistinctive,
     FairEntry,
     FairResult,
     FairStaff,
@@ -122,7 +127,8 @@ export const AppDataSource = new DataSource({
     CreateStagedFlowTables1717430400012,
     AddNotificationInboxFields1717430400013,
     CreateJudgingRoundsTables1717430400014,
-    AddDesertedSupport1717430400015
+    AddDesertedSupport1717430400015,
+    CreateAwardDistinctives1717430400016
   ]
 });
 
