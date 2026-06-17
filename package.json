@@ -10,7 +10,7 @@
     "dev": "pnpm --filter @pegasus/functions dev",
     "dev:web": "pnpm --filter @pegasus/web dev",
     "dev:all": "pnpm --filter @pegasus/functions dev & pnpm --filter @pegasus/web dev",
-    "dev:vercel": "pnpm build && vercel dev",
+    "dev:vercel": "pnpm build && cd packages/web && vercel dev",
     "typeorm": "pnpm --filter @pegasus/core typeorm",
     "migration:generate": "pnpm --filter @pegasus/core migration:generate",
     "migration:run": "pnpm --filter @pegasus/core migration:run",
