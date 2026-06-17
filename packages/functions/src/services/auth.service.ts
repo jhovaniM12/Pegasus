@@ -136,11 +136,11 @@ export async function getActiveUser(userId: string): Promise<User> {
 export async function getActiveStaffUser(userId: string): Promise<User> {
   const user = await getActiveUser(userId);
 
-  if (!["JUDGE", "TECHNICAL_DIRECTOR", "VETERINARIAN"].includes(user.role)) {
+  if (!["ROOT", "JUDGE", "TECHNICAL_DIRECTOR", "VETERINARIAN"].includes(user.role)) {
     throw new ForbiddenError("El rol no tiene acceso a este dashboard.");
   }
 
-  if (!user.personId) {
+  if (user.role !== "ROOT" && !user.personId) {
     throw new ForbiddenError("El usuario no está asociado a una persona.");
   }
 

@@ -32,7 +32,7 @@ export const tieBreakTestTypeSchema = z.enum([
 export const updateRoundFormSchema = z
   .object({
     selectedParticipantIds: z.array(z.string().uuid()).max(20).optional(),
-    desertedPositions: z.array(z.number().int().min(1).max(50)).max(50).optional(),
+    desertedPositions: z.array(z.number().int().min(1).max(5)).max(5).optional(),
     positions: z
       .array(
         z.object({

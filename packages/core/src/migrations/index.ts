@@ -1,0 +1,17 @@
+export { CreateInitialSchema1717430400000 } from "./1717430400000-CreateInitialSchema.js";
+export { ExpandGradesNomenclature1717430400001 } from "./1717430400001-ExpandGradesNomenclature.js";
+export { DropFairsStatusColumn1717430400002 } from "./1717430400002-DropFairsStatusColumn.js";
+export { AddFairsRegisteredCount1717430400003 } from "./1717430400003-AddFairsRegisteredCount.js";
+export { CreateFairEntriesTable1717430400004 } from "./1717430400004-CreateFairEntriesTable.js";
+export { AddCategoryAgeCheck1717430400005 } from "./1717430400005-AddCategoryAgeCheck.js";
+export { AlterPeopleTable1717430400006 } from "./1717430400006-AlterPeopleTable.js";
+export { CreateFairStaffTable1717430400007 } from "./1717430400007-CreateFairStaffTable.js";
+export { CreateFairResultsTable1717430400008 } from "./1717430400008-CreateFairResultsTable.js";
+export { AlterFairResultsUniqueConstraint1717430400009 } from "./1717430400009-AlterFairResultsUniqueConstraint.js";
+export { CreateUsersTable1717430400010 } from "./1717430400010-CreateUsersTable.js";
+export { AddUserAccessCode1717430400011 } from "./1717430400011-AddUserAccessCode.js";
+export { CreateStagedFlowTables1717430400012 } from "./1717430400012-CreateStagedFlowTables.js";
+export { AddNotificationInboxFields1717430400013 } from "./1717430400013-AddNotificationInboxFields.js";
+export { CreateJudgingRoundsTables1717430400014 } from "./1717430400014-CreateJudgingRoundsTables.js";
+export { AddDesertedSupport1717430400015 } from "./1717430400015-AddDesertedSupport.js";
+export { CreateAwardDistinctives1717430400016 } from "./1717430400016-CreateAwardDistinctives.js";

@@ -3,6 +3,14 @@ import { OfficialResultBoard } from "./official-result-board";
 import { formatRoundFormDuration, formatRoundFormTime } from "./round-form-timing";
 import type { RoundManagementItem } from "@/types/staged-flow";
 
+function TrackChip({ position }: { position: number }) {
+  return (
+    <span className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 tabular-nums">
+      #{position}
+    </span>
+  );
+}
+
 function detailTitle(round: RoundManagementItem): string {
   if (round.roundType === "F1") return "Formato F1 Consolidado";
   if (round.roundType === "F2") return "Formato F2 Consolidado";
@@ -31,6 +39,7 @@ export function RoundConsolidatedDetail({ round, resolvedByTieBreak, onBack }: R
   const isF1 = round.roundType === "F1";
   const isTieBreak = round.roundType === "TIE_BREAK";
   const isF2ResolvedByTieBreak = round.roundType === "F2" && resolvedByTieBreak;
+  const sortedF1Finalists = [...round.results].sort((a, b) => a.trackPosition - b.trackPosition);
 
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -123,29 +132,46 @@ export function RoundConsolidatedDetail({ round, resolvedByTieBreak, onBack }: R
         </div>
 
         {round.results.length > 0 || round.desertedResults.length > 0 ? (
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-4">
-            <div className="mb-3 flex items-center gap-2">
-              <Trophy className="size-4 text-emerald-700" />
-              <span className="text-sm font-semibold text-emerald-900">Consolidado {formLabel(round)}</span>
+          isF1 ? (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-4">
+              <div className="flex items-center gap-2">
+                <Trophy className="size-4 text-emerald-700" />
+                <span className="text-sm font-semibold text-emerald-900">Consolidado FORMATO F1</span>
+              </div>
+              <p className="mt-0.5 text-xs text-emerald-700">
+                Finalistas consolidados: <strong>{sortedF1Finalists.length} ejemplares.</strong>
+              </p>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {sortedF1Finalists.map((finalist) => (
+                  <TrackChip key={finalist.id} position={finalist.trackPosition} />
+                ))}
+              </div>
             </div>
-            <OfficialResultBoard
-              results={round.results}
-              desertedResults={round.desertedResults}
-              showScoring={!isF1}
-              title={resultTitle(round)}
-              note={
-                isF2ResolvedByTieBreak
-                  ? "La suma y los primeros puestos corresponden al F2 original; el orden final fue definido por desempate."
-                  : isTieBreak
-                    ? "Este consolidado muestra cómo los jueces ordenaron a los ejemplares empatados para resolver el F2."
-                    : undefined
-              }
-              provisionalLabel={
-                isF2ResolvedByTieBreak ? "Resuelto por desempate" : isTieBreak ? "Resultado desempate" : undefined
-              }
-              provisionalVariant={isF2ResolvedByTieBreak || isTieBreak ? "tieBreak" : "neutral"}
-            />
-          </div>
+          ) : (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-4">
+              <div className="mb-3 flex items-center gap-2">
+                <Trophy className="size-4 text-emerald-700" />
+                <span className="text-sm font-semibold text-emerald-900">Consolidado {formLabel(round)}</span>
+              </div>
+              <OfficialResultBoard
+                results={round.results}
+                desertedResults={round.desertedResults}
+                showScoring
+                title={resultTitle(round)}
+                note={
+                  isF2ResolvedByTieBreak
+                    ? "La suma y los primeros puestos corresponden al F2 original; el orden final fue definido por desempate."
+                    : isTieBreak
+                      ? "Este consolidado muestra cómo los jueces ordenaron a los ejemplares empatados para resolver el F2."
+                      : undefined
+                }
+                provisionalLabel={
+                  isF2ResolvedByTieBreak ? "Resuelto por desempate" : isTieBreak ? "Resultado desempate" : undefined
+                }
+                provisionalVariant={isF2ResolvedByTieBreak || isTieBreak ? "tieBreak" : "neutral"}
+              />
+            </div>
+          )
         ) : (
           <p className="rounded-lg border border-slate-100 bg-slate-50/30 px-4 py-4 text-center text-sm text-slate-400">
             Aún no hay resultado consolidado para esta ronda.

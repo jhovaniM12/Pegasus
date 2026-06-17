@@ -1,3 +1,5 @@
+import { MAX_AWARD_POSITIONS } from "@pegasus/core";
+
 /**
  * Cómputo oficial de la tarjeta F2 (y de las rondas de desempate, que usan la misma lógica).
  *
@@ -98,9 +100,11 @@ export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult
   }
 
   const desertedResults = [...desertedVotes.entries()]
+    .filter(([finalPosition]) => finalPosition >= 1 && finalPosition <= MAX_AWARD_POSITIONS)
     .filter(([, votesCount]) => votesCount >= threshold)
     .map(([finalPosition, votesCount]) => ({ finalPosition, votesCount }))
     .sort((a, b) => a.finalPosition - b.finalPosition);
+  const desertedFinalPositions = new Set(desertedResults.map((row) => row.finalPosition));
   const awarded = aggregates.filter((agg) => agg.cardsCount >= threshold);
   if (awarded.length === 0) {
     return { participants: [], desertedResults, hasTie: false, tiedGroups: [], majorityWinnerId: null };
@@ -131,15 +135,24 @@ export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult
   }
   const tiedGroups = [...sumGroups.values()].filter((group) => group.length > 1);
   const tiedIds = new Set(tiedGroups.flat());
+  let nextFinalPosition = 1;
 
-  const participants: ScoredParticipant[] = ordered.map((agg, index) => ({
-    participantId: agg.participantId,
-    positionSum: agg.positionSum,
-    firstPlaceVotes: agg.firstPlaceVotes,
-    cardsCount: agg.cardsCount,
-    finalPosition: index + 1,
-    tied: tiedIds.has(agg.participantId)
-  }));
+  const participants: ScoredParticipant[] = ordered.map((agg) => {
+    while (desertedFinalPositions.has(nextFinalPosition)) {
+      nextFinalPosition += 1;
+    }
+    const finalPosition = nextFinalPosition;
+    nextFinalPosition += 1;
+
+    return {
+      participantId: agg.participantId,
+      positionSum: agg.positionSum,
+      firstPlaceVotes: agg.firstPlaceVotes,
+      cardsCount: agg.cardsCount,
+      finalPosition,
+      tied: tiedIds.has(agg.participantId)
+    };
+  });
 
   return {
     participants,

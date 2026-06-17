@@ -1,4 +1,5 @@
 import {
+  AwardDistinctive,
   FaConsolidatedResult,
   FairCategoryStage,
   getDataSource,
@@ -12,12 +13,14 @@ import {
   TieBreakTest,
   User,
   type JudgingRoundResultStatus,
+  MAX_AWARD_POSITIONS,
   type JudgingRoundType,
   type TieBreakTestType
 } from "@pegasus/core";
 import type { EntityManager } from "typeorm";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { buildStageSummary, type StagedCategoryDto } from "../staged-flow.service.js";
+import { resolveAwardDistinctiveForPosition } from "./award-distinctives.js";
 import { computeF2, type JudgeCard } from "./scoring.js";
 import {
   ROLE_LABELS,
@@ -32,6 +35,7 @@ import {
 
 const MAX_F1_SELECTIONS = 7;
 const F1_SURVIVOR_THRESHOLD = 8;
+const MIN_AWARD_POSITION = 1;
 
 export const TIE_BREAK_TEST_LABELS: Record<TieBreakTestType, string> = {
   DOUBLE_TABLE: "Doble tabla",
@@ -75,6 +79,13 @@ async function loadParticipants(manager: EntityManager, participantIds: string[]
     where: participantIds.map((id) => ({ id })),
     relations: { fairEntry: true }
   });
+}
+
+async function loadDistinctivesByPosition(manager: EntityManager): Promise<Map<number, AwardDistinctive>> {
+  const rows = await manager.getRepository(AwardDistinctive).find({
+    order: { position: "ASC" }
+  });
+  return new Map(rows.map((row) => [row.position, row]));
 }
 
 /** Ids de participantes que sobreviven a la ronda previa (FA o F1). */
@@ -315,12 +326,14 @@ export async function updateRoundForm(
       // F2 / desempate: puestos ordinales únicos.
       const positions = input.positions ?? [];
       const desertedPositions = Array.from(new Set(input.desertedPositions ?? []));
+      const maxDesertablePosition = Math.min(entries.length, MAX_AWARD_POSITIONS);
+      const maxAssignablePosition = entries.length + desertedPositions.length;
       const positionByParticipant = new Map(positions.map((p) => [p.participantId, p.position]));
       for (const { participantId, position } of positions) {
         if (!entryByParticipant.has(participantId)) {
           throw new BadRequestError("Los puestos contienen ejemplares fuera de la ronda.");
         }
-        if (!Number.isInteger(position) || position < 1 || position > entries.length) {
+        if (!Number.isInteger(position) || position < 1 || position > maxAssignablePosition) {
           throw new BadRequestError("Los puestos deben ser números válidos.");
         }
       }
@@ -329,8 +342,12 @@ export async function updateRoundForm(
         throw new BadRequestError("No puedes repetir un mismo puesto.");
       }
       for (const position of desertedPositions) {
-        if (!Number.isInteger(position) || position < 1 || position > entries.length) {
-          throw new BadRequestError("Los puestos desiertos deben ser números válidos.");
+        if (
+          !Number.isInteger(position) ||
+          position < MIN_AWARD_POSITION ||
+          position > maxDesertablePosition
+        ) {
+          throw new BadRequestError(`Los puestos desiertos válidos están entre 1 y ${maxDesertablePosition}.`);
         }
       }
       const overlap = desertedPositions.some((position) => assigned.includes(position));
@@ -386,9 +403,24 @@ export async function closeRoundForm(user: User, stageId: string) {
       const desertedRows = await manager
         .getRepository(JudgingRoundFormDesertedPosition)
         .find({ where: { roundFormId: form.id } });
+      const maxDesertablePosition = Math.min(entries.length, MAX_AWARD_POSITIONS);
       const deserted = new Set(desertedRows.map((row) => row.position));
+      for (const position of deserted) {
+        if (position < MIN_AWARD_POSITION || position > maxDesertablePosition) {
+          throw new BadRequestError(
+            `Solo puedes declarar desiertos los puestos premiables entre 1 y ${maxDesertablePosition}.`
+          );
+        }
+      }
       const positioned = entries.filter((entry) => entry.position !== null);
       const assigned = positioned.map((entry) => entry.position as number);
+      const maxAssignablePosition = entries.length + deserted.size;
+      if (positioned.length !== entries.length) {
+        throw new BadRequestError("Debes asignar un puesto a cada ejemplar antes de cerrar.");
+      }
+      if (assigned.some((position) => position < 1 || position > maxAssignablePosition)) {
+        throw new BadRequestError("Los puestos asignados no corresponden al número de ejemplares y desiertos.");
+      }
       if (new Set(assigned).size !== assigned.length) {
         throw new BadRequestError("No puedes repetir un mismo puesto.");
       }
@@ -396,7 +428,7 @@ export async function closeRoundForm(user: User, stageId: string) {
       if (hasOverlap) {
         throw new BadRequestError("No puedes cerrar con un puesto simultáneamente asignado y desierto.");
       }
-      for (let position = 1; position <= entries.length; position += 1) {
+      for (let position = 1; position <= maxAssignablePosition; position += 1) {
         if (!deserted.has(position) && !assigned.includes(position)) {
           throw new BadRequestError("Debes cubrir todos los puestos con ejemplar o desierto antes de cerrar.");
         }
@@ -957,6 +989,7 @@ export async function getRoundsManagement(user: User, stageId: string) {
       where: { fairCategoryStageId: stage.id },
       order: { createdAt: "ASC" }
     });
+    const distinctivesByPosition = await loadDistinctivesByPosition(manager);
 
     const roundDtos = [];
     for (const round of rounds) {
@@ -1033,12 +1066,20 @@ export async function getRoundsManagement(user: User, stageId: string) {
           scoreValue: row.scoreValue,
           firstPlaceVotes: row.firstPlaceVotes,
           finalPosition: row.finalPosition,
-          status: row.status
+          status: row.status,
+          awardDistinctive:
+            round.roundType === "F1"
+              ? null
+              : resolveAwardDistinctiveForPosition(distinctivesByPosition, row.finalPosition)
         })),
         desertedResults: desertedResults.map((row) => ({
           id: row.id,
           finalPosition: row.finalPosition,
-          votesCount: row.votesCount
+          votesCount: row.votesCount,
+          awardDistinctive:
+            round.roundType === "F1"
+              ? null
+              : resolveAwardDistinctiveForPosition(distinctivesByPosition, row.finalPosition)
         })),
         tests: tests.map((test) => ({
           id: test.id,

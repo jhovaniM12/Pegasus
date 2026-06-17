@@ -260,7 +260,14 @@ export function DirectorRounds({
 
   // Resultado oficial cerrado.
   if (status === "JUDGING_CLOSED" && f2) {
-    return <OfficialResultBoard results={f2.results} desertedResults={f2.desertedResults} title="Resultado oficial" />;
+    return (
+      <OfficialResultBoard
+        results={f2.results}
+        desertedResults={f2.desertedResults}
+        showPodium
+        title="Resultado oficial"
+      />
+    );
   }
 
   if (status === "JUDGING_DESERTED") {

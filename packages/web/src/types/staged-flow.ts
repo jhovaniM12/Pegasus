@@ -153,6 +153,13 @@ export type RoundState = {
   participants: RoundParticipant[];
 };
 
+export type AwardDistinctiveDto = {
+  position: number;
+  label: string;
+  colorName: string;
+  colorHex: string | null;
+};
+
 export type RoundResult = {
   id: string;
   trackPosition: number;
@@ -162,12 +169,14 @@ export type RoundResult = {
   firstPlaceVotes: number;
   finalPosition: number | null;
   status: RoundResultStatus;
+  awardDistinctive: AwardDistinctiveDto | null;
 };
 
 export type DesertedRoundResult = {
   id: string;
   finalPosition: number;
   votesCount: number;
+  awardDistinctive: AwardDistinctiveDto | null;
 };
 
 export type RoundManagementForm = {
