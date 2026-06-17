@@ -25,6 +25,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useFairDetail, useFairEntries, useFairResults, useFairStaff } from "@/hooks/use-fairs";
+import { ContentReveal, FairDetailSkeleton, TableRowsSkeleton } from "@/components/loaders";
 
 const ENTRIES_PAGE_SIZE = 20;
 const RESULTS_PAGE_SIZE = 20;
@@ -196,7 +197,7 @@ export default function FairDetailPage({ params }: { params: Promise<{ id: strin
   const canGoNextStaffPage = staffMeta.page < staffMeta.totalPages && !staffLoading;
 
   if (loading) {
-    return <div className="p-8 text-center">Cargando feria...</div>;
+    return <FairDetailSkeleton />;
   }
 
   if (!fair) {
@@ -204,6 +205,7 @@ export default function FairDetailPage({ params }: { params: Promise<{ id: strin
   }
 
   return (
+    <ContentReveal>
     <div className="space-y-6">
       <div className="space-y-4">
         <Button
@@ -407,9 +409,7 @@ export default function FairDetailPage({ params }: { params: Promise<{ id: strin
                     </TableHeader>
                     <TableBody>
                       {entriesLoading ? (
-                        <TableRow>
-                          <TableCell colSpan={7} className="text-center">Cargando inscritos...</TableCell>
-                        </TableRow>
+                        <TableRowsSkeleton columns={7} />
                       ) : entries.length === 0 ? (
                         <TableRow>
                           <TableCell colSpan={7} className="text-center">No hay inscritos</TableCell>
@@ -483,9 +483,7 @@ export default function FairDetailPage({ params }: { params: Promise<{ id: strin
                       </TableHeader>
                       <TableBody>
                         {resultsLoading ? (
-                          <TableRow>
-                            <TableCell colSpan={6} className="text-center">Cargando resultados...</TableCell>
-                          </TableRow>
+                          <TableRowsSkeleton columns={7} />
                         ) : results.length === 0 ? (
                           <TableRow>
                             <TableCell colSpan={6} className="text-center">
@@ -564,9 +562,7 @@ export default function FairDetailPage({ params }: { params: Promise<{ id: strin
                 </TableHeader>
                 <TableBody>
                   {staffLoading ? (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center">Cargando personal...</TableCell>
-                    </TableRow>
+                    <TableRowsSkeleton columns={6} />
                   ) : staff.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={6} className="text-center">
@@ -620,5 +616,6 @@ export default function FairDetailPage({ params }: { params: Promise<{ id: strin
         </TabsContent>
       </Tabs>
     </div>
+    </ContentReveal>
   );
 }

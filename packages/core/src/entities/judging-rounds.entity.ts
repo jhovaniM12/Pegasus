@@ -126,6 +126,10 @@ export class JudgingRoundEntry extends PegasusBaseEntity {
   /** F2 / desempate: puesto ordinal asignado por el juez (1 = mejor). */
   @Column({ name: "position", type: "integer", nullable: true })
   position!: number | null;
+
+  /** F1: observación privada del juez sobre este ejemplar (solo visible para él). */
+  @Column({ name: "private_note", type: "varchar", length: 1000, nullable: true })
+  privateNote!: string | null;
 }
 
 @Unique("UQ_judging_round_form_deserted_positions_form_position", ["roundFormId", "position"])

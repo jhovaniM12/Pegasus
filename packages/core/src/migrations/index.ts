@@ -15,3 +15,6 @@ export { AddNotificationInboxFields1717430400013 } from "./1717430400013-AddNoti
 export { CreateJudgingRoundsTables1717430400014 } from "./1717430400014-CreateJudgingRoundsTables.js";
 export { AddDesertedSupport1717430400015 } from "./1717430400015-AddDesertedSupport.js";
 export { CreateAwardDistinctives1717430400016 } from "./1717430400016-CreateAwardDistinctives.js";
+export { CreateJudgingReminders1717430400017 } from "./1717430400017-CreateJudgingReminders.js";
+export { AddRoundEntryAnnotations1717430400018 } from "./1717430400018-AddRoundEntryAnnotations.js";
+export { AddRoundDisqualificationTraceability1717430400019 } from "./1717430400019-AddRoundDisqualificationTraceability.js";

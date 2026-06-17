@@ -6,6 +6,7 @@ import {
   EquineType,
   Fair,
   AwardDistinctive,
+  JudgingReminder,
   FairEntry,
   FairResult,
   FairStaff,
@@ -22,6 +23,8 @@ import {
   JudgingRoundForm,
   JudgingRoundFormDesertedPosition,
   JudgingRoundEntry,
+  JudgingRoundEntryReminder,
+  JudgingRoundEntryReminderHistory,
   JudgingRoundResult,
   JudgingRoundDesertedResult,
   TieBreakTest,
@@ -42,6 +45,9 @@ import {
   AlterFairResultsUniqueConstraint1717430400009,
   AlterPeopleTable1717430400006,
   CreateAwardDistinctives1717430400016,
+  CreateJudgingReminders1717430400017,
+  AddRoundEntryAnnotations1717430400018,
+  AddRoundDisqualificationTraceability1717430400019,
   CreateFairEntriesTable1717430400004,
   CreateFairResultsTable1717430400008,
   CreateFairStaffTable1717430400007,
@@ -83,6 +89,7 @@ export const AppDataSource = new DataSource({
     EquineType,
     Fair,
     AwardDistinctive,
+    JudgingReminder,
     FairEntry,
     FairResult,
     FairStaff,
@@ -99,6 +106,8 @@ export const AppDataSource = new DataSource({
     JudgingRoundForm,
     JudgingRoundFormDesertedPosition,
     JudgingRoundEntry,
+    JudgingRoundEntryReminder,
+    JudgingRoundEntryReminderHistory,
     JudgingRoundResult,
     JudgingRoundDesertedResult,
     TieBreakTest,
@@ -128,7 +137,10 @@ export const AppDataSource = new DataSource({
     AddNotificationInboxFields1717430400013,
     CreateJudgingRoundsTables1717430400014,
     AddDesertedSupport1717430400015,
-    CreateAwardDistinctives1717430400016
+    CreateAwardDistinctives1717430400016,
+    CreateJudgingReminders1717430400017,
+    AddRoundEntryAnnotations1717430400018,
+    AddRoundDisqualificationTraceability1717430400019
   ]
 });
 

@@ -28,6 +28,15 @@ export class ApiService {
     }
   }
 
+  protected async delete<T>(url: string): Promise<T> {
+    try {
+      const response = await axios.delete<T>(url);
+      return response.data;
+    } catch (error) {
+      throw new Error(`Error al eliminar ${url}.`);
+    }
+  }
+
   protected async put<T>(url: string, body?: unknown): Promise<T> {
     try {
       const response = await axios.put<T>(url, body);

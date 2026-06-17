@@ -13,6 +13,8 @@ export * from "./person.entity.js";
 export * from "./role.entity.js";
 export * from "./sex.entity.js";
 export * from "./staged-flow.entity.js";
+export * from "./judging-reminder.entity.js";
+export * from "./judging-round-entry-annotations.entity.js";
 export * from "./judging-rounds.entity.js";
 export * from "./title.entity.js";
 export * from "./user.entity.js";

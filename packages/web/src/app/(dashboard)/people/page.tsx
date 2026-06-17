@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
+import { TableRowsSkeleton } from "@/components/loaders";
 import { usePeople } from "@/hooks/use-people";
 import { peopleService } from "@/services/people.service";
 
@@ -77,9 +78,7 @@ export default function PeoplePage() {
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow>
-                <TableCell colSpan={5} className="text-center">Cargando...</TableCell>
-              </TableRow>
+              <TableRowsSkeleton columns={5} />
             ) : people.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5} className="text-center">No hay personas registradas</TableCell>

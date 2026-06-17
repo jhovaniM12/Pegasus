@@ -60,3 +60,20 @@ export const desertCompetitionSchema = z.object({
 export const openTieBreakSchema = z.object({
   testTypes: z.array(tieBreakTestTypeSchema).min(1).max(7)
 });
+
+export const roundEntryReminderEffectSchema = z.enum(["SUMA", "RESTA"]);
+
+export const updateRoundEntryRemindersSchema = z.object({
+  reminders: z
+    .array(
+      z.object({
+        reminderId: z.string().uuid(),
+        effect: roundEntryReminderEffectSchema
+      })
+    )
+    .max(30)
+});
+
+export const updateRoundEntryNoteSchema = z.object({
+  note: z.union([z.null(), z.string().trim().max(1000)]).optional()
+});

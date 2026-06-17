@@ -10,7 +10,7 @@ import { NotificationInbox } from "@/components/notification-inbox";
 import { stagedFlowService } from "@/services/staged-flow.service";
 import { useToast } from "@/components/ui/toast";
 import { useVeterinaryChecks } from "@/hooks/use-veterinary-checks";
-import { PageLoader } from "@/components/loaders";
+import { ContentReveal, PageLoader } from "@/components/loaders";
 import { SummaryHeader } from "./_components/summary-header";
 import { VetCheckCard } from "./_components/vet-check-card";
 import { FaParticipantCard } from "./_components/fa-participant-card";
@@ -309,6 +309,7 @@ export default function StaffCategoryPage() {
   }
 
   return (
+    <ContentReveal>
     <div className="min-h-screen bg-[#f5f7fb]">
       <main className="mx-auto w-full max-w-6xl px-4 py-6">
         {/* Top bar */}
@@ -619,5 +620,6 @@ export default function StaffCategoryPage() {
         />
       )}
     </div>
+    </ContentReveal>
   );
 }

@@ -29,6 +29,10 @@ import {
   startRoundFormController,
   updateFaDecisionsController,
   updateRoundFormController,
+  updateRoundEntryNoteController,
+  updateRoundEntryRemindersController,
+  disqualifyRoundParticipantController,
+  getRoundEntryReminderHistoryController,
   updateVeterinaryCheckController
 } from "../controllers/staged-flow.controller.js";
 
@@ -70,6 +74,22 @@ stagedFlowRoutes.post("/staff/fair-categories/:id/rounds/open", openNextRoundCon
 stagedFlowRoutes.get("/staff/fair-categories/:id/rounds/current", getRoundController);
 stagedFlowRoutes.post("/staff/fair-categories/:id/rounds/form/start", startRoundFormController);
 stagedFlowRoutes.put("/staff/fair-categories/:id/rounds/form/entries", updateRoundFormController);
+stagedFlowRoutes.put(
+  "/staff/fair-categories/:id/rounds/form/entries/:participantId/reminders",
+  updateRoundEntryRemindersController
+);
+stagedFlowRoutes.put(
+  "/staff/fair-categories/:id/rounds/form/entries/:participantId/note",
+  updateRoundEntryNoteController
+);
+stagedFlowRoutes.post(
+  "/staff/fair-categories/:id/rounds/form/entries/:participantId/disqualify",
+  disqualifyRoundParticipantController
+);
+stagedFlowRoutes.get(
+  "/staff/fair-categories/:id/rounds/form/reminder-history",
+  getRoundEntryReminderHistoryController
+);
 stagedFlowRoutes.post("/staff/fair-categories/:id/rounds/form/close", closeRoundFormController);
 stagedFlowRoutes.post("/staff/fair-categories/:id/rounds/consolidate", consolidateRoundController);
 stagedFlowRoutes.post("/staff/fair-categories/:id/rounds/tie-break/open", openTieBreakController);

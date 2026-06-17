@@ -62,9 +62,23 @@ function darkenHex(hex: string, amount = 0.22): string {
   return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
 }
 
+function readableTextClass(hex: string): string {
+  const clean = hex.replace("#", "");
+  if (clean.length !== 6) return "text-slate-900";
+
+  const r = parseInt(clean.slice(0, 2), 16);
+  const g = parseInt(clean.slice(2, 4), 16);
+  const b = parseInt(clean.slice(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+
+  return luminance > 0.62 ? "text-slate-900" : "text-white";
+}
+
 export function Cinta({ text, variant = "sin_cinta", colorHex, icon: Icon, className }: CintaProps) {
   const usesConfiguredColor = Boolean(colorHex);
-  const variantClasses = usesConfiguredColor ? "text-slate-900" : VARIANT_CLASSES[variant];
+  const variantClasses = usesConfiguredColor
+    ? readableTextClass(colorHex!)
+    : VARIANT_CLASSES[variant];
   const borderColor = usesConfiguredColor && colorHex ? darkenHex(colorHex) : undefined;
   const borderClass = usesConfiguredColor ? undefined : VARIANT_BORDER_CLASSES[variant];
 

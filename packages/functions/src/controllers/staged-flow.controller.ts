@@ -21,9 +21,10 @@ import {
 } from "../services/staged-flow.service.js";
 import {
   closeResults,
-  consolidateRound,
   closeRoundForm,
+  consolidateRound,
   desertCompetition,
+  disqualifyRoundParticipant,
   getRound,
   getRoundsManagement,
   openNextRound,
@@ -31,12 +32,19 @@ import {
   startRoundForm,
   updateRoundForm
 } from "../services/judging/round.service.js";
+import {
+  getEntryReminderHistory,
+  updateEntryPrivateNote,
+  updateEntryReminders
+} from "../services/judging/round-entry-annotations.service.js";
 import { getActiveStaffUser } from "../services/auth.service.js";
 import {
   disqualifyParticipantSchema,
   desertCompetitionSchema,
   openTieBreakSchema,
   updateFaDecisionsSchema,
+  updateRoundEntryNoteSchema,
+  updateRoundEntryRemindersSchema,
   updateRoundFormSchema,
   updateVeterinaryCheckSchema
 } from "../schemas/staged-flow.schema.js";
@@ -175,6 +183,44 @@ export async function updateRoundFormController(c: Context) {
   const user = await getStaffUser(c);
   const body = updateRoundFormSchema.parse(await c.req.json());
   return c.json(success(await updateRoundForm(user, requiredParam(c, "id"), body)));
+}
+
+export async function updateRoundEntryRemindersController(c: Context) {
+  const user = await getStaffUser(c);
+  const stageId = requiredParam(c, "id");
+  const participantId = requiredParam(c, "participantId");
+  const body = updateRoundEntryRemindersSchema.parse(await c.req.json());
+  await updateEntryReminders(user, stageId, participantId, body.reminders);
+  return c.json(success(await getRound(user, stageId)));
+}
+
+export async function updateRoundEntryNoteController(c: Context) {
+  const user = await getStaffUser(c);
+  const stageId = requiredParam(c, "id");
+  const participantId = requiredParam(c, "participantId");
+  const body = updateRoundEntryNoteSchema.parse(await c.req.json());
+  await updateEntryPrivateNote(user, stageId, participantId, body.note ?? null);
+  return c.json(success(await getRound(user, stageId)));
+}
+
+export async function disqualifyRoundParticipantController(c: Context) {
+  const user = await getStaffUser(c);
+  const body = disqualifyParticipantSchema.parse(await c.req.json());
+  const result = await disqualifyRoundParticipant(
+    user,
+    requiredParam(c, "id"),
+    requiredParam(c, "participantId"),
+    body.reasonId
+  );
+  flushNotifications();
+  return c.json(success(result));
+}
+
+export async function getRoundEntryReminderHistoryController(c: Context) {
+  const user = await getStaffUser(c);
+  const stageId = requiredParam(c, "id");
+  const history = await getEntryReminderHistory(user, stageId);
+  return c.json(success(history));
 }
 
 export async function closeRoundFormController(c: Context) {

@@ -1,5 +1,6 @@
 import {
   AwardDistinctive,
+  DisqualificationReason,
   FaConsolidatedResult,
   FairCategoryStage,
   getDataSource,
@@ -12,6 +13,7 @@ import {
   JudgingRoundResult,
   TieBreakTest,
   User,
+  type JudgingParticipantStatus,
   type JudgingRoundResultStatus,
   MAX_AWARD_POSITIONS,
   type JudgingRoundType,
@@ -22,6 +24,13 @@ import { BadRequestError, ForbiddenError, NotFoundError } from "../../lib/errors
 import { buildStageSummary, type StagedCategoryDto } from "../staged-flow.service.js";
 import { resolveAwardDistinctiveForPosition } from "./award-distinctives.js";
 import { computeF2, type JudgeCard } from "./scoring.js";
+import {
+  loadActiveReminders,
+  loadReminderHistory,
+  loadRemindersByEntryIds,
+  type EntryReminderDto,
+  type ReminderHistoryItemDto
+} from "./round-entry-annotations.service.js";
 import {
   ROLE_LABELS,
   assertStageAccess,
@@ -77,8 +86,53 @@ async function loadParticipants(manager: EntityManager, participantIds: string[]
   if (participantIds.length === 0) return [];
   return manager.getRepository(JudgingParticipant).find({
     where: participantIds.map((id) => ({ id })),
-    relations: { fairEntry: true }
+    relations: { fairEntry: true, disqualificationReason: true }
   });
+}
+
+async function loadParticipantStatusMap(
+  manager: EntityManager,
+  participantIds: string[]
+): Promise<Map<string, JudgingParticipantStatus>> {
+  if (participantIds.length === 0) return new Map();
+  const rows = await manager.getRepository(JudgingParticipant).find({
+    where: participantIds.map((id) => ({ id })),
+    select: { id: true, status: true }
+  });
+  return new Map(rows.map((row) => [row.id, row.status]));
+}
+
+async function loadActiveDisqualificationReasons(manager: EntityManager) {
+  const reasons = await manager.getRepository(DisqualificationReason).find({
+    where: { isActive: true },
+    order: { code: "ASC" }
+  });
+  return reasons.map((reason) => ({
+    id: reason.id,
+    code: reason.code,
+    name: reason.name,
+    description: reason.description
+  }));
+}
+
+async function clearParticipantRoundAssignments(
+  manager: EntityManager,
+  roundId: string,
+  participantId: string
+): Promise<void> {
+  const forms = await manager.getRepository(JudgingRoundForm).find({ where: { roundId } });
+  for (const roundForm of forms) {
+    const entries = await manager.getRepository(JudgingRoundEntry).find({
+      where: { roundFormId: roundForm.id, judgingParticipantId: participantId }
+    });
+    for (const entry of entries) {
+      entry.selected = false;
+      entry.position = null;
+    }
+    if (entries.length > 0) {
+      await manager.getRepository(JudgingRoundEntry).save(entries);
+    }
+  }
 }
 
 async function loadDistinctivesByPosition(manager: EntityManager): Promise<Map<number, AwardDistinctive>> {
@@ -308,6 +362,11 @@ export async function updateRoundForm(
       where: { roundFormId: form.id }
     });
     const entryByParticipant = new Map(entries.map((entry) => [entry.judgingParticipantId, entry]));
+    const statusByParticipant = await loadParticipantStatusMap(
+      manager,
+      entries.map((entry) => entry.judgingParticipantId)
+    );
+    const isEligible = (participantId: string) => statusByParticipant.get(participantId) === "ELIGIBLE";
 
     if (round.roundType === "F1") {
       const selected = Array.from(new Set(input.selectedParticipantIds ?? []));
@@ -317,7 +376,15 @@ export async function updateRoundForm(
       if (selected.some((id) => !entryByParticipant.has(id))) {
         throw new BadRequestError("La selección contiene ejemplares fuera de la ronda.");
       }
+      if (selected.some((id) => !isEligible(id))) {
+        throw new BadRequestError("No puedes seleccionar ejemplares descalificados.");
+      }
       for (const entry of entries) {
+        if (!isEligible(entry.judgingParticipantId)) {
+          entry.selected = false;
+          entry.position = null;
+          continue;
+        }
         entry.selected = selected.includes(entry.judgingParticipantId);
         entry.position = null;
       }
@@ -326,12 +393,17 @@ export async function updateRoundForm(
       // F2 / desempate: puestos ordinales únicos.
       const positions = input.positions ?? [];
       const desertedPositions = Array.from(new Set(input.desertedPositions ?? []));
-      const maxDesertablePosition = Math.min(entries.length, MAX_AWARD_POSITIONS);
-      const maxAssignablePosition = entries.length + desertedPositions.length;
+      const eligibleEntries = entries.filter((entry) => isEligible(entry.judgingParticipantId));
+      const eligibleCount = eligibleEntries.length;
+      const maxDesertablePosition = Math.min(eligibleCount, MAX_AWARD_POSITIONS);
+      const maxAssignablePosition = eligibleCount + desertedPositions.length;
       const positionByParticipant = new Map(positions.map((p) => [p.participantId, p.position]));
       for (const { participantId, position } of positions) {
         if (!entryByParticipant.has(participantId)) {
           throw new BadRequestError("Los puestos contienen ejemplares fuera de la ronda.");
+        }
+        if (!isEligible(participantId)) {
+          throw new BadRequestError("No puedes asignar puesto a un ejemplar descalificado.");
         }
         if (!Number.isInteger(position) || position < 1 || position > maxAssignablePosition) {
           throw new BadRequestError("Los puestos deben ser números válidos.");
@@ -355,6 +427,11 @@ export async function updateRoundForm(
         throw new BadRequestError("Un mismo puesto no puede estar asignado y desierto al mismo tiempo.");
       }
       for (const entry of entries) {
+        if (!isEligible(entry.judgingParticipantId)) {
+          entry.position = null;
+          entry.selected = false;
+          continue;
+        }
         entry.position = positionByParticipant.get(entry.judgingParticipantId) ?? null;
         entry.selected = false;
       }
@@ -376,6 +453,109 @@ export async function updateRoundForm(
   });
 }
 
+export async function disqualifyRoundParticipant(
+  user: User,
+  stageId: string,
+  judgingParticipantId: string,
+  reasonId: string
+) {
+  assertUserRole(user, ["JUDGE"]);
+  const dataSource = await getDataSource();
+
+  return dataSource.transaction(async (manager) => {
+    const stage = await getStageOrThrow(manager, stageId);
+    await assertStageAccess(manager, user, stage, ["2"]);
+
+    const roundPhaseStatuses = ["F1_IN_PROGRESS", "F2_IN_PROGRESS", "TIE_BREAK_IN_PROGRESS"] as const;
+    if (!roundPhaseStatuses.includes(stage.status as (typeof roundPhaseStatuses)[number])) {
+      throw new BadRequestError("Solo puedes descalificar durante una ronda activa.");
+    }
+
+    const round = await getActiveRoundOrThrow(manager, stage.id);
+    const form = await getJudgeFormOrThrow(manager, round.id, user.id);
+
+    if (form.status !== "STARTED") {
+      throw new BadRequestError("Solo puedes descalificar con la tarjeta iniciada.");
+    }
+
+    const [participant, reason, entry] = await Promise.all([
+      manager.getRepository(JudgingParticipant).findOne({
+        where: { id: judgingParticipantId, fairCategoryStageId: stage.id },
+        relations: { fairEntry: true }
+      }),
+      manager.getRepository(DisqualificationReason).findOne({
+        where: { id: reasonId, isActive: true }
+      }),
+      manager.getRepository(JudgingRoundEntry).findOne({
+        where: { roundFormId: form.id, judgingParticipantId }
+      })
+    ]);
+
+    if (!participant) {
+      throw new NotFoundError("No se encontró el participante de juzgamiento.");
+    }
+
+    if (!reason) {
+      throw new NotFoundError("No se encontró el motivo de descalificación.");
+    }
+
+    if (!entry) {
+      throw new BadRequestError("El ejemplar no pertenece a la ronda activa.");
+    }
+
+    if (participant.status === "DISQUALIFIED") {
+      throw new BadRequestError("El ejemplar ya está descalificado.");
+    }
+
+    participant.status = "DISQUALIFIED";
+    participant.disqualificationReasonId = reason.id;
+    participant.disqualifiedAt = new Date();
+    participant.disqualifiedByUserId = user.id;
+    participant.disqualifiedInRoundId = round.id;
+    participant.disqualifiedInRoundFormId = form.id;
+    await manager.getRepository(JudgingParticipant).save(participant);
+    await clearParticipantRoundAssignments(manager, round.id, participant.id);
+
+    await recordEvent(manager, {
+      stageId: stage.id,
+      userId: user.id,
+      eventType: "JUDGING_PARTICIPANT_DISQUALIFIED",
+      payload: {
+        judgingParticipantId: participant.id,
+        reasonId: reason.id,
+        roundId: round.id,
+        roundType: round.roundType
+      }
+    });
+
+    const notification = stageNotificationContext(stage);
+    await queueRoleNotifications(manager, stage, "2", {
+      type: "JUDGING_PARTICIPANT_DISQUALIFIED",
+      title: `Ejemplar ${participant.fairEntry?.trackPosition ?? ""} descalificado - ${notification.titleSuffix}`.trim(),
+      body: `Motivo: ${reason.name}. Categoría: ${notification.detail}.`,
+      payload: {
+        ...notification.payload,
+        judgingParticipantId: participant.id,
+        reasonId: reason.id,
+        roundId: round.id
+      }
+    });
+    await queueRoleNotifications(manager, stage, "3", {
+      type: "JUDGING_PARTICIPANT_DISQUALIFIED",
+      title: `Ejemplar ${participant.fairEntry?.trackPosition ?? ""} descalificado - ${notification.titleSuffix}`.trim(),
+      body: `Motivo: ${reason.name}. Categoría: ${notification.detail}.`,
+      payload: {
+        ...notification.payload,
+        judgingParticipantId: participant.id,
+        reasonId: reason.id,
+        roundId: round.id
+      }
+    });
+
+    return getRoundStateForJudge(manager, user, stage, round);
+  });
+}
+
 export async function closeRoundForm(user: User, stageId: string) {
   assertUserRole(user, ["JUDGE"]);
   const dataSource = await getDataSource();
@@ -393,17 +573,26 @@ export async function closeRoundForm(user: User, stageId: string) {
     const entries = await manager.getRepository(JudgingRoundEntry).find({
       where: { roundFormId: form.id }
     });
+    const statusByParticipant = await loadParticipantStatusMap(
+      manager,
+      entries.map((entry) => entry.judgingParticipantId)
+    );
+    const isEligible = (participantId: string) => statusByParticipant.get(participantId) === "ELIGIBLE";
 
     if (round.roundType === "F1") {
-      const selectedCount = entries.filter((entry) => entry.selected).length;
+      const selectedCount = entries.filter(
+        (entry) => entry.selected && isEligible(entry.judgingParticipantId)
+      ).length;
       if (selectedCount > MAX_F1_SELECTIONS) {
         throw new BadRequestError(`F1 permite máximo ${MAX_F1_SELECTIONS} seleccionados.`);
       }
     } else {
+      const eligibleEntries = entries.filter((entry) => isEligible(entry.judgingParticipantId));
+      const eligibleCount = eligibleEntries.length;
       const desertedRows = await manager
         .getRepository(JudgingRoundFormDesertedPosition)
         .find({ where: { roundFormId: form.id } });
-      const maxDesertablePosition = Math.min(entries.length, MAX_AWARD_POSITIONS);
+      const maxDesertablePosition = Math.min(eligibleCount, MAX_AWARD_POSITIONS);
       const deserted = new Set(desertedRows.map((row) => row.position));
       for (const position of deserted) {
         if (position < MIN_AWARD_POSITION || position > maxDesertablePosition) {
@@ -412,11 +601,11 @@ export async function closeRoundForm(user: User, stageId: string) {
           );
         }
       }
-      const positioned = entries.filter((entry) => entry.position !== null);
+      const positioned = eligibleEntries.filter((entry) => entry.position !== null);
       const assigned = positioned.map((entry) => entry.position as number);
-      const maxAssignablePosition = entries.length + deserted.size;
-      if (positioned.length !== entries.length) {
-        throw new BadRequestError("Debes asignar un puesto a cada ejemplar antes de cerrar.");
+      const maxAssignablePosition = eligibleCount + deserted.size;
+      if (positioned.length !== eligibleCount) {
+        throw new BadRequestError("Debes asignar un puesto a cada ejemplar elegible antes de cerrar.");
       }
       if (assigned.some((position) => position < 1 || position > maxAssignablePosition)) {
         throw new BadRequestError("Los puestos asignados no corresponden al número de ejemplares y desiertos.");
@@ -525,8 +714,10 @@ async function consolidateF1(manager: EntityManager, round: JudgingRound): Promi
     .getRepository(JudgingRoundEntry)
     .createQueryBuilder("entry")
     .innerJoin("entry.roundForm", "form")
+    .innerJoin("entry.judgingParticipant", "participant")
     .where("form.round_id = :roundId", { roundId: round.id })
     .andWhere("entry.selected = true")
+    .andWhere("participant.status = :participantStatus", { participantStatus: "ELIGIBLE" })
     .select("entry.judging_participant_id", "participantId")
     .addSelect("COUNT(entry.id)", "votes")
     .groupBy("entry.judging_participant_id")
@@ -557,10 +748,17 @@ async function loadJudgeCards(manager: EntityManager, roundId: string): Promise<
       manager.getRepository(JudgingRoundEntry).find({ where: { roundFormId: form.id } }),
       manager.getRepository(JudgingRoundFormDesertedPosition).find({ where: { roundFormId: form.id } })
     ]);
+    const statusByParticipant = await loadParticipantStatusMap(
+      manager,
+      entries.map((entry) => entry.judgingParticipantId)
+    );
     cards.push({
       judgeUserId: form.judgeUserId,
       positions: entries
-        .filter((entry) => entry.position !== null)
+        .filter(
+          (entry) =>
+            entry.position !== null && statusByParticipant.get(entry.judgingParticipantId) === "ELIGIBLE"
+        )
         .map((entry) => ({ participantId: entry.judgingParticipantId, position: entry.position as number })),
       desertedPositions: desertedRows.map((row) => row.position)
     });
@@ -914,8 +1112,17 @@ type RoundParticipantDto = {
   trackPosition: number;
   riderName: string;
   registrationNumber: string;
+  status: JudgingParticipantStatus;
+  disqualificationReason: {
+    id: string;
+    code: string;
+    name: string;
+    description: string | null;
+  } | null;
   selected: boolean;
   position: number | null;
+  privateNote: string | null;
+  reminders: EntryReminderDto[];
 };
 
 async function getRoundStateForJudge(
@@ -930,6 +1137,14 @@ async function getRoundStateForJudge(
   const entries = form
     ? await manager.getRepository(JudgingRoundEntry).find({ where: { roundFormId: form.id } })
     : [];
+  const remindersByEntryId =
+    round.roundType === "F1" && entries.length > 0
+      ? await loadRemindersByEntryIds(
+          manager,
+          entries.map((entry) => entry.id)
+        )
+      : new Map<string, EntryReminderDto[]>();
+
   const participants = await loadParticipants(
     manager,
     entries.map((entry) => entry.judgingParticipantId)
@@ -944,11 +1159,30 @@ async function getRoundStateForJudge(
         trackPosition: participant?.fairEntry.trackPosition ?? 0,
         riderName: participant?.fairEntry.riderName ?? "",
         registrationNumber: participant?.fairEntry.registrationNumber ?? "",
+        status: participant?.status ?? "ELIGIBLE",
+        disqualificationReason: participant?.disqualificationReason
+          ? {
+              id: participant.disqualificationReason.id,
+              code: participant.disqualificationReason.code,
+              name: participant.disqualificationReason.name,
+              description: participant.disqualificationReason.description
+            }
+          : null,
         selected: entry.selected,
-        position: entry.position
+        position: entry.position,
+        privateNote: round.roundType === "F1" ? entry.privateNote : null,
+        reminders: remindersByEntryId.get(entry.id) ?? []
       };
     })
     .sort((a, b) => a.trackPosition - b.trackPosition);
+
+  const availableReminders =
+    round.roundType === "F1" ? await loadActiveReminders(manager) : [];
+  const reminderHistory: ReminderHistoryItemDto[] =
+    round.roundType === "F1" && form
+      ? await loadReminderHistory(manager, form.id)
+      : [];
+  const disqualificationReasons = await loadActiveDisqualificationReasons(manager);
 
   return {
     stage: await buildStageSummary(manager, stage),
@@ -972,6 +1206,9 @@ async function getRoundStateForJudge(
         }
       : null,
     maxSelections: round.roundType === "F1" ? MAX_F1_SELECTIONS : null,
+    availableReminders,
+    reminderHistory,
+    disqualificationReasons,
     participants: roster
   };
 }

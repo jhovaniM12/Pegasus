@@ -141,8 +141,39 @@ export type RoundParticipant = {
   trackPosition: number;
   riderName: string;
   registrationNumber: string;
+  status: JudgingParticipantStatus;
+  disqualificationReason: DisqualificationReason | null;
   selected: boolean;
   position: number | null;
+  privateNote: string | null;
+  reminders: RoundParticipantReminder[];
+};
+
+export type RoundReminderEffect = "SUMA" | "RESTA";
+
+export type RoundAvailableReminder = {
+  id: string;
+  name: string;
+  icon: string;
+};
+
+export type RoundParticipantReminder = {
+  reminderId: string;
+  name: string;
+  icon: string;
+  effect: RoundReminderEffect;
+};
+
+export type RoundReminderHistoryItem = {
+  id: string;
+  participantId: string;
+  trackPosition: number;
+  riderName: string;
+  reminderId: string;
+  reminderName: string;
+  reminderIcon: string;
+  effect: RoundReminderEffect;
+  createdAt: string;
 };
 
 export type RoundState = {
@@ -150,6 +181,9 @@ export type RoundState = {
   round: { id: string; roundType: RoundType; sequence: number; status: RoundStatus };
   form: { id: string; status: RoundFormStatus; closedAt: string | null; desertedPositions: number[] } | null;
   maxSelections: number | null;
+  availableReminders: RoundAvailableReminder[];
+  reminderHistory: RoundReminderHistoryItem[];
+  disqualificationReasons: DisqualificationReason[];
   participants: RoundParticipant[];
 };
 

@@ -10,6 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { TableRowsSkeleton } from "@/components/loaders";
 import { useFairs } from "@/hooks/use-fairs";
 
 export default function FairsPage() {
@@ -32,9 +33,7 @@ export default function FairsPage() {
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow>
-                <TableCell colSpan={4} className="text-center">Cargando...</TableCell>
-              </TableRow>
+              <TableRowsSkeleton columns={4} />
             ) : fairs.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={4} className="text-center">No hay ferias registradas</TableCell>

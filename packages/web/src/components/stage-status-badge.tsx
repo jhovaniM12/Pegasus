@@ -1,7 +1,7 @@
 import { StageStatus } from "@/types/staged-flow"
 import { Badge } from "@/components/ui/badge"
 
-const statusLabels: Record<StageStatus, string> = {
+export const stageStatusLabels: Record<StageStatus, string> = {
   NOT_STARTED: "Sin iniciar",
   PRE_RING_STARTED: "Pre-pista iniciada",
   PRE_RING_CLOSED: "Pre-pista cerrada",
@@ -45,7 +45,7 @@ export function StageStatusBadge({ status, className }: { status: StageStatus; c
 
   return (
     <Badge className={`w-fit rounded-md font-medium px-2.5 py-0.5 border ${customClass} ${className || ""}`} variant="outline">
-      {statusLabels[status]}
+      {stageStatusLabels[status]}
     </Badge>
   )
 }
