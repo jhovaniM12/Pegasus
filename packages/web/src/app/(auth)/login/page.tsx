@@ -6,6 +6,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PegasusLogo } from "@/components/brand/pegasus-logo";
 
 function getLoginErrorMessage(data: unknown): string {
   if (
@@ -61,18 +62,13 @@ export default function LoginPage() {
     <div className="grid min-h-screen bg-[#f7f8f5] lg:grid-cols-[minmax(480px,0.92fr)_1.08fr]">
       <div className="flex min-h-screen w-full items-center justify-center px-6 py-10 sm:px-10 lg:px-16">
         <div className="w-full max-w-[420px]">
-          <div className="mb-10 flex items-center gap-3">
-            <div className="flex size-11 items-center justify-center rounded-lg bg-slate-950 text-lg font-semibold text-white shadow-sm">
-              P
-            </div>
-            <div>
-              <p className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">Pegasus</p>
-              <p className="text-sm text-slate-500">Panel administrativo</p>
-            </div>
+          <div className="mb-10">
+            <PegasusLogo size="lg" priority />
+            <p className="mt-4 text-sm text-slate-500">Panel administrativo</p>
           </div>
 
           <div className="mb-8">
-            <h1 className="text-4xl font-semibold tracking-normal text-slate-950">Pegasus</h1>
+            <h1 className="text-4xl font-semibold tracking-normal text-slate-950">Iniciar sesión</h1>
             <p className="mt-3 text-sm leading-6 text-slate-600">
               Ingresa tus credenciales para acceder al panel de control.
             </p>

@@ -14,6 +14,10 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "Pegasus",
   description: "Panel administrativo Pegasus",
+  icons: {
+    icon: "/LOGO_PGS.png",
+    apple: "/LOGO_PGS.png",
+  },
 };
 
 export default function RootLayout({

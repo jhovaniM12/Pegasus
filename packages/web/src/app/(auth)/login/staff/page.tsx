@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PegasusLogo } from "@/components/brand/pegasus-logo";
 
 function getAccessErrorMessage(data: unknown): string {
   if (
@@ -62,14 +62,9 @@ export default function AccessPage() {
       <div className="absolute inset-0 bg-gradient-to-t from-slate-950/45 via-transparent to-slate-950/20" />
 
       <div className="relative z-10 w-full max-w-sm rounded-lg border border-white/25 bg-white/92 p-6 shadow-2xl backdrop-blur-md">
-        <div className="mb-8 flex items-center gap-3">
-          <div className="flex size-11 items-center justify-center rounded-lg bg-slate-950 text-white">
-            <KeyRound className="size-5" />
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-slate-950">Pegasus</p>
-            <p className="text-xs text-slate-500">Acceso de staff</p>
-          </div>
+        <div className="mb-8 flex flex-col items-center gap-3 text-center">
+          <PegasusLogo size="2xl" priority />
+          <p className="text-xs text-slate-500">Acceso de staff</p>
         </div>
 
         <div className="mb-6">
@@ -81,7 +76,9 @@ export default function AccessPage() {
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-2">
-            <Label htmlFor="accessCode">Código de acceso</Label>
+            <Label htmlFor="accessCode" className="text-sm font-semibold text-slate-800">
+              Código de acceso
+            </Label>
             <Input
               id="accessCode"
               value={accessCode}
@@ -90,7 +87,7 @@ export default function AccessPage() {
               required
               minLength={6}
               maxLength={6}
-              className="h-12 text-center text-lg font-semibold uppercase tracking-[0.18em]"
+              className="h-16 text-center text-2xl font-semibold uppercase tracking-[0.22em]"
             />
           </div>
 
@@ -100,7 +97,7 @@ export default function AccessPage() {
             </div>
           )}
 
-          <Button className="h-12 w-full" type="submit" disabled={isLoading}>
+          <Button className="h-14 w-full text-base" type="submit" disabled={isLoading}>
             {isLoading ? "Validando..." : "Entrar"}
           </Button>
         </form>

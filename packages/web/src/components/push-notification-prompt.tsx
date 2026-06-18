@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import * as PusherPushNotifications from "@pusher/push-notifications-web";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 function getBeamsClient() {
   const instanceId = process.env.NEXT_PUBLIC_PUSHER_BEAMS_INSTANCE_ID;
@@ -14,7 +15,13 @@ function getBeamsClient() {
   return new PusherPushNotifications.Client({ instanceId });
 }
 
-export function PushNotificationPrompt({ userId }: { userId: string | null | undefined }) {
+export function PushNotificationPrompt({
+  userId,
+  className,
+}: {
+  userId: string | null | undefined;
+  className?: string;
+}) {
   const [status, setStatus] = useState<
     "checking" | "idle" | "mismatch" | "loading" | "enabled" | "unsupported" | "blocked" | "error"
   >("checking");
@@ -130,7 +137,7 @@ export function PushNotificationPrompt({ userId }: { userId: string | null | und
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className={cn("flex items-center gap-2", className)}>
       <Button
         type="button"
         size="sm"

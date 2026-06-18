@@ -1,4 +1,4 @@
-import { PegasusMark } from "./pegasus-mark";
+import { PegasusLogo } from "@/components/brand/pegasus-logo";
 
 type PageLoaderProps = {
   label?: string;
@@ -40,10 +40,10 @@ export function PageLoader({
         />
 
         <div
-          className="relative flex size-10 items-center justify-center rounded-full bg-white ring-[3px] ring-zapote/30 shadow-sm"
+          className="relative flex size-14 items-center justify-center rounded-full bg-white p-1.5 ring-[3px] ring-zapote/30 shadow-sm"
           aria-hidden
         >
-          <PegasusMark className="size-5 text-zapote" />
+          <PegasusLogo size="xs" className="size-full" />
         </div>
       </div>
 

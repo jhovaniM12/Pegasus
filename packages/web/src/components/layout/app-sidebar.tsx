@@ -4,6 +4,8 @@ import { Bell, Calendar, Home, List, Settings, Shield, Users } from "lucide-reac
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { PegasusLogo } from "@/components/brand/pegasus-logo";
+
 import {
   Sidebar,
   SidebarContent,
@@ -57,9 +59,7 @@ export function AppSidebar() {
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
       <SidebarHeader className="px-4 py-5 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:px-2">
         <div className="flex items-center gap-3 group-data-[collapsible=icon]:justify-center">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-base font-bold text-sidebar-primary-foreground">
-            P
-          </div>
+          <PegasusLogo size="sm" className="shrink-0 rounded-md bg-white/95 p-0.5" />
           <div className="min-w-0 group-data-[collapsible=icon]:hidden">
             <p className="text-sm font-semibold leading-none text-white">Pegasus</p>
             <p className="mt-1 text-xs text-white/55">Panel root</p>

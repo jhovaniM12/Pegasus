@@ -27,6 +27,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { NotificationInbox } from "@/components/notification-inbox";
 import { PushNotificationPrompt } from "@/components/push-notification-prompt";
+import { PegasusLogo } from "@/components/brand/pegasus-logo";
 import { useToast } from "@/components/ui/toast";
 import {
   DropdownMenu,
@@ -448,9 +449,13 @@ export default function StaffPage() {
     <div className="min-h-screen bg-[#f5f7fb]">
       <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 px-4 py-4 backdrop-blur md:px-6">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Pegasus</p>
-            <h1 className="text-xl font-semibold tracking-normal text-slate-950">Categorías asignadas</h1>
+          <div className="flex min-w-0 items-center gap-3">
+            <PegasusLogo size="xs" className="shrink-0" />
+            <div className="min-w-0">
+              <h1 className="truncate text-xl font-semibold tracking-normal text-slate-950">
+                Categorías asignadas
+              </h1>
+            </div>
           </div>
           <div className="hidden items-center gap-3 sm:flex">
             <PushNotificationPrompt userId={currentUser?.id} />
@@ -462,10 +467,13 @@ export default function StaffPage() {
       </header>
 
       <main className="mx-auto w-full max-w-7xl px-4 py-6 md:px-6 lg:py-8">
-        <div className="mb-4 flex items-center gap-3 sm:hidden">
-          <NotificationInbox />
-          <ConnectionIndicator className="shrink-0" />
-          <StaffUserMenu currentUser={currentUser} onLogout={logout} className="w-full bg-white" />
+        <div className="mb-4 space-y-3 sm:hidden">
+          <PushNotificationPrompt userId={currentUser?.id} className="flex-wrap" />
+          <div className="flex items-center gap-3">
+            <NotificationInbox />
+            <ConnectionIndicator className="shrink-0" />
+            <StaffUserMenu currentUser={currentUser} onLogout={logout} className="w-full bg-white" />
+          </div>
         </div>
 
         {loading ? (
