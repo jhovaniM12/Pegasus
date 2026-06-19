@@ -31,6 +31,36 @@ function notificationDeepLink(notification: NotificationOutbox): string | null {
   return typeof notification.payload?.deepLink === "string" ? notification.payload.deepLink : null;
 }
 
+function getPublicWebOrigin(): string | null {
+  const origin =
+    process.env.PUSHER_BEAMS_WEB_ORIGIN ??
+    process.env.NEXT_PUBLIC_APP_URL ??
+    process.env.APP_URL ??
+    process.env.VERCEL_URL ??
+    null;
+
+  if (!origin) {
+    return null;
+  }
+
+  return origin.startsWith("http://") || origin.startsWith("https://") ? origin : `https://${origin}`;
+}
+
+function toBeamsDeepLink(notification: NotificationOutbox): string | undefined {
+  const deepLink = notificationDeepLink(notification) ?? "/staff";
+
+  try {
+    return new URL(deepLink).toString();
+  } catch {
+    const origin = getPublicWebOrigin();
+    if (!origin) {
+      return undefined;
+    }
+
+    return new URL(deepLink, origin).toString();
+  }
+}
+
 function toInboxNotification(notification: NotificationOutbox) {
   const payload = notification.payload as Record<string, unknown> | null;
 
@@ -151,16 +181,19 @@ export async function processPendingNotifications(limit = 25): Promise<{ sent: n
         continue;
       }
 
+      const deepLink = toBeamsDeepLink(notification);
+      const webNotification: { title: string; body: string; deep_link?: string } = {
+        title: notification.title,
+        body: notification.body
+      };
+
+      if (deepLink) {
+        webNotification.deep_link = deepLink;
+      }
+
       await getBeamsClient().publishToUsers(userIds, {
         web: {
-          notification: {
-            title: notification.title,
-            body: notification.body,
-            deep_link:
-              typeof notification.payload?.deepLink === "string"
-                ? notification.payload.deepLink
-                : "/staff"
-          }
+          notification: webNotification
         }
       });
 

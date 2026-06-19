@@ -111,6 +111,10 @@ export default function StaffCategoryPage() {
       setCurrentUser(user);
 
       const current = categories.data?.find((item) => item.stageId === stageId) ?? null;
+      if (!current) {
+        router.push("/staff");
+        return;
+      }
       setSummary(current);
 
       if (user?.role === "VETERINARIAN") {

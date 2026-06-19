@@ -14,6 +14,7 @@ import {
   Role,
   User,
   type FairCategoryStageStatus,
+  type UserRole,
   type JudgingRoundFormStatus,
   type JudgingRoundType,
   type VeterinaryCheckStatus,
@@ -165,6 +166,60 @@ export async function buildStageSummary(manager: EntityManager, stage: FairCateg
   };
 }
 
+const ROLES_SEE_ONLY_STARTED_STAGES: UserRole[] = ["JUDGE", "VETERINARIAN"];
+
+async function listStagesFromFairEntries(
+  manager: EntityManager,
+  personId: string,
+  roleExternalId: string
+): Promise<FairCategoryStage[]> {
+  const rows = await manager
+    .getRepository(FairEntry)
+    .createQueryBuilder("entry")
+    .innerJoin("entry.fair", "fair")
+    .innerJoin("entry.category", "category")
+    .innerJoin("category.gait", "gait")
+    .innerJoin(FairStaff, "staff", "staff.fair_id = entry.fair_id")
+    .innerJoin(Role, "role", "role.id = staff.role_id")
+    .select("fair.id", "fairId")
+    .addSelect("category.id", "categoryId")
+    .where("staff.person_id = :personId", { personId })
+    .andWhere("role.external_id = :roleExternalId", { roleExternalId })
+    .groupBy("fair.id")
+    .addGroupBy("category.id")
+    .orderBy("fair.id", "ASC")
+    .addOrderBy("category.id", "ASC")
+    .getRawMany<{ fairId: string; categoryId: string }>();
+
+  const stages: FairCategoryStage[] = [];
+  for (const row of rows) {
+    stages.push(await getOrCreateStage(manager, row.fairId, row.categoryId));
+  }
+
+  return stages;
+}
+
+async function listStartedStagesForStaff(
+  manager: EntityManager,
+  personId: string,
+  roleExternalId: string
+): Promise<FairCategoryStage[]> {
+  return manager
+    .getRepository(FairCategoryStage)
+    .createQueryBuilder("stage")
+    .innerJoinAndSelect("stage.fair", "fair")
+    .innerJoinAndSelect("stage.category", "category")
+    .innerJoinAndSelect("category.gait", "gait")
+    .innerJoin(FairStaff, "staff", "staff.fair_id = stage.fair_id")
+    .innerJoin(Role, "role", "role.id = staff.role_id")
+    .where("staff.person_id = :personId", { personId })
+    .andWhere("role.external_id = :roleExternalId", { roleExternalId })
+    .andWhere("stage.status != :notStarted", { notStarted: "NOT_STARTED" })
+    .orderBy("fair.id", "ASC")
+    .addOrderBy("category.id", "ASC")
+    .getMany();
+}
+
 async function enrichForJudge(
   manager: EntityManager,
   items: StagedCategoryDto[],
@@ -213,28 +268,10 @@ export async function listStagedCategories(user: User): Promise<StagedCategoryDt
     }
 
     const roleExternalId = roleExternalIdForUser(user);
-    const rows = await manager
-      .getRepository(FairEntry)
-      .createQueryBuilder("entry")
-      .innerJoin("entry.fair", "fair")
-      .innerJoin("entry.category", "category")
-      .innerJoin("category.gait", "gait")
-      .innerJoin(FairStaff, "staff", "staff.fair_id = entry.fair_id")
-      .innerJoin(Role, "role", "role.id = staff.role_id")
-      .select("fair.id", "fairId")
-      .addSelect("category.id", "categoryId")
-      .where("staff.person_id = :personId", { personId: user.personId })
-      .andWhere("role.external_id = :roleExternalId", { roleExternalId })
-      .groupBy("fair.id")
-      .addGroupBy("category.id")
-      .orderBy("fair.id", "ASC")
-      .addOrderBy("category.id", "ASC")
-      .getRawMany<{ fairId: string; categoryId: string }>();
-
-    const stages = [];
-    for (const row of rows) {
-      stages.push(await getOrCreateStage(manager, row.fairId, row.categoryId));
-    }
+    const onlyStartedStages = ROLES_SEE_ONLY_STARTED_STAGES.includes(user.role);
+    const stages = onlyStartedStages
+      ? await listStartedStagesForStaff(manager, user.personId, roleExternalId)
+      : await listStagesFromFairEntries(manager, user.personId, roleExternalId);
 
     const summaries = await Promise.all(stages.map((stage) => buildStageSummary(manager, stage)));
 
