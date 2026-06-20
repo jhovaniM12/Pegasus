@@ -9,6 +9,7 @@ import {
   getDataSource,
   JudgingParticipant,
   JudgingRound,
+  JudgingRoundEntry,
   JudgingRoundForm,
   NotificationOutbox,
   Role,
@@ -35,6 +36,16 @@ import {
   stageNotificationContext
 } from "./judging/shared.js";
 
+export type JudgeFormatKey = "FA" | "F1" | "F2" | "TIE_BREAK";
+export type JudgeFormatStatus = "NOT_AVAILABLE" | "PENDING" | "STARTED" | "CLOSED";
+
+export type JudgeFormatDto = {
+  key: JudgeFormatKey;
+  formStatus: JudgeFormatStatus;
+  isActive: boolean;
+  participantCount: number | null;
+};
+
 export type StagedCategoryDto = {
   stageId: string;
   status: FairCategoryStageStatus;
@@ -48,8 +59,20 @@ export type StagedCategoryDto = {
     faFormStatus: "PENDING" | "STARTED" | "CLOSED" | null;
     roundFormStatus: JudgingRoundFormStatus | null;
     currentRoundType: JudgingRoundType | null;
+    formats: JudgeFormatDto[];
   };
 };
+
+const JUDGING_PHASE_STATUSES: FairCategoryStageStatus[] = [
+  "JUDGING_STARTED",
+  "FA_CONSOLIDATED",
+  "F1_IN_PROGRESS",
+  "F1_CONSOLIDATED",
+  "F2_IN_PROGRESS",
+  "TIE_BREAK_IN_PROGRESS",
+  "JUDGING_DESERTED",
+  "JUDGING_CLOSED"
+];
 
 async function getEntries(manager: EntityManager, stage: FairCategoryStage): Promise<FairEntry[]> {
   return manager.getRepository(FairEntry).find({
@@ -220,6 +243,89 @@ async function listStartedStagesForStaff(
     .getMany();
 }
 
+async function countRoundFormParticipants(
+  manager: EntityManager,
+  roundId: string,
+  judgeUserId: string
+): Promise<number> {
+  const form = await manager.getRepository(JudgingRoundForm).findOne({
+    where: { roundId, judgeUserId },
+    select: { id: true }
+  });
+
+  if (form) {
+    return manager.getRepository(JudgingRoundEntry).count({ where: { roundFormId: form.id } });
+  }
+
+  const fallbackForm = await manager.getRepository(JudgingRoundForm).findOne({
+    where: { roundId },
+    select: { id: true }
+  });
+
+  if (!fallbackForm) {
+    return 0;
+  }
+
+  return manager.getRepository(JudgingRoundEntry).count({ where: { roundFormId: fallbackForm.id } });
+}
+
+async function buildRoundFormatDto(
+  manager: EntityManager,
+  stageId: string,
+  userId: string,
+  roundType: JudgingRoundType,
+  stageStatus: FairCategoryStageStatus
+): Promise<JudgeFormatDto> {
+  const round = await manager.getRepository(JudgingRound).findOne({
+    where: { fairCategoryStageId: stageId, roundType },
+    order: { createdAt: "DESC" },
+    select: { id: true, status: true, roundType: true }
+  });
+
+  if (!round) {
+    return {
+      key: roundType,
+      formStatus: "NOT_AVAILABLE",
+      isActive: false,
+      participantCount: null
+    };
+  }
+
+  const form = await manager.getRepository(JudgingRoundForm).findOne({
+    where: { roundId: round.id, judgeUserId: userId },
+    select: { status: true }
+  });
+  const formStatus = (form?.status ?? "PENDING") as JudgeFormatStatus;
+  const participantCount = await countRoundFormParticipants(manager, round.id, userId);
+  const isActive =
+    round.status === "OPEN" &&
+    stageStatus !== "JUDGING_DESERTED" &&
+    stageStatus !== "JUDGING_CLOSED" &&
+    (formStatus === "PENDING" || formStatus === "STARTED");
+
+  return {
+    key: roundType,
+    formStatus,
+    isActive,
+    participantCount: participantCount > 0 ? participantCount : null
+  };
+}
+
+function buildFaFormatDto(
+  stageStatus: FairCategoryStageStatus,
+  faForm: Pick<FaJudgeForm, "status"> | null
+): JudgeFormatDto {
+  if (!JUDGING_PHASE_STATUSES.includes(stageStatus)) {
+    return { key: "FA", formStatus: "NOT_AVAILABLE", isActive: false, participantCount: null };
+  }
+
+  const formStatus = (faForm?.status ?? "PENDING") as JudgeFormatStatus;
+  const isActive =
+    stageStatus === "JUDGING_STARTED" && (formStatus === "PENDING" || formStatus === "STARTED");
+
+  return { key: "FA", formStatus, isActive, participantCount: null };
+}
+
 async function enrichForJudge(
   manager: EntityManager,
   items: StagedCategoryDto[],
@@ -227,7 +333,7 @@ async function enrichForJudge(
 ): Promise<StagedCategoryDto[]> {
   return Promise.all(
     items.map(async (item) => {
-      const [faForm, activeRound] = await Promise.all([
+      const [faForm, activeRound, f1Format, f2Format, tieBreakFormat] = await Promise.all([
         manager.getRepository(FaJudgeForm).findOne({
           where: { fairCategoryStageId: item.stageId, judgeUserId: userId },
           select: { status: true }
@@ -236,7 +342,10 @@ async function enrichForJudge(
           where: { fairCategoryStageId: item.stageId, status: "OPEN" },
           order: { createdAt: "DESC" },
           select: { id: true, roundType: true }
-        })
+        }),
+        buildRoundFormatDto(manager, item.stageId, userId, "F1", item.status),
+        buildRoundFormatDto(manager, item.stageId, userId, "F2", item.status),
+        buildRoundFormatDto(manager, item.stageId, userId, "TIE_BREAK", item.status)
       ]);
 
       let roundForm: Pick<JudgingRoundForm, "status"> | null = null;
@@ -247,12 +356,19 @@ async function enrichForJudge(
         });
       }
 
+      const faFormat = buildFaFormatDto(item.status, faForm);
+      const formats: JudgeFormatDto[] = [faFormat, f1Format, f2Format];
+      if (tieBreakFormat.formStatus !== "NOT_AVAILABLE") {
+        formats.push(tieBreakFormat);
+      }
+
       return {
         ...item,
         judge: {
           faFormStatus: faForm?.status ?? null,
           roundFormStatus: roundForm?.status ?? null,
-          currentRoundType: activeRound?.roundType ?? null
+          currentRoundType: activeRound?.roundType ?? null,
+          formats
         }
       };
     })
@@ -280,6 +396,24 @@ export async function listStagedCategories(user: User): Promise<StagedCategoryDt
     }
 
     return summaries;
+  });
+}
+
+export async function getStagedCategory(user: User, stageId: string): Promise<StagedCategoryDto> {
+  const dataSource = await getDataSource();
+
+  return dataSource.transaction(async (manager) => {
+    const stage = await getStageOrThrow(manager, stageId);
+    await assertStageAccess(manager, user, stage);
+
+    let summary = await buildStageSummary(manager, stage);
+
+    if (user.role === "JUDGE") {
+      const [enriched] = await enrichForJudge(manager, [summary], user.id);
+      summary = enriched;
+    }
+
+    return summary;
   });
 }
 
@@ -585,7 +719,7 @@ export async function getFa(user: User, stageId: string) {
 
 async function getFaForStage(manager: EntityManager, user: User, stage: FairCategoryStage) {
   const form = await getJudgeFormOrCreate(manager, stage, user);
-  const [participants, decisions, reasons] = await Promise.all([
+  const [participants, decisions, reasons, consolidatedRows] = await Promise.all([
     manager.getRepository(JudgingParticipant).find({
       where: { fairCategoryStageId: stage.id },
       relations: { fairEntry: true, disqualificationReason: true },
@@ -598,6 +732,11 @@ async function getFaForStage(manager: EntityManager, user: User, stage: FairCate
     manager.getRepository(DisqualificationReason).find({
       where: { isActive: true },
       order: { code: "ASC" }
+    }),
+    manager.getRepository(FaConsolidatedResult).find({
+      where: { fairCategoryStageId: stage.id },
+      relations: { judgingParticipant: { fairEntry: true } },
+      order: { finalPosition: "ASC" }
     })
   ]);
   const decisionsByParticipantId = new Map(decisions.map((decision) => [decision.judgingParticipantId, decision]));
@@ -612,6 +751,12 @@ async function getFaForStage(manager: EntityManager, user: User, stage: FairCate
       discardedCount: decisions.filter((decision) => decision.decision === "DISCARDED").length,
       closedAt: form.closedAt?.toISOString() ?? null
     },
+    consolidated: consolidatedRows.map((result) => ({
+      id: result.id,
+      trackPosition: result.judgingParticipant.fairEntry.trackPosition,
+      votesCount: result.votesCount,
+      finalPosition: result.finalPosition
+    })),
     participants: participants.map((participant) => {
       const decision = decisionsByParticipantId.get(participant.id);
 

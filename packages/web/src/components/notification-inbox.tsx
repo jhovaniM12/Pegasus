@@ -9,6 +9,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useStaffRealtimeRefresh } from "@/hooks/use-staff-realtime-refresh";
 import { useToast } from "@/components/ui/toast";
 import { stagedFlowService } from "@/services/staged-flow.service";
 import type { StaffNotification } from "@/types/staged-flow";
@@ -96,22 +97,16 @@ export function NotificationInbox() {
   }, [toast]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    const timeout = window.setTimeout(() => {
+      void load();
+    }, 0);
 
-  // Refrescar la bandeja cuando el service worker notifica que llegó un push.
-  useEffect(() => {
-    if (!("serviceWorker" in navigator)) return;
-
-    const handleMessage = (event: MessageEvent) => {
-      if ((event.data as { type?: string } | null)?.type === "PUSH_RECEIVED") {
-        void load();
-      }
+    return () => {
+      window.clearTimeout(timeout);
     };
-
-    navigator.serviceWorker.addEventListener("message", handleMessage);
-    return () => navigator.serviceWorker.removeEventListener("message", handleMessage);
   }, [load]);
+
+  useStaffRealtimeRefresh(() => load(), { debounceMs: 400 });
 
   // Polling de respaldo: refresca la bandeja cada 30 segundos en caso de que
   // el service worker no haya podido enviar el mensaje (e.g. tab en segundo plano).

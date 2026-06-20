@@ -6,6 +6,7 @@ import type {
   NotificationInboxState,
   RoundReminderHistoryItem,
   RoundState,
+  RoundType,
   RoundsManagement,
   StaffNotification,
   StagedCategory,
@@ -17,6 +18,19 @@ import type {
 class StagedFlowService extends ApiService {
   async listCategories(): Promise<ApiResponse<StagedCategory[]>> {
     return this.get<ApiResponse<StagedCategory[]>>("/api/staff/staged-categories");
+  }
+
+  async getCategory(stageId: string): Promise<ApiResponse<StagedCategory>> {
+    try {
+      return await this.get<ApiResponse<StagedCategory>>(`/api/staff/staged-categories/${stageId}`);
+    } catch {
+      const list = await this.listCategories();
+      const category = list.data?.find((item) => item.stageId === stageId) ?? null;
+      if (!category) {
+        throw new Error(`Categoría ${stageId} no disponible.`);
+      }
+      return { success: true, data: category };
+    }
   }
 
   async startPreRing(stageId: string): Promise<ApiResponse<StagedCategory>> {
@@ -95,6 +109,10 @@ class StagedFlowService extends ApiService {
 
   async getRound(stageId: string): Promise<ApiResponse<RoundState>> {
     return this.get<ApiResponse<RoundState>>(`/api/staff/fair-categories/${stageId}/rounds/current`);
+  }
+
+  async getRoundByType(stageId: string, roundType: RoundType): Promise<ApiResponse<RoundState>> {
+    return this.get<ApiResponse<RoundState>>(`/api/staff/fair-categories/${stageId}/rounds/${roundType}`);
   }
 
   async startRoundForm(stageId: string): Promise<ApiResponse<RoundState>> {

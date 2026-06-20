@@ -20,7 +20,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "dev": "PORT=3001 tsx src/dev-server.ts"
+    "dev": "PORT=3001 tsx watch src/dev-server.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.14.4",

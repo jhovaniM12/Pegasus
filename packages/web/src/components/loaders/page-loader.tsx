@@ -43,7 +43,7 @@ export function PageLoader({
           className="relative flex size-14 items-center justify-center rounded-full bg-white p-1.5 ring-[3px] ring-zapote/30 shadow-sm"
           aria-hidden
         >
-          <PegasusLogo size="xs" className="size-full" />
+          <PegasusLogo size="xs" className="size-full" priority />
         </div>
       </div>
 

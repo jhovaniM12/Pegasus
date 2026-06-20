@@ -1,6 +1,7 @@
 "use client";
 
-import { ArrowRight, CheckCheck, CheckCircle2, Clock, Flag, Layers } from "lucide-react";
+import type { ReactNode } from "react";
+import { CheckCheck, CheckCircle2, Clock, Flag, Gavel, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { stagedFlowService } from "@/services/staged-flow.service";
 import type {
@@ -33,15 +34,104 @@ function allFormsClosed(round: RoundManagementItem | null): boolean {
   return Boolean(round && round.forms.length > 0 && round.forms.every((form) => form.status === "CLOSED"));
 }
 
+function roundFormStatusBadge(status: RoundManagementItem["forms"][number]["status"]) {
+  if (status === "CLOSED") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-md border border-emerald-100 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+        <CheckCircle2 className="size-3" />
+        Cerrado
+      </span>
+    );
+  }
+  if (status === "STARTED") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-md border border-blue-100 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
+        <Gavel className="size-3" />
+        En progreso
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-600">
+      <Clock className="size-3" />
+      Pendiente
+    </span>
+  );
+}
+
+function DirectorActiveRoundCard({
+  roundType,
+  round,
+  children,
+}: {
+  roundType: "F1" | "F2";
+  round: RoundManagementItem;
+  children: ReactNode;
+}) {
+  const closedForms = round.forms.filter((form) => form.status === "CLOSED").length;
+  const totalForms = round.forms.length;
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex flex-col gap-3 border-b border-slate-200/60 bg-slate-50/80 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2">
+          <Trophy className="size-4.5 text-slate-600" />
+          <span className="text-base font-semibold text-slate-800">Formato {roundType}</span>
+        </div>
+        <span className="flex items-center gap-1.5 rounded border border-slate-200/40 bg-slate-100 px-2 py-1 text-xs text-slate-700">
+          Jueces cerrados:{" "}
+          <strong className="font-semibold">
+            {closedForms}/{totalForms}
+          </strong>
+        </span>
+      </div>
+
+      <div className="border-b border-slate-200/60 bg-slate-50/40 px-5 py-3">
+        <p className="text-xs font-bold uppercase tracking-wider text-slate-600">Jueces</p>
+      </div>
+
+      <div className="space-y-2.5 p-5">
+        {round.forms.length === 0 ? (
+          <p className="rounded-lg border border-slate-100 bg-slate-50/30 px-4 py-4 text-center text-sm text-slate-400">
+            Sin tarjetas registradas.
+          </p>
+        ) : (
+          round.forms
+            .slice()
+            .sort((a, b) => a.judgeName.localeCompare(b.judgeName))
+            .map((form) => (
+              <div
+                key={form.id}
+                className="flex flex-col gap-2 rounded-lg border border-slate-200/60 bg-slate-50/30 p-4 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center rounded border border-slate-200/40 bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                      Juez
+                    </span>
+                    <p className="truncate text-sm font-semibold text-slate-800">{form.judgeName}</p>
+                  </div>
+                </div>
+                <div className="shrink-0 self-start sm:self-center">{roundFormStatusBadge(form.status)}</div>
+              </div>
+            ))
+        )}
+      </div>
+
+      <div className="border-t border-slate-200/60 bg-slate-50/40 p-5">{children}</div>
+    </div>
+  );
+}
+
 function RoundFormsProgress({ round }: { round: RoundManagementItem }) {
   const closed = round.forms.filter((form) => form.status === "CLOSED").length;
 
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between text-sm">
-        <span className="font-medium text-slate-700">Tarjetas cerradas</span>
+        <span className="font-medium text-slate-700">Jueces</span>
         <span className="font-semibold text-slate-900">
-          {closed}/{round.forms.length}
+          {closed}/{round.forms.length} cerrados
         </span>
       </div>
       <ul className="space-y-1.5">
@@ -81,40 +171,15 @@ export function DirectorRounds({
   const tieBreak = latestOfType(rounds, "TIE_BREAK");
   const activeTieBreakOpen = tieBreak?.status === "OPEN" ? tieBreak : null;
 
-  // FA consolidado → abrir F1 o F2 (el backend decide según sobrevivientes).
+  // FA consolidado: el botón vive en la tarjeta Formato FA (ManagementView).
   if (status === "FA_CONSOLIDATED") {
-    return (
-      <div className="rounded-lg border border-slate-200 bg-white p-5">
-        <div className="flex items-center gap-2">
-          <Layers className="size-5 text-blue-600" />
-          <h3 className="text-base font-semibold text-slate-950">FA consolidado</h3>
-        </div>
-        <p className="mt-1 text-sm text-slate-500">
-          Abre la siguiente ronda reglamentaria. Si quedan más de 8 ejemplares se abrirá F1 (cabeza de lote); de lo
-          contrario, F2 (tarjeta final).
-        </p>
-        <Button
-          className="mt-4 bg-blue-600 text-white hover:bg-blue-700"
-          disabled={busy}
-          onClick={() =>
-            runAction("Abrir siguiente ronda", "Se notificará a los jueces para diligenciar sus tarjetas.", () =>
-              stagedFlowService.openNextRound(stageId)
-            )
-          }
-        >
-          <ArrowRight className="size-4" />
-          Abrir siguiente ronda
-        </Button>
-      </div>
-    );
+    return null;
   }
 
   // F1 en progreso → consolidar cuando todos cierren.
   if (status === "F1_IN_PROGRESS" && f1) {
     return (
-      <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-5">
-        <h3 className="text-base font-semibold text-slate-950">F1 — Cabeza de lote</h3>
-        <RoundFormsProgress round={f1} />
+      <DirectorActiveRoundCard roundType="F1" round={f1}>
         <Button
           className="w-full bg-amber-500 text-white hover:bg-amber-600 disabled:bg-amber-500/50"
           disabled={busy || !allFormsClosed(f1)}
@@ -127,48 +192,20 @@ export function DirectorRounds({
           <CheckCheck className="size-4" />
           Consolidar F1
         </Button>
-      </div>
+      </DirectorActiveRoundCard>
     );
   }
 
-  // F1 consolidado → abrir F2 (sin tabla de puestos: aún no es resultado oficial de categoría).
+  // F1 consolidado: la activación de F2 vive en ManagementView (ActivateRoundCard).
   if (status === "F1_CONSOLIDATED") {
-    const finalistCount = f1?.results.length ?? 0;
-
-    return (
-      <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-5">
-        <div className="flex items-center gap-2">
-          <CheckCircle2 className="size-5 text-emerald-600" />
-          <h3 className="text-base font-semibold text-slate-950">F1 consolidado</h3>
-        </div>
-        <p className="text-sm text-slate-600">
-          La cabeza de lote quedó definida
-          {finalistCount > 0 ? ` con ${finalistCount} ejemplar${finalistCount === 1 ? "" : "es"}` : ""}.
-          Los puestos oficiales de la categoría se asignan en la tarjeta final F2.
-        </p>
-        <Button
-          className="w-full bg-blue-600 text-white hover:bg-blue-700"
-          disabled={busy}
-          onClick={() =>
-            runAction("Abrir F2", "Los jueces asignarán puestos finales a los ejemplares de cabeza de lote.", () =>
-              stagedFlowService.openNextRound(stageId)
-            )
-          }
-        >
-          <ArrowRight className="size-4" />
-          Abrir tarjeta final F2
-        </Button>
-      </div>
-    );
+    return null;
   }
 
   // F2 en progreso (abierta o consolidada con/ sin empate).
   if (status === "F2_IN_PROGRESS" && f2) {
     if (f2.status === "OPEN") {
       return (
-        <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-5">
-          <h3 className="text-base font-semibold text-slate-950">F2 — Tarjeta final</h3>
-          <RoundFormsProgress round={f2} />
+        <DirectorActiveRoundCard roundType="F2" round={f2}>
           <Button
             className="w-full bg-amber-500 text-white hover:bg-amber-600 disabled:bg-amber-500/50"
             disabled={busy || !allFormsClosed(f2)}
@@ -181,28 +218,14 @@ export function DirectorRounds({
             <CheckCheck className="size-4" />
             Consolidar F2
           </Button>
-        </div>
+        </DirectorActiveRoundCard>
       );
     }
 
     const hasTie = f2.results.some((row) => row.status === "TIED");
     const tiedCount = f2.results.filter((row) => row.status === "TIED").length;
-    const resolvedByTieBreak =
-      !hasTie && rounds.some((round) => round.roundType === "TIE_BREAK" && round.status === "CONSOLIDATED");
     return (
       <div className="space-y-4">
-        <OfficialResultBoard
-          results={f2.results}
-          desertedResults={f2.desertedResults}
-          title={resolvedByTieBreak ? "Resultado F2 tras desempate" : "Resultado F2"}
-          note={
-            resolvedByTieBreak
-              ? "La suma y los primeros puestos corresponden al F2 original; el orden final fue definido por la ronda de desempate."
-              : undefined
-          }
-          provisionalLabel={resolvedByTieBreak ? "Resuelto por desempate" : undefined}
-          provisionalVariant={resolvedByTieBreak ? "tieBreak" : "neutral"}
-        />
         {hasTie ? (
           <TieBreakPanel busy={busy} tiedCount={tiedCount} onOpen={onOpenTieBreak} />
         ) : (

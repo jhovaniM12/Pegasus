@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { categoriesService } from "@/services/categories.service";
 import type { PaginationMeta } from "@/types/common";
@@ -29,11 +29,21 @@ export function useCategoryGaits() {
 }
 
 export function useCategories(params: UseCategoriesParams) {
-  const [page, setPage] = useState(1);
+  const filterKey = params.gaitId || "all";
+  const [pageByFilter, setPageByFilter] = useState<Record<string, number>>({});
   const [categories, setCategories] = useState<Category[]>([]);
   const [meta, setMeta] = useState<PaginationMeta>({ ...emptyMeta, limit: params.limit });
   const [loadedKey, setLoadedKey] = useState("");
-  const requestKey = [params.gaitId || "", params.limit, page].join(":");
+
+  const page = pageByFilter[filterKey] ?? 1;
+  const setPage = useCallback(
+    (nextPage: number) => {
+      setPageByFilter((current) => ({ ...current, [filterKey]: nextPage }));
+    },
+    [filterKey]
+  );
+
+  const requestKey = [filterKey, params.limit, page].join(":");
 
   useEffect(() => {
     categoriesService
@@ -47,11 +57,7 @@ export function useCategories(params: UseCategoriesParams) {
         setMeta(data.meta || { ...emptyMeta, limit: params.limit });
         setLoadedKey(requestKey);
       });
-  }, [params.gaitId, params.limit, page, requestKey]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [params.gaitId]);
+  }, [filterKey, params.gaitId, params.limit, page, requestKey]);
 
   return { categories, meta, loading: loadedKey !== requestKey, page, setPage };
 }

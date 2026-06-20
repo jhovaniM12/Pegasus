@@ -5,7 +5,7 @@ export class ApiService {
     try {
       const response = await axios.get<T>(url);
       return response.data;
-    } catch (error) {
+    } catch {
       throw new Error(`Error al consultar ${url}.`);
     }
   }
@@ -14,7 +14,7 @@ export class ApiService {
     try {
       const response = await axios.post<T>(url, body);
       return response.data;
-    } catch (error) {
+    } catch {
       throw new Error(`Error al enviar ${url}.`);
     }
   }
@@ -23,7 +23,7 @@ export class ApiService {
     try {
       const response = await axios.patch<T>(url, body);
       return response.data;
-    } catch (error) {
+    } catch {
       throw new Error(`Error al actualizar ${url}.`);
     }
   }
@@ -32,7 +32,7 @@ export class ApiService {
     try {
       const response = await axios.delete<T>(url);
       return response.data;
-    } catch (error) {
+    } catch {
       throw new Error(`Error al eliminar ${url}.`);
     }
   }
@@ -41,7 +41,7 @@ export class ApiService {
     try {
       const response = await axios.put<T>(url, body);
       return response.data;
-    } catch (error) {
+    } catch {
       throw new Error(`Error al guardar ${url}.`);
     }
   }

@@ -26,6 +26,15 @@ export type TieBreakTestType =
 
 export type VeterinaryCheckStatus = "PENDING" | "APPROVED" | "REJECTED" | "ABSENT";
 export type JudgeFormStatus = "PENDING" | "STARTED" | "CLOSED";
+export type JudgeFormatKey = "FA" | "F1" | "F2" | "TIE_BREAK";
+export type JudgeFormatStatus = "NOT_AVAILABLE" | "PENDING" | "STARTED" | "CLOSED";
+
+export type JudgeFormat = {
+  key: JudgeFormatKey;
+  formStatus: JudgeFormatStatus;
+  isActive: boolean;
+  participantCount: number | null;
+};
 export type JudgingParticipantStatus = "ELIGIBLE" | "DISQUALIFIED";
 export type JudgeEntryDecision = "SELECTED" | "DISCARDED" | "DISQUALIFIED";
 
@@ -47,6 +56,7 @@ export type StagedCategory = {
     faFormStatus: JudgeFormStatus | null;
     roundFormStatus: RoundFormStatus | null;
     currentRoundType: RoundType | null;
+    formats: JudgeFormat[];
   };
 };
 
@@ -83,6 +93,13 @@ export type FaParticipant = {
   } | null;
 };
 
+export type FaConsolidatedFinalist = {
+  id: string;
+  trackPosition: number;
+  votesCount: number;
+  finalPosition: number | null;
+};
+
 export type FaState = {
   stage: StagedCategory;
   form: {
@@ -95,6 +112,7 @@ export type FaState = {
   };
   participants: FaParticipant[];
   disqualificationReasons: DisqualificationReason[];
+  consolidated: FaConsolidatedFinalist[];
 };
 
 export type ManagementVetCheck = {

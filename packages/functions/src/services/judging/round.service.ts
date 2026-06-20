@@ -336,6 +336,21 @@ export async function getRound(user: User, stageId: string) {
   });
 }
 
+export async function getRoundByType(user: User, stageId: string, roundType: JudgingRoundType) {
+  assertUserRole(user, ["JUDGE"]);
+  const dataSource = await getDataSource();
+
+  return dataSource.transaction(async (manager) => {
+    const stage = await getStageOrThrow(manager, stageId);
+    await assertStageAccess(manager, user, stage, ["2"]);
+    const round = await getLatestRound(manager, stage.id, roundType);
+    if (!round) {
+      throw new NotFoundError(`No se encontró la ronda ${roundType} para esta categoría.`);
+    }
+    return getRoundStateForJudge(manager, user, stage, round);
+  });
+}
+
 export async function updateRoundForm(
   user: User,
   stageId: string,
@@ -594,32 +609,61 @@ export async function closeRoundForm(user: User, stageId: string) {
         .find({ where: { roundFormId: form.id } });
       const maxDesertablePosition = Math.min(eligibleCount, MAX_AWARD_POSITIONS);
       const deserted = new Set(desertedRows.map((row) => row.position));
-      for (const position of deserted) {
-        if (position < MIN_AWARD_POSITION || position > maxDesertablePosition) {
-          throw new BadRequestError(
-            `Solo puedes declarar desiertos los puestos premiables entre 1 y ${maxDesertablePosition}.`
-          );
-        }
-      }
       const positioned = eligibleEntries.filter((entry) => entry.position !== null);
       const assigned = positioned.map((entry) => entry.position as number);
-      const maxAssignablePosition = eligibleCount + deserted.size;
-      if (positioned.length !== eligibleCount) {
-        throw new BadRequestError("Debes asignar un puesto a cada ejemplar elegible antes de cerrar.");
-      }
-      if (assigned.some((position) => position < 1 || position > maxAssignablePosition)) {
-        throw new BadRequestError("Los puestos asignados no corresponden al número de ejemplares y desiertos.");
-      }
-      if (new Set(assigned).size !== assigned.length) {
-        throw new BadRequestError("No puedes repetir un mismo puesto.");
-      }
-      const hasOverlap = assigned.some((position) => deserted.has(position));
-      if (hasOverlap) {
-        throw new BadRequestError("No puedes cerrar con un puesto simultáneamente asignado y desierto.");
-      }
-      for (let position = 1; position <= maxAssignablePosition; position += 1) {
-        if (!deserted.has(position) && !assigned.includes(position)) {
-          throw new BadRequestError("Debes cubrir todos los puestos con ejemplar o desierto antes de cerrar.");
+
+      // F2 / desempate: los puestos no asignados en el rango premiable (1..5) quedan desiertos al cerrar.
+      if (round.roundType === "F2" || round.roundType === "TIE_BREAK") {
+        if (assigned.some((position) => position < MIN_AWARD_POSITION || position > maxDesertablePosition)) {
+          throw new BadRequestError(
+            `En ${round.roundType === "F2" ? "F2" : "desempate"} solo puedes asignar puestos entre ${MIN_AWARD_POSITION} y ${maxDesertablePosition}.`
+          );
+        }
+        if (new Set(assigned).size !== assigned.length) {
+          throw new BadRequestError("No puedes repetir un mismo puesto.");
+        }
+
+        const autoDeserted = Array.from({ length: maxDesertablePosition }, (_, index) => index + 1).filter(
+          (position) => !assigned.includes(position)
+        );
+
+        await manager.getRepository(JudgingRoundFormDesertedPosition).delete({ roundFormId: form.id });
+        if (autoDeserted.length > 0) {
+          await manager.getRepository(JudgingRoundFormDesertedPosition).save(
+            autoDeserted.map((position) =>
+              manager.getRepository(JudgingRoundFormDesertedPosition).create({
+                roundFormId: form.id,
+                position
+              })
+            )
+          );
+        }
+      } else {
+        for (const position of deserted) {
+          if (position < MIN_AWARD_POSITION || position > maxDesertablePosition) {
+            throw new BadRequestError(
+              `Solo puedes declarar desiertos los puestos premiables entre 1 y ${maxDesertablePosition}.`
+            );
+          }
+        }
+        const maxAssignablePosition = eligibleCount + deserted.size;
+        if (positioned.length !== eligibleCount) {
+          throw new BadRequestError("Debes asignar un puesto a cada ejemplar elegible antes de cerrar.");
+        }
+        if (assigned.some((position) => position < 1 || position > maxAssignablePosition)) {
+          throw new BadRequestError("Los puestos asignados no corresponden al número de ejemplares y desiertos.");
+        }
+        if (new Set(assigned).size !== assigned.length) {
+          throw new BadRequestError("No puedes repetir un mismo puesto.");
+        }
+        const hasOverlap = assigned.some((position) => deserted.has(position));
+        if (hasOverlap) {
+          throw new BadRequestError("No puedes cerrar con un puesto simultáneamente asignado y desierto.");
+        }
+        for (let position = 1; position <= maxAssignablePosition; position += 1) {
+          if (!deserted.has(position) && !assigned.includes(position)) {
+            throw new BadRequestError("Debes cubrir todos los puestos con ejemplar o desierto antes de cerrar.");
+          }
         }
       }
     }
@@ -752,15 +796,16 @@ async function loadJudgeCards(manager: EntityManager, roundId: string): Promise<
       manager,
       entries.map((entry) => entry.judgingParticipantId)
     );
+    const eligibleEntries = entries.filter(
+      (entry) => statusByParticipant.get(entry.judgingParticipantId) === "ELIGIBLE"
+    );
     cards.push({
       judgeUserId: form.judgeUserId,
-      positions: entries
-        .filter(
-          (entry) =>
-            entry.position !== null && statusByParticipant.get(entry.judgingParticipantId) === "ELIGIBLE"
-        )
+      positions: eligibleEntries
+        .filter((entry) => entry.position !== null)
         .map((entry) => ({ participantId: entry.judgingParticipantId, position: entry.position as number })),
-      desertedPositions: desertedRows.map((row) => row.position)
+      desertedPositions: desertedRows.map((row) => row.position),
+      eligibleParticipantIds: eligibleEntries.map((entry) => entry.judgingParticipantId)
     });
   }
   return cards;
@@ -1138,7 +1183,7 @@ async function getRoundStateForJudge(
     ? await manager.getRepository(JudgingRoundEntry).find({ where: { roundFormId: form.id } })
     : [];
   const remindersByEntryId =
-    round.roundType === "F1" && entries.length > 0
+    entries.length > 0
       ? await loadRemindersByEntryIds(
           manager,
           entries.map((entry) => entry.id)
@@ -1170,18 +1215,16 @@ async function getRoundStateForJudge(
           : null,
         selected: entry.selected,
         position: entry.position,
-        privateNote: round.roundType === "F1" ? entry.privateNote : null,
+        privateNote: entry.privateNote,
         reminders: remindersByEntryId.get(entry.id) ?? []
       };
     })
     .sort((a, b) => a.trackPosition - b.trackPosition);
 
-  const availableReminders =
-    round.roundType === "F1" ? await loadActiveReminders(manager) : [];
-  const reminderHistory: ReminderHistoryItemDto[] =
-    round.roundType === "F1" && form
-      ? await loadReminderHistory(manager, form.id)
-      : [];
+  const availableReminders = await loadActiveReminders(manager);
+  const reminderHistory: ReminderHistoryItemDto[] = form
+    ? await loadReminderHistory(manager, form.id)
+    : [];
   const disqualificationReasons = await loadActiveDisqualificationReasons(manager);
 
   return {

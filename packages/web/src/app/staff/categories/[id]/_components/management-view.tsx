@@ -3,6 +3,7 @@
 import { useState } from "react";
 import {
   CheckCircle2,
+  CheckCheck,
   ChevronDown,
   ChevronUp,
   Clock,
@@ -16,7 +17,14 @@ import {
   XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { FaConsolidatedDetail } from "./fa-consolidated-detail";
+import {
+  ActivateRoundCard,
+  isFaStageComplete,
+  resolveActivateRoundConfig,
+  type ActivateRoundConfig,
+} from "./activate-round-card";
 import { RoundsSummarySection } from "./rounds-summary-section";
 import { formatFaFormDuration, formatRoundFormTime } from "./round-form-timing";
 import type {
@@ -262,18 +270,27 @@ function PreRingSection({
 
 // ─── FaSection ────────────────────────────────────────────────────────────────
 
-function FaSection({ management }: { management: ManagementState }) {
+function FaSection({
+  management,
+  busy = false,
+  onConsolidateFa,
+}: {
+  management: ManagementState;
+  busy?: boolean;
+  onConsolidateFa?: () => void;
+}) {
   const { judgeForms, participants, consolidated, summary } = management;
   const { closedForms, totalJudges } = summary.judging;
   const disqualifiedParticipants = participants.filter((p) => p.status === "DISQUALIFIED");
-  const isConsolidated =
-    summary.status === "FA_CONSOLIDATED" ||
-    summary.status === "JUDGING_CLOSED" ||
-    summary.status === "JUDGING_DESERTED" ||
-    consolidated.length > 0;
+  const isConsolidated = isFaStageComplete(summary.status) || consolidated.length > 0;
   const [showDetail, setShowDetail] = useState(false);
 
-  if (showDetail) {
+  const canConsolidateFa =
+    summary.status === "JUDGING_STARTED" &&
+    totalJudges > 0 &&
+    closedForms >= totalJudges;
+
+  if (showDetail && isConsolidated) {
     return (
       <FaConsolidatedDetail
         judgeForms={judgeForms}
@@ -285,7 +302,8 @@ function FaSection({ management }: { management: ManagementState }) {
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+    <div className="space-y-4">
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       {/* Header */}
       <div className="flex flex-col gap-3 bg-slate-50/80 border-b border-slate-200/60 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
@@ -306,12 +324,24 @@ function FaSection({ management }: { management: ManagementState }) {
           )}
           {isConsolidated && (
             <button
-              onClick={() => setShowDetail(true)}
+              type="button"
+              onClick={() => setShowDetail((current) => !current)}
               className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-emerald-700"
             >
               <Eye className="size-3.5" />
-              Ver FA
+              {showDetail ? "Ocultar FA" : "Ver FA"}
             </button>
+          )}
+          {!isConsolidated && onConsolidateFa && (
+            <Button
+              size="sm"
+              className="h-8 gap-1.5 bg-amber-500 px-3 text-xs font-semibold text-white hover:bg-amber-600 disabled:bg-amber-500/50"
+              disabled={busy || !canConsolidateFa}
+              onClick={onConsolidateFa}
+            >
+              <CheckCheck className="size-3.5" />
+              Consolidar FA
+            </Button>
           )}
         </div>
       </div>
@@ -360,6 +390,8 @@ function FaSection({ management }: { management: ManagementState }) {
           </ul>
         </div>
       )}
+      </div>
+
     </div>
   );
 }
@@ -369,14 +401,34 @@ function FaSection({ management }: { management: ManagementState }) {
 export function ManagementView({
   management,
   rounds = [],
+  busy = false,
+  onConsolidateFa,
+  onActivateRound,
 }: {
   management: ManagementState;
   rounds?: RoundManagementItem[];
+  busy?: boolean;
+  onConsolidateFa?: () => void;
+  onActivateRound?: (config: ActivateRoundConfig) => void;
 }) {
+  const f1Round = [...rounds].reverse().find((round) => round.roundType === "F1") ?? null;
+  const activateRoundConfig = resolveActivateRoundConfig({
+    status: management.summary.status,
+    consolidatedCount: management.consolidated.length,
+    f1ResultCount: f1Round?.results.length ?? 0,
+  });
+
   return (
     <div className="space-y-5">
       <PreRingSection management={management} />
-      <FaSection management={management} />
+      <FaSection management={management} busy={busy} onConsolidateFa={onConsolidateFa} />
+      {activateRoundConfig && onActivateRound && (
+        <ActivateRoundCard
+          config={activateRoundConfig}
+          busy={busy}
+          onActivate={() => onActivateRound(activateRoundConfig)}
+        />
+      )}
       <RoundsSummarySection rounds={rounds} />
     </div>
   );

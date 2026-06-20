@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -39,11 +39,26 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { CategoryCardSkeleton, ContentReveal, StaffFiltersSkeleton } from "@/components/loaders";
+import { JudgeFormatActions } from "@/app/staff/_components/judge-format-actions";
+import { StartFaDialog } from "@/app/staff/categories/[id]/_components/start-fa-dialog";
+import { StartRoundDialog } from "@/app/staff/categories/[id]/_components/start-round-dialog";
+import { PushNotificationGate } from "@/components/push-notification-gate";
+import { PushNotificationProvider } from "@/components/push-notification-provider";
+import { useStaffRealtimeRefresh } from "@/hooks/use-staff-realtime-refresh";
 import { stagedFlowService } from "@/services/staged-flow.service";
-import type { StageStatus, StagedCategory } from "@/types/staged-flow";
+import type { JudgeFormat, StageStatus, StagedCategory } from "@/types/staged-flow";
 
 const ALL_STATUS_VALUE = "all";
 const ALL_GAIT_VALUE = "all";
+
+function categoryGaitLabel(category: StagedCategory): string {
+  return `${category.gait.name ?? "Sin andar"} - ${category.category.minAgeMonths} a ${category.category.maxAgeMonths} meses`;
+}
+
+type StartRoundTarget = {
+  category: StagedCategory;
+  format: JudgeFormat & { key: "F1" | "F2" | "TIE_BREAK" };
+};
 
 const STAGE_STATUS_ORDER: StageStatus[] = [
   "NOT_STARTED",
@@ -171,10 +186,13 @@ function getCardAction(role: string | undefined, item: StagedCategory): CardActi
   }
 
   if (role === "JUDGE") {
+    const faReviewHref = `${href}?view=FA`;
+
+    if (item.judge?.faFormStatus === "CLOSED") {
+      return { kind: "navigate", color: "secondary", icon: Eye, href: faReviewHref, label: "Ver Formato FA" };
+    }
+
     if (item.status === "JUDGING_STARTED") {
-      if (item.judge?.faFormStatus === "CLOSED") {
-        return { kind: "navigate", color: "secondary", icon: Eye, href, label: "Ver categoría" };
-      }
       return { kind: "navigate", color: "blue", icon: ClipboardList, href, label: "Formato FA" };
     }
     const judgeRoundStatuses: StagedCategory["status"][] = [
@@ -386,6 +404,8 @@ export default function StaffPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<(ConfirmAction & { open: boolean }) | null>(null);
+  const [startFaTarget, setStartFaTarget] = useState<StagedCategory | null>(null);
+  const [startRoundTarget, setStartRoundTarget] = useState<StartRoundTarget | null>(null);
   const [statusFilter, setStatusFilter] = useState(ALL_STATUS_VALUE);
   const [gaitFilter, setGaitFilter] = useState(ALL_GAIT_VALUE);
 
@@ -402,18 +422,54 @@ export default function StaffPage() {
     setGaitFilter(ALL_GAIT_VALUE);
   };
 
-  useEffect(() => {
-    Promise.all([fetch("/api/auth/me"), fetch("/api/staff/staged-categories")])
-      .then(async ([userResponse, categoriesResponse]) => {
-        if (!userResponse.ok || !categoriesResponse.ok) throw new Error("No autorizado");
+  const reloadCategories = useCallback(
+    async ({ silent = false }: { silent?: boolean } = {}) => {
+      if (!silent) {
+        setLoading(true);
+      }
+
+      try {
+        const [userResponse, categoriesResponse] = await Promise.all([
+          fetch("/api/auth/me"),
+          stagedFlowService.listCategories(),
+        ]);
+        if (!userResponse.ok) {
+          if (!silent) {
+            router.push("/login/staff");
+          }
+          return;
+        }
+
         const userPayload = (await userResponse.json()) as { data?: CurrentUser };
-        const categoriesPayload = (await categoriesResponse.json()) as { data?: StagedCategory[] };
         setCurrentUser(userPayload.data ?? null);
-        setCategories(categoriesPayload.data ?? []);
-      })
-      .catch(() => router.push("/login/staff"))
-      .finally(() => setLoading(false));
-  }, [router]);
+        setCategories(categoriesResponse.data ?? []);
+      } catch {
+        if (!silent) {
+          router.push("/login/staff");
+        }
+      } finally {
+        if (!silent) {
+          setLoading(false);
+        }
+      }
+    },
+    [router]
+  );
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      void reloadCategories();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [reloadCategories]);
+
+  useStaffRealtimeRefresh(
+    () => reloadCategories({ silent: true }),
+    { enableVisibilityRefresh: true, pollingMs: 30_000, debounceMs: 400 }
+  );
 
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -446,11 +502,12 @@ export default function StaffPage() {
   };
 
   return (
+    <PushNotificationProvider userId={currentUser?.id}>
     <div className="min-h-screen bg-[#f5f7fb]">
       <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 px-4 py-4 backdrop-blur md:px-6">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
-            <PegasusLogo size="xs" className="shrink-0" />
+            <PegasusLogo size="xs" className="shrink-0" priority />
             <div className="min-w-0">
               <h1 className="truncate text-xl font-semibold tracking-normal text-slate-950">
                 Categorías asignadas
@@ -458,7 +515,7 @@ export default function StaffPage() {
             </div>
           </div>
           <div className="hidden items-center gap-3 sm:flex">
-            <PushNotificationPrompt userId={currentUser?.id} />
+            <PushNotificationPrompt />
             <NotificationInbox />
             <ConnectionIndicator />
             <StaffUserMenu currentUser={currentUser} onLogout={logout} className="max-w-72" />
@@ -468,7 +525,7 @@ export default function StaffPage() {
 
       <main className="mx-auto w-full max-w-7xl px-4 py-6 md:px-6 lg:py-8">
         <div className="mb-4 space-y-3 sm:hidden">
-          <PushNotificationPrompt userId={currentUser?.id} className="flex-wrap" />
+          <PushNotificationPrompt className="flex-wrap" />
           <div className="flex items-center gap-3">
             <NotificationInbox />
             <ConnectionIndicator className="shrink-0" />
@@ -518,6 +575,9 @@ export default function StaffPage() {
           <div className="grid gap-4 lg:grid-cols-2">
             {filteredCategories.map((item) => {
               const action = getCardAction(currentUser?.role, item);
+              const showJudgeFormats =
+                currentUser?.role === "JUDGE" &&
+                item.judge?.formats?.some((format) => format.formStatus !== "NOT_AVAILABLE");
 
               return (
                 <article
@@ -579,7 +639,18 @@ export default function StaffPage() {
                   </div>
 
                   {/* Bottom action: confirm dialog for state mutations, Link for views */}
-                  {action.kind === "confirm" ? (
+                  {showJudgeFormats ? (
+                    <JudgeFormatActions
+                      stageId={item.stageId}
+                      formats={item.judge!.formats}
+                      onStartFa={() => setStartFaTarget(item)}
+                      onStartRound={(format) => {
+                        if (format.key === "F1" || format.key === "F2" || format.key === "TIE_BREAK") {
+                          setStartRoundTarget({ category: item, format: { ...format, key: format.key } });
+                        }
+                      }}
+                    />
+                  ) : action.kind === "confirm" ? (
                     <Button
                       className={`mt-5 w-full rounded-md ${actionButtonClass(action.color)}`}
                       disabled={busy}
@@ -620,6 +691,70 @@ export default function StaffPage() {
           onConfirm={handleConfirm}
         />
       )}
+
+      <StartFaDialog
+        open={startFaTarget !== null}
+        onOpenChange={(open) => {
+          if (!open && !busy) setStartFaTarget(null);
+        }}
+        gaitLabel={startFaTarget ? categoryGaitLabel(startFaTarget) : ""}
+        busy={busy}
+        onConfirm={async () => {
+          if (!startFaTarget) return;
+          setBusy(true);
+          try {
+            await stagedFlowService.startFa(startFaTarget.stageId);
+            toast({ title: "Formato FA iniciado", variant: "success" });
+            setStartFaTarget(null);
+            router.push(`/staff/categories/${startFaTarget.stageId}?view=FA`);
+          } catch (error) {
+            toast({
+              title: "Error",
+              description: error instanceof Error ? error.message : "No fue posible iniciar el formato FA.",
+              variant: "error",
+            });
+          } finally {
+            setBusy(false);
+          }
+        }}
+      />
+
+      <StartRoundDialog
+        open={startRoundTarget !== null}
+        onOpenChange={(open) => {
+          if (!open && !busy) setStartRoundTarget(null);
+        }}
+        roundKey={startRoundTarget?.format.key ?? "F2"}
+        gaitLabel={startRoundTarget ? categoryGaitLabel(startRoundTarget.category) : ""}
+        participantCount={startRoundTarget?.format.participantCount}
+        busy={busy}
+        onConfirm={async () => {
+          if (!startRoundTarget) return;
+
+          const { category, format } = startRoundTarget;
+          setBusy(true);
+          try {
+            await stagedFlowService.startRoundForm(category.stageId);
+            toast({ title: `Formato ${format.key} iniciado`, variant: "success" });
+            setStartRoundTarget(null);
+            router.push(`/staff/categories/${category.stageId}?view=${format.key}`);
+          } catch (error) {
+            toast({
+              title: "Error",
+              description:
+                error instanceof Error
+                  ? error.message
+                  : `No fue posible iniciar el formato ${format.key}.`,
+              variant: "error",
+            });
+          } finally {
+            setBusy(false);
+          }
+        }}
+      />
+
+      <PushNotificationGate />
     </div>
+    </PushNotificationProvider>
   );
 }

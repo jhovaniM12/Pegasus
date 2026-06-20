@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { fairsService } from "@/services/fairs.service";
 import type { PaginationMeta } from "@/types/common";
@@ -71,13 +71,24 @@ export function useFairDetail(fairId: string) {
 }
 
 export function useFairEntries(fairId: string, params: UseFairEntriesParams) {
-  const [page, setPage] = useState(1);
+  const filterKey = params.categoryId
+    ? [fairId, params.categoryId, params.search || ""].join(":")
+    : "";
+  const [pageByFilter, setPageByFilter] = useState<Record<string, number>>({});
   const [entries, setEntries] = useState<FairEntry[]>([]);
   const [meta, setMeta] = useState<PaginationMeta>({ ...emptyMeta, limit: params.limit });
   const [loadedKey, setLoadedKey] = useState("");
-  const requestKey = params.categoryId
-    ? [fairId, params.categoryId, params.limit, page, params.search || ""].join(":")
-    : "";
+
+  const page = filterKey ? (pageByFilter[filterKey] ?? 1) : 1;
+  const setPage = useCallback(
+    (nextPage: number) => {
+      if (!filterKey) return;
+      setPageByFilter((current) => ({ ...current, [filterKey]: nextPage }));
+    },
+    [filterKey]
+  );
+
+  const requestKey = filterKey ? [filterKey, params.limit, page].join(":") : "";
 
   useEffect(() => {
     if (!params.categoryId) {
@@ -86,7 +97,7 @@ export function useFairEntries(fairId: string, params: UseFairEntriesParams) {
 
     fairsService
       .listEntries(fairId, {
-        page: page,
+        page,
         limit: params.limit,
         categoryId: params.categoryId,
         search: params.search,
@@ -96,11 +107,7 @@ export function useFairEntries(fairId: string, params: UseFairEntriesParams) {
         setMeta(data.meta || { ...emptyMeta, limit: params.limit });
         setLoadedKey(requestKey);
       });
-  }, [fairId, params.categoryId, params.limit, page, params.search, requestKey]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [fairId, params.categoryId, params.search]);
+  }, [fairId, filterKey, params.categoryId, params.limit, page, params.search, requestKey]);
 
   return {
     entries: params.categoryId ? entries : [],
@@ -112,13 +119,22 @@ export function useFairEntries(fairId: string, params: UseFairEntriesParams) {
 }
 
 export function useFairResults(fairId: string, params: UseFairResultsParams) {
-  const [page, setPage] = useState(1);
+  const filterKey = params.categoryId ? [fairId, params.categoryId].join(":") : "";
+  const [pageByFilter, setPageByFilter] = useState<Record<string, number>>({});
   const [results, setResults] = useState<FairResult[]>([]);
   const [meta, setMeta] = useState<PaginationMeta>({ ...emptyMeta, limit: params.limit });
   const [loadedKey, setLoadedKey] = useState("");
-  const requestKey = params.categoryId
-    ? [fairId, params.categoryId, params.limit, page].join(":")
-    : "";
+
+  const page = filterKey ? (pageByFilter[filterKey] ?? 1) : 1;
+  const setPage = useCallback(
+    (nextPage: number) => {
+      if (!filterKey) return;
+      setPageByFilter((current) => ({ ...current, [filterKey]: nextPage }));
+    },
+    [filterKey]
+  );
+
+  const requestKey = filterKey ? [filterKey, params.limit, page].join(":") : "";
 
   useEffect(() => {
     if (!params.categoryId) {
@@ -127,7 +143,7 @@ export function useFairResults(fairId: string, params: UseFairResultsParams) {
 
     fairsService
       .listResults(fairId, {
-        page: page,
+        page,
         limit: params.limit,
         categoryId: params.categoryId,
       })
@@ -136,11 +152,7 @@ export function useFairResults(fairId: string, params: UseFairResultsParams) {
         setMeta(data.meta || { ...emptyMeta, limit: params.limit });
         setLoadedKey(requestKey);
       });
-  }, [fairId, params.categoryId, params.limit, page, requestKey]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [fairId, params.categoryId]);
+  }, [fairId, filterKey, params.categoryId, params.limit, page, requestKey]);
 
   return {
     results: params.categoryId ? results : [],
@@ -152,16 +164,26 @@ export function useFairResults(fairId: string, params: UseFairResultsParams) {
 }
 
 export function useFairStaff(fairId: string, params: UseFairStaffParams) {
-  const [page, setPage] = useState(1);
+  const filterKey = fairId;
+  const [pageByFilter, setPageByFilter] = useState<Record<string, number>>({});
   const [staff, setStaff] = useState<FairStaff[]>([]);
   const [meta, setMeta] = useState<PaginationMeta>({ ...emptyMeta, limit: params.limit });
   const [loadedKey, setLoadedKey] = useState("");
-  const requestKey = [fairId, params.limit, page].join(":");
+
+  const page = pageByFilter[filterKey] ?? 1;
+  const setPage = useCallback(
+    (nextPage: number) => {
+      setPageByFilter((current) => ({ ...current, [filterKey]: nextPage }));
+    },
+    [filterKey]
+  );
+
+  const requestKey = [filterKey, params.limit, page].join(":");
 
   useEffect(() => {
     fairsService
       .listStaff(fairId, {
-        page: page,
+        page,
         limit: params.limit,
       })
       .then((data) => {
@@ -169,11 +191,7 @@ export function useFairStaff(fairId: string, params: UseFairStaffParams) {
         setMeta(data.meta || { ...emptyMeta, limit: params.limit });
         setLoadedKey(requestKey);
       });
-  }, [fairId, params.limit, page, requestKey]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [fairId]);
+  }, [fairId, filterKey, params.limit, page, requestKey]);
 
   return { staff, meta, loading: loadedKey !== requestKey, page, setPage };
 }

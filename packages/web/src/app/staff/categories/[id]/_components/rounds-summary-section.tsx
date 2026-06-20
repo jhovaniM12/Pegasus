@@ -48,12 +48,14 @@ function canViewDetail(round: RoundManagementItem): boolean {
   );
 }
 
-function RoundCompactSection({
+export function RoundCompactSection({
   round,
-  resolvedByTieBreak,
+  resolvedByTieBreak = false,
+  isActive = false,
 }: {
   round: RoundManagementItem;
-  resolvedByTieBreak: boolean;
+  resolvedByTieBreak?: boolean;
+  isActive?: boolean;
 }) {
   const [showDetail, setShowDetail] = useState(false);
   const closed = round.forms.filter((form) => form.status === "CLOSED").length;
@@ -71,9 +73,15 @@ function RoundCompactSection({
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className="flex flex-col gap-3 border-b border-slate-200/60 bg-slate-50/80 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Trophy className="size-4.5 text-slate-600" />
           <span className="text-base font-semibold text-slate-800">{roundTitle(round)}</span>
+          {isActive && (
+            <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+              <CheckCircle2 className="size-3.5" />
+              Activo
+            </span>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-slate-500">
           <span className="flex items-center gap-1.5 rounded border border-slate-200/40 bg-slate-100 px-2 py-1 text-slate-700">
@@ -145,9 +153,19 @@ function RoundCompactSection({
   );
 }
 
-export function RoundsSummarySection({ rounds }: { rounds: RoundManagementItem[] }) {
+export function RoundsSummarySection({
+  rounds,
+  excludeRoundIds = [],
+}: {
+  rounds: RoundManagementItem[];
+  excludeRoundIds?: string[];
+}) {
+  const excluded = new Set(excludeRoundIds);
   const visibleRounds = rounds.filter(
-    (round) => round.roundType === "F1" || round.roundType === "F2" || round.roundType === "TIE_BREAK"
+    (round) =>
+      !excluded.has(round.id) &&
+      round.status !== "OPEN" &&
+      (round.roundType === "F1" || round.roundType === "F2" || round.roundType === "TIE_BREAK")
   );
   const f2 = visibleRounds.find((round) => round.roundType === "F2");
   const resolvedByTieBreak =

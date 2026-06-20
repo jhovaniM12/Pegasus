@@ -41,7 +41,7 @@ export default function SettingsPage() {
         const response = await awardDistinctivesService.listAwardDistinctives();
         const rows = response.data ?? [];
         setDistinctives(rows.map((row) => ({ ...row, saving: false })));
-      } catch (_error) {
+      } catch {
         setError("No se pudieron cargar los distintivos configurables.");
       } finally {
         setLoadingDistinctives(false);
@@ -86,7 +86,7 @@ export default function SettingsPage() {
       } else {
         updateLocalDistinctive(row.id, { saving: false });
       }
-    } catch (_error) {
+    } catch {
       updateLocalDistinctive(row.id, { saving: false });
       setError(`No se pudo guardar el distintivo del puesto ${row.position}.`);
     }

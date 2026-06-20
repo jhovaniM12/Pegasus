@@ -2,7 +2,7 @@ import { CheckCircle2, Clock, MinusCircle, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { VeterinaryCheck, VeterinaryCheckStatus } from "@/types/staged-flow";
 
-const VET_STATUSES: VeterinaryCheckStatus[] = ["APPROVED", "REJECTED", "ABSENT", "PENDING"];
+const VET_STATUSES: VeterinaryCheckStatus[] = ["APPROVED", "REJECTED", "PENDING"];
 
 const VET_LABELS: Record<VeterinaryCheckStatus, string> = {
   APPROVED: "Aprobado",

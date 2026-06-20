@@ -6,9 +6,9 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { stagedFlowService } from "@/services/staged-flow.service";
 import type { RoundParticipant, RoundState, RoundType } from "@/types/staged-flow";
-import { F2RankingBoard } from "./f2-ranking-board";
+import { F2PositionBoard } from "./f2-position-board";
 import { F1SelectionBoard } from "./f1-selection-board";
-import { RoundDisqualifyDialog } from "./round-disqualify-dialog";
+import { FaDisqualifyDialog } from "./fa-disqualify-dialog";
 
 const ROUND_TITLES: Record<RoundType, string> = {
   F1: "Tarjeta F1 — Cabeza de lote",
@@ -18,10 +18,37 @@ const ROUND_TITLES: Record<RoundType, string> = {
 
 const ROUND_HINTS: Record<RoundType, string> = {
   F1: "Selecciona los ejemplares que pasan a la tarjeta final.",
-  F2: "Asigna un puesto a cada ejemplar. En 1.º a 5.º puedes declarar desierto; el ejemplar restante debe ubicarse en el siguiente puesto.",
+  F2: "Toca el botón de puesto en cada tarjeta para asignar la posición. Al insertar en un puesto ocupado los demás se desplazan. Los ejemplares sin puesto quedan desiertos.",
   TIE_BREAK:
-    "Asigna el orden de todos los empatados. En puestos premiables 1.º a 5.º puedes declarar desierto desde la fila del puesto.",
+    "Toca el botón de puesto en cada tarjeta para asignar la posición. Al insertar en un puesto ocupado los demás se desplazan. Los ejemplares sin puesto quedan desiertos.",
 };
+
+const MAX_F2_POSITIONS = 5;
+
+function assignWithCascade(
+  assignments: Array<{ participantId: string; position: number }>,
+  participantId: string,
+  targetPosition: number
+): Array<{ participantId: string; position: number }> {
+  const without = assignments.filter((a) => a.participantId !== participantId);
+  const targetIsOccupied = without.some((a) => a.position === targetPosition);
+  const shifted = targetIsOccupied
+    ? without.map((a) =>
+        a.position >= targetPosition ? { ...a, position: a.position + 1 } : a
+      )
+    : without;
+  const bounded = shifted.filter((a) => a.position <= MAX_F2_POSITIONS);
+  return [...bounded, { participantId, position: targetPosition }];
+}
+
+function computeAutoDeserted(
+  assignments: Array<{ participantId: string; position: number }>,
+  totalEligible: number
+): number[] {
+  const assignedSet = new Set(assignments.map((a) => a.position));
+  const maxPositions = Math.min(MAX_F2_POSITIONS, totalEligible);
+  return Array.from({ length: maxPositions }, (_, i) => i + 1).filter((p) => !assignedSet.has(p));
+}
 
 type JudgeRoundWorkspaceProps = {
   stageId: string;
@@ -32,7 +59,8 @@ type JudgeRoundWorkspaceProps = {
     title: string,
     description: string,
     action: () => Promise<unknown>,
-    variant?: "default" | "destructive"
+    variant?: "default" | "destructive",
+    confirmText?: string
   ) => void;
 };
 
@@ -59,22 +87,6 @@ function syncParticipantsWithPositions(
     ...participant,
     position: positionByParticipant.get(participant.id) ?? null,
   }));
-}
-
-function getNextAssignablePosition(
-  assignments: Array<{ participantId: string; position: number }>,
-  desertedPositions: number[],
-  participantCount: number
-): number | null {
-  const assignedPositions = new Set(assignments.map((row) => row.position));
-  const deserted = new Set(desertedPositions);
-  const totalPositions = participantCount + deserted.size;
-
-  return (
-    Array.from({ length: totalPositions }, (_, index) => index + 1).find(
-      (position) => !assignedPositions.has(position) && !deserted.has(position)
-    ) ?? null
-  );
 }
 
 export function JudgeRoundWorkspace({
@@ -111,11 +123,6 @@ export function JudgeRoundWorkspace({
         localParticipants.filter((participant) => participant.selected && participant.status === "ELIGIBLE").map((p) => p.id)
       ),
     [localParticipants]
-  );
-
-  const desertedPositions = useMemo(
-    () => new Set(localDesertedPositions),
-    [localDesertedPositions]
   );
 
   const assignedByParticipant = useMemo(
@@ -257,67 +264,32 @@ export function JudgeRoundWorkspace({
       .map((participant) => ({ participantId: participant.id, position: participant.position as number }))
       .sort((a, b) => a.position - b.position);
 
-  const assignParticipant = (participantId: string) => {
+  const assignParticipantToPosition = (participantId: string, targetPosition: number) => {
     if (!editable) return;
     const participant = localParticipantsRef.current.find((item) => item.id === participantId);
     if (!participant || participant.status === "DISQUALIFIED") return;
     const currentAssignments = getCurrentAssignments();
-    const currentDesertedPositions = localDesertedPositionsRef.current;
-    if (currentAssignments.some((row) => row.participantId === participantId)) return;
-
     const eligibleCount = localParticipantsRef.current.filter((item) => item.status === "ELIGIBLE").length;
-    const nextPosition = getNextAssignablePosition(
-      currentAssignments,
-      currentDesertedPositions,
-      eligibleCount
-    );
-    if (!nextPosition) return;
-
-    persistRankingState(
-      [...currentAssignments, { participantId, position: nextPosition }],
-      currentDesertedPositions
-    );
+    const nextAssignments = assignWithCascade(currentAssignments, participantId, targetPosition);
+    persistRankingState(nextAssignments, computeAutoDeserted(nextAssignments, eligibleCount));
   };
 
-  const unassignParticipant = (participantId: string) => {
+  const unassignParticipantF2 = (participantId: string) => {
     if (!editable) return;
     const currentAssignments = getCurrentAssignments();
-    persistRankingState(
-      currentAssignments.filter((row) => row.participantId !== participantId),
-      localDesertedPositionsRef.current
-    );
-  };
-
-  const toggleDesertedPosition = (position: number) => {
-    if (!editable) return;
-    const currentAssignments = getCurrentAssignments();
-    const currentDesertedPositions = localDesertedPositionsRef.current;
-    const isDeserted = currentDesertedPositions.includes(position);
-
-    if (isDeserted) {
-      persistRankingState(
-        currentAssignments.map((row) => ({
-          ...row,
-          position: row.position > position ? row.position - 1 : row.position,
-        })),
-        currentDesertedPositions.filter((row) => row !== position)
-      );
-      return;
-    }
-
-    persistRankingState(
-      currentAssignments.filter((row) => row.position !== position),
-      [...currentDesertedPositions, position].sort((a, b) => a - b)
-    );
+    const eligibleCount = localParticipantsRef.current.filter((item) => item.status === "ELIGIBLE").length;
+    const nextAssignments = currentAssignments.filter((row) => row.participantId !== participantId);
+    persistRankingState(nextAssignments, computeAutoDeserted(nextAssignments, eligibleCount));
   };
 
   const totalEligible = eligibleParticipants.length;
-  const unrankedCount = totalEligible - assignedByParticipant.length;
+  const isPositionBoardRound = roundType === "F2" || roundType === "TIE_BREAK";
+  const maxPositionBoardSlots = Math.min(MAX_F2_POSITIONS, totalEligible);
   const progressLabel = isSelectionRound
     ? `${selectedIds.size} / ${round.maxSelections ?? totalEligible} seleccionados`
-    : `${assignedByParticipant.length} / ${totalEligible} con puesto · ${desertedPositions.size} desiertos premiables`;
+    : `${assignedByParticipant.length} / ${maxPositionBoardSlots} puestos asignados`;
 
-  const canClose = isSelectionRound ? true : assignedByParticipant.length === totalEligible;
+  const canClose = isSelectionRound || isPositionBoardRound;
 
   // Estados de la ronda ajenos a la edición del juez.
   if (round.round.status !== "OPEN") {
@@ -356,33 +328,11 @@ export function JudgeRoundWorkspace({
             Iniciar tarjeta
           </Button>
         )}
-        {formStatus === "STARTED" && (
-          <Button
-            className="bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-600/50"
-            disabled={busy || !canClose}
-            onClick={() =>
-              runAction(
-                "Cerrar tarjeta",
-                "Una vez cerrada no podrás modificarla. El Director Técnico será notificado.",
-                () => stagedFlowService.closeRoundForm(stageId)
-              )
-            }
-          >
-            <Lock className="size-4" />
-            Cerrar tarjeta
-          </Button>
-        )}
       </div>
 
-      {formStatus === "STARTED" && (
+      {formStatus === "STARTED" && !isPositionBoardRound && (
         <div className="mt-3 space-y-2">
           <p className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-500">{ROUND_HINTS[roundType]}</p>
-          {!isSelectionRound && unrankedCount > 0 && (
-            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
-              Faltan {unrankedCount} ejemplar{unrankedCount === 1 ? "" : "es"} por ubicar. No podrás cerrar la
-              tarjeta hasta asignarles puesto.
-            </p>
-          )}
         </div>
       )}
 
@@ -420,15 +370,13 @@ export function JudgeRoundWorkspace({
               }}
               onOpenDisqualify={setDisqualifyTarget}
             />
-          ) : (
-            <F2RankingBoard
+          ) : isPositionBoardRound ? (
+            <F2PositionBoard
               stageId={stageId}
               round={{ ...round, participants: localParticipants }}
               editable={editable}
-              desertedPositions={[...desertedPositions]}
-              onAssignParticipant={assignParticipant}
-              onUnassignParticipant={unassignParticipant}
-              onToggleDesertedPosition={toggleDesertedPosition}
+              onAssignToPosition={assignParticipantToPosition}
+              onUnassign={unassignParticipantF2}
               onLocalUpdate={(updated) => {
                 latestConfirmedRoundRef.current = updated;
                 localParticipantsRef.current = updated.participants;
@@ -439,17 +387,38 @@ export function JudgeRoundWorkspace({
               }}
               onOpenDisqualify={setDisqualifyTarget}
             />
-          )}
+          ) : null}
         </div>
       )}
 
-      <RoundDisqualifyDialog
+      {formStatus === "STARTED" && (
+        <div className="mt-6 border-t border-slate-200 pt-4">
+          <Button
+            className="h-11 w-full bg-blue-600 text-base font-semibold text-white hover:bg-blue-700 disabled:bg-blue-600/50"
+            disabled={busy || !canClose}
+            onClick={() =>
+              runAction(
+                "Cerrar prueba individual",
+                "Una vez cerrado, no podrás modificar las posiciones asignadas. ¿Estás seguro de que deseas cerrar el formato?",
+                () => stagedFlowService.closeRoundForm(stageId),
+                "default",
+                "Cerrar prueba"
+              )
+            }
+          >
+            <Lock className="size-5" />
+            Cerrar prueba individual
+          </Button>
+        </div>
+      )}
+
+      <FaDisqualifyDialog
         open={disqualifyTarget !== null}
         participant={disqualifyTarget}
         reasons={round.disqualificationReasons}
         busy={disqualifyBusy}
         onOpenChange={(open) => {
-          if (!open) setDisqualifyTarget(null);
+          if (!open && !disqualifyBusy) setDisqualifyTarget(null);
         }}
         onConfirm={confirmDisqualify}
       />

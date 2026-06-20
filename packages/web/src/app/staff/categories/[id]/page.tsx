@@ -2,24 +2,37 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, CheckCheck, Gavel, Lock, Play } from "lucide-react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { ArrowLeft, Gavel, Lock, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmActionDialog } from "@/components/confirm-action-dialog";
 import { NotificationInbox } from "@/components/notification-inbox";
 import { stagedFlowService } from "@/services/staged-flow.service";
 import { useToast } from "@/components/ui/toast";
+import { useStaffRealtimeRefresh } from "@/hooks/use-staff-realtime-refresh";
+import { PushNotificationGate } from "@/components/push-notification-gate";
+import { PushNotificationProvider } from "@/components/push-notification-provider";
 import { useVeterinaryChecks } from "@/hooks/use-veterinary-checks";
 import { ContentReveal, PageLoader } from "@/components/loaders";
 import { SummaryHeader } from "./_components/summary-header";
 import { VetCheckCard } from "./_components/vet-check-card";
 import { FaParticipantCard } from "./_components/fa-participant-card";
+import { FaDisqualifyDialog } from "./_components/fa-disqualify-dialog";
 import { FaClosedState } from "./_components/fa-closed-state";
+import { FaConsolidatedBanner } from "./_components/fa-consolidated-banner";
 import { ManagementView } from "./_components/management-view";
 import { JudgeRoundWorkspace } from "./_components/judge-round-workspace";
 import { DirectorRounds } from "./_components/director-rounds";
+import { ClosePreRingDialog } from "./_components/close-pre-ring-dialog";
+import { StartFaDialog } from "./_components/start-fa-dialog";
+import { CloseFaDialog } from "./_components/close-fa-dialog";
+import { ConsolidateFaDialog } from "./_components/consolidate-fa-dialog";
+import { ActivateRoundDialog } from "./_components/activate-round-dialog";
+import type { ActivateRoundConfig } from "./_components/activate-round-card";
 import type {
   FaState,
+  FaParticipant,
+  JudgeFormatKey,
   ManagementState,
   RoundState,
   RoundsManagement,
@@ -35,9 +48,16 @@ const JUDGE_ROUND_STATUSES: StagedCategory["status"][] = [
   "JUDGING_CLOSED",
 ];
 
+const ROUND_VIEW_KEYS: JudgeFormatKey[] = ["F1", "F2", "TIE_BREAK"];
+
+function isRoundView(view: string | null): view is "F1" | "F2" | "TIE_BREAK" {
+  return view != null && ROUND_VIEW_KEYS.includes(view as JudgeFormatKey);
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type CurrentUser = {
+  id: string;
   role: string;
   roleLabel: string;
   personName: string | null;
@@ -49,12 +69,80 @@ function extractSelectedParticipantIds(state: FaState): string[] {
     .map((participant) => participant.id);
 }
 
+function isFaParticipantSelected(
+  participant: FaParticipant,
+  selectedIds: Set<string>
+): boolean {
+  return participant.decision?.decision === "SELECTED" || selectedIds.has(participant.id);
+}
+
+function resolveJudgeView(viewParam: string | null): "FA" | "F1" | "F2" | "TIE_BREAK" | null {
+  if (viewParam === "FA") return "FA";
+  return isRoundView(viewParam) ? viewParam : null;
+}
+
+async function fetchCurrentUser(): Promise<CurrentUser | null> {
+  const response = await fetch("/api/auth/me");
+  if (!response.ok) return null;
+  const payload = (await response.json()) as { data?: CurrentUser };
+  return payload.data ?? null;
+}
+
+async function loadJudgeWorkspace(
+  stageId: string,
+  current: StagedCategory,
+  viewParam: string | null
+): Promise<{ summary: StagedCategory; fa: FaState | null; round: RoundState | null }> {
+  const view = resolveJudgeView(viewParam);
+  const judgeHasClosedFa = current.judge?.faFormStatus === "CLOSED";
+
+  if (view === "FA") {
+    const response = await stagedFlowService.getFa(stageId);
+    const fa = response.data ?? null;
+    return { summary: fa?.stage ?? current, fa, round: null };
+  }
+
+  if (view != null) {
+    const response = await stagedFlowService.getRoundByType(stageId, view);
+    const round = response.data ?? null;
+    return { summary: round?.stage ?? current, fa: null, round };
+  }
+
+  if (current.status === "JUDGING_STARTED") {
+    const response = await stagedFlowService.getFa(stageId);
+    const fa = response.data ?? null;
+    return { summary: fa?.stage ?? current, fa, round: null };
+  }
+
+  if (judgeHasClosedFa && current.status === "FA_CONSOLIDATED") {
+    const response = await stagedFlowService.getFa(stageId);
+    const fa = response.data ?? null;
+    return { summary: fa?.stage ?? current, fa, round: null };
+  }
+
+  if (JUDGE_ROUND_STATUSES.includes(current.status)) {
+    const response = await stagedFlowService.getRound(stageId);
+    const round = response.data ?? null;
+    return { summary: round?.stage ?? current, fa: null, round };
+  }
+
+  if (judgeHasClosedFa) {
+    const response = await stagedFlowService.getFa(stageId);
+    const fa = response.data ?? null;
+    return { summary: fa?.stage ?? current, fa, round: null };
+  }
+
+  return { summary: current, fa: null, round: null };
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function StaffCategoryPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const params = useParams<{ id: string }>();
   const stageId = params.id;
+  const viewParam = searchParams.get("view");
 
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [summary, setSummary] = useState<StagedCategory | null>(null);
@@ -63,10 +151,10 @@ export default function StaffCategoryPage() {
   const [management, setManagement] = useState<ManagementState | null>(null);
   const [round, setRound] = useState<RoundState | null>(null);
   const [roundsManagement, setRoundsManagement] = useState<RoundsManagement | null>(null);
-  const [reasonByParticipantId, setReasonByParticipantId] = useState<Record<string, string>>({});
-  const [disqualifyExpandedIds, setDisqualifyExpandedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [disqualifyTarget, setDisqualifyTarget] = useState<FaParticipant | null>(null);
+  const [disqualifyBusy, setDisqualifyBusy] = useState(false);
   // Ref síncrona: fuente de verdad para calcular el siguiente toggle sin depender del ciclo de React.
   const localSelectionRef = useRef<string[]>([]);
   const isSyncingFaSelectionRef = useRef(false);
@@ -90,68 +178,208 @@ export default function StaffCategoryPage() {
     open: boolean;
     title: string;
     description?: string;
+    confirmText?: string;
     variant?: "default" | "destructive";
     action: () => Promise<unknown>;
   } | null>(null);
+  const [closePreRingOpen, setClosePreRingOpen] = useState(false);
+  const [startFaOpen, setStartFaOpen] = useState(false);
+  const [closeFaOpen, setCloseFaOpen] = useState(false);
+  const [consolidateFaOpen, setConsolidateFaOpen] = useState(false);
+  const [activateRoundTarget, setActivateRoundTarget] = useState<ActivateRoundConfig | null>(null);
 
   // ─── Data loading ─────────────────────────────────────────────────────────
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
+    if (!stageId) return;
+
+    if (!silent) {
+      setLoading(true);
+    }
     try {
-      // Fetch user y categorías en paralelo — eliminamos la waterfall de requests.
-      const [userResponse, categories] = await Promise.all([
-        fetch("/api/auth/me"),
-        stagedFlowService.listCategories(),
-      ]);
+      const judgeView = resolveJudgeView(viewParam);
 
-      if (!userResponse.ok) throw new Error("No autorizado");
-      const userPayload = (await userResponse.json()) as { data?: CurrentUser };
-      const user = userPayload.data ?? null;
-      setCurrentUser(user);
+      if (judgeView === "FA") {
+        const [user, faResponse] = await Promise.all([
+          fetchCurrentUser(),
+          stagedFlowService.getFa(stageId),
+        ]);
 
-      const current = categories.data?.find((item) => item.stageId === stageId) ?? null;
-      if (!current) {
-        router.push("/staff");
+        if (!user) {
+          if (!silent) router.push("/login/staff");
+          return;
+        }
+
+        setCurrentUser(user);
+        const faData = faResponse.data ?? null;
+        const summaryData = faData?.stage ?? null;
+
+        if (!summaryData) {
+          if (!silent) {
+            toast({
+              title: "Categoría no disponible",
+              description: "No tienes acceso a esta categoría o no existe.",
+              variant: "error",
+            });
+            router.push("/staff");
+          }
+          return;
+        }
+
+        setSummary(summaryData);
+        setFa(faData);
+        setRound(null);
         return;
       }
+
+      if (judgeView != null) {
+        const [user, roundResponse] = await Promise.all([
+          fetchCurrentUser(),
+          stagedFlowService.getRoundByType(stageId, judgeView),
+        ]);
+
+        if (!user) {
+          if (!silent) router.push("/login/staff");
+          return;
+        }
+
+        setCurrentUser(user);
+        const roundData = roundResponse.data ?? null;
+        const summaryData = roundData?.stage ?? null;
+
+        if (!summaryData) {
+          if (!silent) {
+            toast({
+              title: "Categoría no disponible",
+              description: "No tienes acceso a esta categoría o no existe.",
+              variant: "error",
+            });
+            router.push("/staff");
+          }
+          return;
+        }
+
+        setSummary(summaryData);
+        setFa(null);
+        setRound(roundData);
+        return;
+      }
+
+      const user = await fetchCurrentUser();
+      if (!user) {
+        if (!silent) router.push("/login/staff");
+        return;
+      }
+
+      setCurrentUser(user);
+
+      if (user.role === "TECHNICAL_DIRECTOR") {
+        const managementResponse = await stagedFlowService.getManagement(stageId);
+        let roundsData: RoundsManagement | null = null;
+
+        try {
+          const roundsResponse = await stagedFlowService.getRoundsManagement(stageId);
+          roundsData = roundsResponse.data ?? null;
+        } catch (error) {
+          if (!silent) {
+            toast({
+              title: "No se pudieron cargar las rondas F1/F2",
+              description: error instanceof Error ? error.message : "Recarga la página para reintentar.",
+              variant: "error",
+            });
+          }
+          roundsData = null;
+        }
+
+        const management = managementResponse.data ?? null;
+        if (!management?.summary) {
+          if (!silent) {
+            toast({
+              title: "Categoría no disponible",
+              description: "No tienes acceso a esta categoría o no existe.",
+              variant: "error",
+            });
+            router.push("/staff");
+          }
+          return;
+        }
+
+        setSummary(management.summary);
+        setManagement(management);
+        setRoundsManagement(roundsData);
+        return;
+      }
+
+      if (user.role === "VETERINARIAN") {
+        const [categoryResponse, checksResponse] = await Promise.all([
+          stagedFlowService.getCategory(stageId),
+          stagedFlowService.listVeterinaryChecks(stageId),
+        ]);
+        const current = categoryResponse.data ?? null;
+        if (!current) {
+          if (!silent) {
+            toast({
+              title: "Categoría no disponible",
+              description: "No tienes acceso a esta categoría o no existe.",
+              variant: "error",
+            });
+            router.push("/staff");
+          }
+          return;
+        }
+
+        setSummary(current);
+        setChecks(checksResponse.data ?? []);
+        return;
+      }
+
+      const categoryResponse = await stagedFlowService.getCategory(stageId);
+      const current = categoryResponse.data ?? null;
+      if (!current) {
+        if (!silent) {
+          toast({
+            title: "Categoría no disponible",
+            description: "No tienes acceso a esta categoría o no existe.",
+            variant: "error",
+          });
+          router.push("/staff");
+        }
+        return;
+      }
+
       setSummary(current);
 
-      if (user?.role === "VETERINARIAN") {
-        const response = await stagedFlowService.listVeterinaryChecks(stageId);
-        setChecks(response.data ?? []);
-      } else if (user?.role === "JUDGE") {
-        if (current?.status === "JUDGING_STARTED") {
-          const response = await stagedFlowService.getFa(stageId);
-          setFa(response.data ?? null);
-          setRound(null);
-        } else if (current && JUDGE_ROUND_STATUSES.includes(current.status)) {
-          const response = await stagedFlowService.getRound(stageId);
-          setRound(response.data ?? null);
-          setFa(null);
-        } else {
-          // FA consolidado o fases sin tarjeta de juez: solo lectura del resumen.
-          setFa(null);
-          setRound(null);
-        }
-      } else if (user?.role === "TECHNICAL_DIRECTOR") {
-        const [managementResponse, roundsResponse] = await Promise.all([
-          stagedFlowService.getManagement(stageId),
-          stagedFlowService.getRoundsManagement(stageId),
-        ]);
-        setManagement(managementResponse.data ?? null);
-        setRoundsManagement(roundsResponse.data ?? null);
+      if (user.role === "JUDGE") {
+        const workspace = await loadJudgeWorkspace(stageId, current, viewParam);
+        setSummary(workspace.summary);
+        setFa(workspace.fa);
+        setRound(workspace.round);
       }
-    } catch {
-      router.push("/login/staff");
+    } catch (error) {
+      if (!silent) {
+        toast({
+          title: "Error al cargar la categoría",
+          description: error instanceof Error ? error.message : "Intenta nuevamente.",
+          variant: "error",
+        });
+        router.push("/staff");
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
-  }, [router, setChecks, stageId]);
+  }, [router, setChecks, stageId, toast, viewParam]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch remoto al montar o cambiar contexto
     void load();
   }, [load]);
+
+  useStaffRealtimeRefresh(
+    () => load({ silent: true }),
+    { enableVisibilityRefresh: true, pollingMs: 30_000, debounceMs: 400 }
+  );
 
   // ─── Confirm dialog helper ────────────────────────────────────────────────
 
@@ -159,9 +387,10 @@ export default function StaffCategoryPage() {
     title: string,
     description: string,
     action: () => Promise<unknown>,
-    variant: "default" | "destructive" = "default"
+    variant: "default" | "destructive" = "default",
+    confirmText?: string
   ) => {
-    setConfirmDialog({ open: true, title, description, action, variant });
+    setConfirmDialog({ open: true, title, description, action, variant, confirmText });
   };
 
   // ─── FA handlers ─────────────────────────────────────────────────────────
@@ -171,23 +400,24 @@ export default function StaffCategoryPage() {
   useEffect(() => {
     if (!fa) {
       localSelectionRef.current = [];
-      setFaSelectedIdsLocal([]);
       latestConfirmedFaSelectionRef.current = [];
       pendingFaSelectionRef.current = null;
       isSyncingFaSelectionRef.current = false;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset al salir de vista FA
+      setFaSelectedIdsLocal([]);
       return;
     }
 
     const confirmedSelectedIds = extractSelectedParticipantIds(fa);
     latestConfirmedFaSelectionRef.current = confirmedSelectedIds;
 
-    // Evita que una respuesta tardía pise el estado optimista en curso.
     if (!isSyncingFaSelectionRef.current) {
       localSelectionRef.current = confirmedSelectedIds;
       setFaSelectedIdsLocal(confirmedSelectedIds);
     }
   }, [fa]);
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- cola optimista con refs estables
   const flushFaSelection = useCallback(async () => {
     if (isSyncingFaSelectionRef.current) return;
 
@@ -214,7 +444,7 @@ export default function StaffCategoryPage() {
         }
         setFa(response.data);
       }
-    } catch (_error) {
+    } catch {
       if (requestId === latestFaRequestIdRef.current) {
         localSelectionRef.current = latestConfirmedFaSelectionRef.current;
         setFaSelectedIdsLocal(latestConfirmedFaSelectionRef.current);
@@ -257,31 +487,45 @@ export default function StaffCategoryPage() {
     [fa, flushFaSelection, summary?.status]
   );
 
-  const toggleDisqualifyPanel = useCallback((participantId: string) => {
-    setDisqualifyExpandedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(participantId)) {
-        next.delete(participantId);
-      } else {
-        next.add(participantId);
-      }
-      return next;
-    });
-  }, []);
-
-  const handleDisqualifyParticipant = useCallback(
-    (participantId: string, reasonId: string) => {
+  const openFaDisqualify = useCallback(
+    (participantId: string) => {
       if (!fa || summary?.status !== "JUDGING_STARTED" || fa.form.status !== "STARTED") return;
-      const reason = fa?.disqualificationReasons.find((r) => r.id === reasonId);
-      if (!reason) return;
-      runAction(
-        "Confirmar descalificación",
-        `Este ejemplar quedará fuera de la competencia por "${reason.name}" y no podrá ser seleccionado por otros jueces.`,
-        () => stagedFlowService.disqualifyParticipant(stageId, participantId, reasonId),
-        "destructive"
-      );
+      const participant = fa.participants.find((item) => item.id === participantId) ?? null;
+      if (!participant || participant.status === "DISQUALIFIED") return;
+      setDisqualifyTarget(participant);
     },
-    [fa, stageId, summary?.status]
+    [fa, summary?.status]
+  );
+
+  const confirmFaDisqualify = useCallback(
+    async (participantId: string, reasonId: string) => {
+      if (!fa || summary?.status !== "JUDGING_STARTED" || fa.form.status !== "STARTED") return;
+
+      setDisqualifyBusy(true);
+      try {
+        const response = await stagedFlowService.disqualifyParticipant(stageId, participantId, reasonId);
+        if (response.data) {
+          setFa(response.data);
+          setSummary(response.data.stage);
+          const confirmedSelectedIds = extractSelectedParticipantIds(response.data);
+          latestConfirmedFaSelectionRef.current = confirmedSelectedIds;
+          localSelectionRef.current = confirmedSelectedIds;
+          setFaSelectedIdsLocal(confirmedSelectedIds);
+          setDisqualifyTarget(null);
+          toast({ title: "Ejemplar descalificado", variant: "success" });
+        }
+      } catch (error) {
+        toast({
+          title: "No se pudo descalificar",
+          description: error instanceof Error ? error.message : "Intenta nuevamente.",
+          variant: "error",
+        });
+        throw error;
+      } finally {
+        setDisqualifyBusy(false);
+      }
+    },
+    [fa, stageId, summary?.status, toast]
   );
 
   const handleOpenTieBreak = (testTypes: TieBreakTestType[]) => {
@@ -309,12 +553,18 @@ export default function StaffCategoryPage() {
   // ─── Render ───────────────────────────────────────────────────────────────
 
   if (loading || !summary) {
-    return <PageLoader label="Cargando categoría..." />;
+    return (
+      <PushNotificationProvider userId={currentUser?.id}>
+        <PageLoader label="Cargando categoría..." />
+        <PushNotificationGate />
+      </PushNotificationProvider>
+    );
   }
 
   return (
-    <ContentReveal>
-    <div className="min-h-screen bg-[#f5f7fb]">
+    <PushNotificationProvider userId={currentUser?.id}>
+      <ContentReveal>
+        <div className="min-h-screen bg-[#f5f7fb]">
       <main className="mx-auto w-full max-w-6xl px-4 py-6">
         {/* Top bar */}
         <div className="mb-4 flex items-center justify-between gap-3">
@@ -325,7 +575,9 @@ export default function StaffCategoryPage() {
           <NotificationInbox />
         </div>
 
-        <SummaryHeader summary={summary} />
+        {currentUser?.role === "TECHNICAL_DIRECTOR" && (
+          <SummaryHeader summary={summary} />
+        )}
 
         {/* ── DIRECTOR TÉCNICO ─────────────────────────────────────────── */}
         {currentUser?.role === "TECHNICAL_DIRECTOR" && (
@@ -361,25 +613,6 @@ export default function StaffCategoryPage() {
               >
                 <Gavel className="size-4" />
                 Iniciar juzgamiento
-              </Button>
-              <Button
-                size="lg"
-                className="w-full bg-amber-500 hover:bg-amber-600 text-white disabled:bg-amber-500/50"
-                disabled={
-                  busy ||
-                  summary.status !== "JUDGING_STARTED" ||
-                  summary.judging.closedForms < summary.judging.totalJudges
-                }
-                onClick={() =>
-                  runAction(
-                    "Consolidar FA",
-                    "Esto consolidará los formatos cerrados de los jueces y dará por terminado el juzgamiento.",
-                    () => stagedFlowService.consolidateFa(stageId)
-                  )
-                }
-              >
-                <CheckCheck className="size-4" />
-                Consolidar FA
               </Button>
               <Button
                 size="lg"
@@ -424,49 +657,39 @@ export default function StaffCategoryPage() {
               </div>
             </div>
 
-            {showDirectorRounds && roundsManagement && (
+            {management && (
+              <ManagementView
+                management={management}
+                rounds={roundsManagement?.rounds ?? []}
+                busy={busy}
+                onConsolidateFa={() => setConsolidateFaOpen(true)}
+                onActivateRound={(config) => setActivateRoundTarget(config)}
+              />
+            )}
+
+            {showDirectorRounds && (
               <DirectorRounds
                 stageId={stageId}
                 summary={summary}
-                rounds={roundsManagement.rounds}
+                rounds={roundsManagement?.rounds ?? []}
                 busy={busy}
                 runAction={runAction}
                 onOpenTieBreak={handleOpenTieBreak}
               />
             )}
-
-            {management && <ManagementView management={management} rounds={roundsManagement?.rounds ?? []} />}
           </section>
         )}
 
         {/* ── VETERINARIO ──────────────────────────────────────────────── */}
         {currentUser?.role === "VETERINARIAN" && (
           <section className="mt-4 rounded-lg border border-slate-200 bg-white p-5">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="text-base font-semibold text-slate-950">Checkeo veterinario</h2>
-                {checks.length > 0 && (
-                  <p className="mt-0.5 text-sm text-slate-500">
-                    {checks.filter((c) => c.status !== "PENDING").length}/{checks.length} revisados
-                  </p>
-                )}
-              </div>
-              <Button
-                disabled={
-                  busy ||
-                  summary.status !== "PRE_RING_STARTED" ||
-                  checks.some((c) => c.status === "PENDING")
-                }
-                onClick={() =>
-                  runAction(
-                    "Cerrar pre-pista",
-                    "Todos los participantes tienen decisión veterinaria. Solo los aprobados pasarán a juzgamiento.",
-                    () => stagedFlowService.closePreRing(stageId)
-                  )
-                }
-              >
-                Cerrar pre-pista
-              </Button>
+            <div>
+              <h2 className="text-base font-semibold text-slate-950">Checkeo veterinario</h2>
+              {checks.length > 0 && (
+                <p className="mt-0.5 text-sm text-slate-500">
+                  {checks.filter((c) => c.status !== "PENDING").length}/{checks.length} revisados
+                </p>
+              )}
             </div>
             <div className="mt-4 grid gap-3">
               {checks.map((check) => (
@@ -479,6 +702,19 @@ export default function StaffCategoryPage() {
                 />
               ))}
             </div>
+            <Button
+              size="lg"
+              className="mt-5 h-14 w-full gap-2 rounded-xl px-6 text-base font-semibold bg-blue-600 hover:bg-blue-700 text-white disabled:bg-blue-600/50"
+              disabled={
+                busy ||
+                summary.status !== "PRE_RING_STARTED" ||
+                checks.some((c) => c.status === "PENDING")
+              }
+              onClick={() => setClosePreRingOpen(true)}
+            >
+              <Lock className="size-5" />
+              Cerrar pre-pista
+            </Button>
           </section>
         )}
 
@@ -495,13 +731,7 @@ export default function StaffCategoryPage() {
                   <Button
                     className="bg-emerald-600 hover:bg-emerald-700 text-white disabled:bg-emerald-600/50"
                     disabled={busy || summary.status !== "JUDGING_STARTED" || fa.form.status !== "PENDING"}
-                    onClick={() =>
-                      runAction(
-                        "Iniciar Formato FA",
-                        "Podrás empezar a seleccionar o descartar ejemplares en competencia.",
-                        () => stagedFlowService.startFa(stageId)
-                      )
-                    }
+                    onClick={() => setStartFaOpen(true)}
                   >
                     <Play className="size-4" />
                     Iniciar FA
@@ -513,13 +743,7 @@ export default function StaffCategoryPage() {
                       summary.status !== "JUDGING_STARTED" ||
                       fa.form.status !== "STARTED"
                     }
-                    onClick={() =>
-                      runAction(
-                        "Cerrar Formato FA",
-                        "Una vez cerrado, no podrás modificar tus selecciones. Puedes cerrar con cero seleccionados si corresponde al criterio de juzgamiento.",
-                        () => stagedFlowService.closeFa(stageId)
-                      )
-                    }
+                    onClick={() => setCloseFaOpen(true)}
                   >
                     <Lock className="size-4" />
                     Cerrar FA
@@ -528,12 +752,19 @@ export default function StaffCategoryPage() {
               )}
             </div>
 
+            {(fa.consolidated ?? []).length > 0 && (
+              <div className="mt-4">
+                <FaConsolidatedBanner consolidated={fa.consolidated ?? []} />
+              </div>
+            )}
+
             {fa.form.status === "CLOSED" && (
               <div className="mt-4">
                 <FaClosedState
                   closedAt={fa.form.closedAt}
                   selectedCount={fa.form.selectedCount}
                   stageStatus={summary.status}
+                  hideConsolidatedNotice={(fa.consolidated ?? []).length > 0}
                 />
               </div>
             )}
@@ -544,17 +775,10 @@ export default function StaffCategoryPage() {
                   <FaParticipantCard
                     key={participant.id}
                     participant={participant}
-                    selected={selectedIds.has(participant.id)}
+                    selected={isFaParticipantSelected(participant, selectedIds)}
                     editable={summary.status === "JUDGING_STARTED" && fa.form.status === "STARTED"}
-                    disqualifyExpanded={disqualifyExpandedIds.has(participant.id)}
-                    selectedReasonId={reasonByParticipantId[participant.id] ?? ""}
-                    reasons={fa.disqualificationReasons}
                     onToggle={toggleFaSelection}
-                    onExpandDisqualify={toggleDisqualifyPanel}
-                    onReasonChange={(id, reasonId) =>
-                      setReasonByParticipantId((prev) => ({ ...prev, [id]: reasonId }))
-                    }
-                    onDisqualify={handleDisqualifyParticipant}
+                    onOpenDisqualify={openFaDisqualify}
                   />
                 ))}
               </div>
@@ -563,7 +787,7 @@ export default function StaffCategoryPage() {
         )}
 
         {/* ── JUEZ: FA consolidado, esperando ronda ─────────────────────── */}
-        {currentUser?.role === "JUDGE" && summary.status === "FA_CONSOLIDATED" && (
+        {currentUser?.role === "JUDGE" && summary.status === "FA_CONSOLIDATED" && !fa && !round && (
           <section className="mt-4 rounded-lg border border-dashed border-slate-300 bg-white px-6 py-8 text-center">
             <p className="text-base font-semibold text-slate-900">FA consolidado</p>
             <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
@@ -602,6 +826,7 @@ export default function StaffCategoryPage() {
           }}
           title={confirmDialog.title}
           description={confirmDialog.description}
+          confirmText={confirmDialog.confirmText}
           variant={confirmDialog.variant}
           busy={busy}
           onConfirm={async () => {
@@ -623,7 +848,164 @@ export default function StaffCategoryPage() {
           }}
         />
       )}
-    </div>
-    </ContentReveal>
+
+      <FaDisqualifyDialog
+        open={disqualifyTarget !== null}
+        participant={disqualifyTarget}
+        reasons={fa?.disqualificationReasons ?? []}
+        busy={disqualifyBusy}
+        onOpenChange={(open) => {
+          if (!open && !disqualifyBusy) setDisqualifyTarget(null);
+        }}
+        onConfirm={confirmFaDisqualify}
+      />
+
+      <ActivateRoundDialog
+        open={activateRoundTarget !== null}
+        config={activateRoundTarget}
+        onOpenChange={(open) => {
+          if (!open && !busy) setActivateRoundTarget(null);
+        }}
+        busy={busy}
+        onConfirm={async () => {
+          setBusy(true);
+          try {
+            await stagedFlowService.openNextRound(stageId);
+            await load();
+            toast({
+              title: activateRoundTarget
+                ? `Formato ${activateRoundTarget.roundType} activado`
+                : "Ronda activada",
+              variant: "success",
+            });
+            setActivateRoundTarget(null);
+          } catch (error) {
+            toast({
+              title: "Error",
+              description: error instanceof Error ? error.message : "No fue posible activar la ronda.",
+              variant: "error",
+            });
+          } finally {
+            setBusy(false);
+          }
+        }}
+      />
+
+      <ConsolidateFaDialog
+        open={consolidateFaOpen}
+        onOpenChange={setConsolidateFaOpen}
+        busy={busy}
+        onConfirm={async () => {
+          setBusy(true);
+          try {
+            await stagedFlowService.consolidateFa(stageId);
+            await load();
+            toast({ title: "Formato FA consolidado", variant: "success" });
+            setConsolidateFaOpen(false);
+          } catch (error) {
+            toast({
+              title: "Error",
+              description: error instanceof Error ? error.message : "No fue posible consolidar el formato FA.",
+              variant: "error",
+            });
+          } finally {
+            setBusy(false);
+          }
+        }}
+      />
+
+      <CloseFaDialog
+        open={closeFaOpen}
+        onOpenChange={setCloseFaOpen}
+        summary={{
+          selectedCount: selectedIds.size,
+          maxSelected: 10,
+          disqualifiedCount: fa?.form.disqualifiedCount ?? 0,
+          discardedCount: fa
+            ? fa.participants.filter(
+                (p) =>
+                  p.status === "ELIGIBLE" &&
+                  !selectedIds.has(p.id) &&
+                  p.decision?.decision !== "DISQUALIFIED"
+              ).length
+            : 0,
+        }}
+        busy={busy}
+        onConfirm={async () => {
+          setBusy(true);
+          try {
+            const response = await stagedFlowService.closeFa(stageId);
+            if (response.data) {
+              setFa(response.data);
+              setSummary(response.data.stage);
+            }
+            await load();
+            toast({ title: "Formato FA cerrado", variant: "success" });
+            setCloseFaOpen(false);
+          } catch (error) {
+            toast({
+              title: "Error",
+              description: error instanceof Error ? error.message : "No fue posible cerrar el formato FA.",
+              variant: "error",
+            });
+          } finally {
+            setBusy(false);
+          }
+        }}
+      />
+
+      <StartFaDialog
+        open={startFaOpen}
+        onOpenChange={setStartFaOpen}
+        gaitLabel={`${summary.gait.name ?? "Sin andar"} - ${summary.category.minAgeMonths} a ${summary.category.maxAgeMonths} meses`}
+        busy={busy}
+        onConfirm={async () => {
+          setBusy(true);
+          try {
+            await stagedFlowService.startFa(stageId);
+            toast({ title: "Formato FA iniciado", variant: "success" });
+            setStartFaOpen(false);
+            router.replace(`/staff/categories/${stageId}?view=FA`);
+            await load();
+          } catch (error) {
+            toast({
+              title: "Error",
+              description: error instanceof Error ? error.message : "No fue posible iniciar el formato FA.",
+              variant: "error",
+            });
+          } finally {
+            setBusy(false);
+          }
+        }}
+      />
+
+      <ClosePreRingDialog
+        open={closePreRingOpen}
+        onOpenChange={setClosePreRingOpen}
+        totalProcessed={checks.length}
+        busy={busy}
+        onConfirm={async () => {
+          setBusy(true);
+          try {
+            await stagedFlowService.closePreRing(stageId);
+            await load();
+            toast({ title: "Pre-pista cerrada", variant: "success" });
+            setClosePreRingOpen(false);
+          } catch (error) {
+            toast({
+              title: "Error",
+              description: error instanceof Error ? error.message : "No fue posible cerrar la pre-pista.",
+              variant: "error",
+            });
+          } finally {
+            setBusy(false);
+          }
+        }}
+      />
+
+          <PushNotificationGate />
+        </div>
+      </ContentReveal>
+    </PushNotificationProvider>
   );
 }

@@ -1,5 +1,5 @@
 import type { Context } from "hono";
-import { ForbiddenError } from "../lib/errors.js";
+import { BadRequestError, ForbiddenError } from "../lib/errors.js";
 import { success } from "../lib/http.js";
 import { getSessionFromCookie } from "../lib/session.js";
 import {
@@ -10,6 +10,7 @@ import {
   getFa,
   getManagement,
   listDisqualificationReasons,
+  getStagedCategory,
   listStagedCategories,
   listVeterinaryChecks,
   resetStageForTesting,
@@ -26,6 +27,7 @@ import {
   desertCompetition,
   disqualifyRoundParticipant,
   getRound,
+  getRoundByType,
   getRoundsManagement,
   openNextRound,
   openTieBreak,
@@ -79,6 +81,11 @@ function flushNotifications(): void {
 export async function listStagedCategoriesController(c: Context) {
   const user = await getStaffUser(c);
   return c.json(success(await listStagedCategories(user)));
+}
+
+export async function getStagedCategoryController(c: Context) {
+  const user = await getStaffUser(c);
+  return c.json(success(await getStagedCategory(user, requiredParam(c, "id"))));
 }
 
 export async function startPreRingController(c: Context) {
@@ -172,6 +179,17 @@ export async function openNextRoundController(c: Context) {
 export async function getRoundController(c: Context) {
   const user = await getStaffUser(c);
   return c.json(success(await getRound(user, requiredParam(c, "id"))));
+}
+
+const VALID_ROUND_TYPES = ["F1", "F2", "TIE_BREAK"] as const;
+
+export async function getRoundByTypeController(c: Context) {
+  const user = await getStaffUser(c);
+  const roundType = requiredParam(c, "roundType");
+  if (!VALID_ROUND_TYPES.includes(roundType as (typeof VALID_ROUND_TYPES)[number])) {
+    throw new BadRequestError("Tipo de ronda inválido.");
+  }
+  return c.json(success(await getRoundByType(user, requiredParam(c, "id"), roundType as "F1" | "F2" | "TIE_BREAK")));
 }
 
 export async function startRoundFormController(c: Context) {

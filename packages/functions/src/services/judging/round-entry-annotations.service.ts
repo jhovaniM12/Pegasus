@@ -216,10 +216,6 @@ export async function updateEntryReminders(
     await assertStageAccess(manager, user, stage, ["2"]);
     const round = await getActiveRoundOrThrow(manager, stage.id);
 
-    if (round.roundType !== "F1") {
-      throw new BadRequestError("Los recordatorios solo están disponibles en F1.");
-    }
-
     const form = await getJudgeFormForRound(manager, round.id, user.id);
     const entry = await getEditableEntryOrThrow(manager, form, participantId);
 
@@ -286,10 +282,6 @@ export async function updateEntryPrivateNote(
     await assertStageAccess(manager, user, stage, ["2"]);
     const round = await getActiveRoundOrThrow(manager, stage.id);
 
-    if (round.roundType !== "F1") {
-      throw new BadRequestError("Las observaciones privadas solo están disponibles en F1.");
-    }
-
     const form = await getJudgeFormForRound(manager, round.id, user.id);
     const entry = await getEditableEntryOrThrow(manager, form, participantId);
 
@@ -310,10 +302,6 @@ export async function getEntryReminderHistory(
     const stage = await getStageOrThrow(manager, stageId);
     await assertStageAccess(manager, user, stage, ["2"]);
     const round = await getActiveRoundOrThrow(manager, stage.id);
-
-    if (round.roundType !== "F1") {
-      throw new BadRequestError("El historial de marcas solo está disponible en F1.");
-    }
 
     const form = await getJudgeFormForRound(manager, round.id, user.id);
     return loadReminderHistory(manager, form.id);
