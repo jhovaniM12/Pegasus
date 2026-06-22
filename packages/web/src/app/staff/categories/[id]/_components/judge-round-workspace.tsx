@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, Loader2, Lock, Play } from "lucide-react";
+import { CheckCircle2, Loader2, Lock, Play, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { stagedFlowService } from "@/services/staged-flow.service";
@@ -122,6 +122,14 @@ export function JudgeRoundWorkspace({
       new Set(
         localParticipants.filter((participant) => participant.selected && participant.status === "ELIGIBLE").map((p) => p.id)
       ),
+    [localParticipants]
+  );
+  const consolidatedF1TrackPositions = useMemo(
+    () =>
+      localParticipants
+        .filter((participant) => participant.selected && participant.status === "ELIGIBLE")
+        .map((participant) => participant.trackPosition)
+        .sort((a, b) => a - b),
     [localParticipants]
   );
 
@@ -296,13 +304,51 @@ export function JudgeRoundWorkspace({
     return (
       <section className="mt-4 rounded-lg border border-slate-200 bg-white p-5">
         <h2 className="text-base font-semibold text-slate-950">{ROUND_TITLES[roundType]}</h2>
-        <div className="mt-4 flex flex-col items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50/40 px-6 py-8 text-center">
-          <CheckCircle2 className="size-8 text-emerald-600" />
-          <p className="text-sm font-semibold text-slate-900">Ronda consolidada</p>
-          <p className="max-w-md text-sm text-slate-500">
-            El Director Técnico consolidó esta ronda. Espera la siguiente fase o el resultado oficial.
-          </p>
-        </div>
+        {roundType === "F1" ? (
+          <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/40 p-4">
+            <div className="flex items-center gap-2">
+              <Trophy className="size-4 text-emerald-700" />
+              <span className="text-sm font-semibold text-emerald-900">Consolidado FORMATO F1</span>
+            </div>
+            <p className="mt-0.5 text-xs text-emerald-700">
+              Finalistas consolidados: <strong>{consolidatedF1TrackPositions.length} ejemplares.</strong>
+            </p>
+            {consolidatedF1TrackPositions.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {consolidatedF1TrackPositions.map((trackPosition) => (
+                  <span
+                    key={trackPosition}
+                    className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 tabular-nums"
+                  >
+                    #{trackPosition}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="mt-4 flex flex-col items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50/40 px-6 py-8 text-center">
+            <CheckCircle2 className="size-8 text-emerald-600" />
+            <p className="text-sm font-semibold text-slate-900">Ronda consolidada</p>
+            <p className="max-w-md text-sm text-slate-500">
+              El Director Técnico consolidó esta ronda. Espera la siguiente fase o el resultado oficial.
+            </p>
+          </div>
+        )}
+        {roundType === "F1" && formStatus !== "PENDING" && (
+          <div className="mt-4">
+            <F1SelectionBoard
+              stageId={stageId}
+              round={{ ...round, participants: localParticipants }}
+              editable={false}
+              selectedIds={selectedIds}
+              maxSelections={round.maxSelections ?? totalEligible}
+              onToggle={() => undefined}
+              onLocalUpdate={() => undefined}
+              onOpenDisqualify={() => undefined}
+            />
+          </div>
+        )}
       </section>
     );
   }

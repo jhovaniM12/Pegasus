@@ -262,7 +262,7 @@ export function RoundEntryCard(props: RoundEntryCardProps) {
   return (
     <div
       className={cn(
-        "relative flex min-h-[148px] flex-col rounded-xl border p-3 transition-all",
+        "relative flex min-h-[188px] flex-col rounded-xl border p-4 transition-all",
         disqualified
           ? "border-slate-200 bg-slate-50/80 opacity-70"
           : selected
@@ -271,41 +271,41 @@ export function RoundEntryCard(props: RoundEntryCardProps) {
         blocked && !selected && !disqualified ? "opacity-50" : ""
       )}
     >
-      <div className="absolute top-2 left-2 z-10 flex flex-col gap-1.5">
+      <div className="absolute top-3 left-3 z-10 flex flex-col gap-2">
         <button
           type="button"
           disabled={!editable || disqualified}
           onClick={(event) => { event.stopPropagation(); onOpenReminders(participant); }}
-          className="flex size-7 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex size-9 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           aria-label="Agregar recordatorios"
         >
-          <Plus className="size-4" />
+          <Plus className="size-5" />
         </button>
         <button
           type="button"
           disabled={!editable || disqualified}
           onClick={(event) => { event.stopPropagation(); onOpenNote(participant); }}
           className={cn(
-            "relative flex size-7 items-center justify-center rounded-full text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-50",
+            "relative flex size-9 items-center justify-center rounded-full text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-50",
             hasNote ? "bg-violet-700 hover:bg-violet-800" : "bg-violet-600 hover:bg-violet-700"
           )}
           aria-label={hasNote ? "Ver nota privada" : "Agregar nota privada"}
         >
-          <FileText className="size-3.5" />
+          <FileText className="size-4.5" />
           {hasNote && <PrivateNoteBadge />}
         </button>
       </div>
 
       {!disqualified && editable && (
-        <div className="absolute top-2 right-2 z-10">
+        <div className="absolute top-3 right-3 z-10">
           <button
             type="button"
             onClick={(event) => { event.stopPropagation(); onOpenDisqualify(participant); }}
-            className="flex size-7 items-center justify-center rounded-full bg-red-500 text-white shadow-sm hover:bg-red-600"
+            className="flex size-9 items-center justify-center rounded-full bg-red-500 text-white shadow-sm hover:bg-red-600"
             title="Descalificar participante"
             aria-label="Descalificar participante"
           >
-            <X className="size-3.5" />
+            <X className="size-4.5" />
           </button>
         </div>
       )}
@@ -315,13 +315,13 @@ export function RoundEntryCard(props: RoundEntryCardProps) {
         disabled={mainDisabled}
         onClick={() => { if (!mainDisabled) props.onToggleSelect(participant.id); }}
         className={cn(
-          "flex flex-1 flex-col items-center justify-center pt-6 pb-8",
+          "flex flex-1 flex-col items-center justify-center pt-8 pb-10",
           !mainDisabled ? "cursor-pointer" : "cursor-default"
         )}
       >
         <span
           className={cn(
-            "text-5xl font-extrabold leading-none tracking-tight",
+            "text-6xl font-extrabold leading-none tracking-tight",
             disqualified ? "text-slate-400" : isF1 && selected ? "text-white" : "text-slate-400"
           )}
         >
@@ -329,7 +329,7 @@ export function RoundEntryCard(props: RoundEntryCardProps) {
         </span>
         <span
           className={cn(
-            "mt-2 text-[11px] font-bold uppercase tracking-[0.2em]",
+            "mt-2.5 text-xs font-bold uppercase tracking-[0.2em]",
             disqualified ? "text-slate-500" : isF1 && selected ? "text-white" : "text-slate-400"
           )}
         >

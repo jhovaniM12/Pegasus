@@ -69,13 +69,6 @@ function extractSelectedParticipantIds(state: FaState): string[] {
     .map((participant) => participant.id);
 }
 
-function isFaParticipantSelected(
-  participant: FaParticipant,
-  selectedIds: Set<string>
-): boolean {
-  return participant.decision?.decision === "SELECTED" || selectedIds.has(participant.id);
-}
-
 function resolveJudgeView(viewParam: string | null): "FA" | "F1" | "F2" | "TIE_BREAK" | null {
   if (viewParam === "FA") return "FA";
   return isRoundView(viewParam) ? viewParam : null;
@@ -274,24 +267,30 @@ export default function StaffCategoryPage() {
       setCurrentUser(user);
 
       if (user.role === "TECHNICAL_DIRECTOR") {
-        const managementResponse = await stagedFlowService.getManagement(stageId);
-        let roundsData: RoundsManagement | null = null;
+        const [managementResult, roundsResult] = await Promise.allSettled([
+          stagedFlowService.getManagement(stageId),
+          stagedFlowService.getRoundsManagement(stageId),
+        ]);
 
-        try {
-          const roundsResponse = await stagedFlowService.getRoundsManagement(stageId);
-          roundsData = roundsResponse.data ?? null;
-        } catch (error) {
-          if (!silent) {
-            toast({
-              title: "No se pudieron cargar las rondas F1/F2",
-              description: error instanceof Error ? error.message : "Recarga la página para reintentar.",
-              variant: "error",
-            });
-          }
-          roundsData = null;
+        if (managementResult.status === "rejected") {
+          throw managementResult.reason;
         }
 
-        const management = managementResponse.data ?? null;
+        let roundsData: RoundsManagement | null = null;
+        if (roundsResult.status === "fulfilled") {
+          roundsData = roundsResult.value.data ?? null;
+        } else if (!silent) {
+          toast({
+            title: "No se pudieron cargar las rondas F1/F2",
+            description:
+              roundsResult.reason instanceof Error
+                ? roundsResult.reason.message
+                : "Recarga la página para reintentar.",
+            variant: "error",
+          });
+        }
+
+        const management = managementResult.value.data ?? null;
         if (!management?.summary) {
           if (!silent) {
             toast({
@@ -378,7 +377,12 @@ export default function StaffCategoryPage() {
 
   useStaffRealtimeRefresh(
     () => load({ silent: true }),
-    { enableVisibilityRefresh: true, pollingMs: 30_000, debounceMs: 400 }
+    {
+      enableVisibilityRefresh: true,
+      refreshWhenHidden: true,
+      pollingMs: 10_000,
+      debounceMs: 0,
+    }
   );
 
   // ─── Confirm dialog helper ────────────────────────────────────────────────
@@ -396,6 +400,10 @@ export default function StaffCategoryPage() {
   // ─── FA handlers ─────────────────────────────────────────────────────────
 
   const selectedIds = useMemo(() => new Set(faSelectedIdsLocal), [faSelectedIdsLocal]);
+  const faSelectedCount = useMemo(() => {
+    if (!fa) return 0;
+    return fa.form.status === "STARTED" ? selectedIds.size : fa.form.selectedCount;
+  }, [fa, selectedIds]);
 
   useEffect(() => {
     if (!fa) {
@@ -724,7 +732,7 @@ export default function StaffCategoryPage() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-base font-semibold text-slate-950">Formato FA</h2>
-                <p className="text-sm text-slate-500">{fa.form.selectedCount} / 10 seleccionados</p>
+                <p className="text-sm text-slate-500">{faSelectedCount} / 10 seleccionados</p>
               </div>
               {fa.form.status !== "CLOSED" && (
                 <div className="flex gap-2">
@@ -775,7 +783,7 @@ export default function StaffCategoryPage() {
                   <FaParticipantCard
                     key={participant.id}
                     participant={participant}
-                    selected={isFaParticipantSelected(participant, selectedIds)}
+                    selected={selectedIds.has(participant.id)}
                     editable={summary.status === "JUDGING_STARTED" && fa.form.status === "STARTED"}
                     onToggle={toggleFaSelection}
                     onOpenDisqualify={openFaDisqualify}

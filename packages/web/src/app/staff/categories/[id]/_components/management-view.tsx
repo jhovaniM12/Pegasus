@@ -422,6 +422,7 @@ export function ManagementView({
     <div className="space-y-5">
       <PreRingSection management={management} />
       <FaSection management={management} busy={busy} onConsolidateFa={onConsolidateFa} />
+      <RoundsSummarySection rounds={rounds} />
       {activateRoundConfig && onActivateRound && (
         <ActivateRoundCard
           config={activateRoundConfig}
@@ -429,7 +430,6 @@ export function ManagementView({
           onActivate={() => onActivateRound(activateRoundConfig)}
         />
       )}
-      <RoundsSummarySection rounds={rounds} />
     </div>
   );
 }
