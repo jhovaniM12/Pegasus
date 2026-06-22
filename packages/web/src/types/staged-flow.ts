@@ -214,6 +214,7 @@ export type AwardDistinctiveDto = {
 
 export type RoundResult = {
   id: string;
+  participantId: string;
   trackPosition: number;
   riderName: string;
   registrationNumber: string;

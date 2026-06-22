@@ -6,11 +6,12 @@ import { Button } from "@/components/ui/button";
 import { stagedFlowService } from "@/services/staged-flow.service";
 import type {
   RoundManagementItem,
+  RoundResult,
   StagedCategory,
   TieBreakTestType,
 } from "@/types/staged-flow";
 import { OfficialResultBoard } from "./official-result-board";
-import { TieBreakPanel } from "./tie-break-panel";
+import { TieBreakPanel, type TieBlockInfo } from "./tie-break-panel";
 
 type DirectorRoundsProps = {
   stageId: string;
@@ -32,6 +33,51 @@ function latestOfType(rounds: RoundManagementItem[], type: RoundManagementItem["
 
 function allFormsClosed(round: RoundManagementItem | null): boolean {
   return Boolean(round && round.forms.length > 0 && round.forms.every((form) => form.status === "CLOSED"));
+}
+
+function tieBlockKey(participantIds: string[]): string {
+  return [...participantIds].sort().join("|");
+}
+
+function getBlockingTieBlocks(results: RoundResult[]): RoundResult[][] {
+  const byScore = new Map<number, RoundResult[]>();
+  for (const result of results) {
+    if (result.status !== "TIED") continue;
+    const group = byScore.get(result.scoreValue) ?? [];
+    group.push(result);
+    byScore.set(result.scoreValue, group);
+  }
+
+  return [...byScore.values()]
+    .filter((group) => {
+      if (group.length < 2) return false;
+      const startPosition = Math.min(...group.map((row) => row.finalPosition ?? Number.MAX_SAFE_INTEGER));
+      return startPosition <= 5;
+    })
+    .sort((a, b) => {
+      const startA = Math.min(...a.map((row) => row.finalPosition ?? Number.MAX_SAFE_INTEGER));
+      const startB = Math.min(...b.map((row) => row.finalPosition ?? Number.MAX_SAFE_INTEGER));
+      return startA - startB;
+    });
+}
+
+function getResolvedTieBlockKeys(rounds: RoundManagementItem[]): Set<string> {
+  const resolved = new Set<string>();
+  for (const round of rounds) {
+    if (round.roundType !== "TIE_BREAK" || round.status !== "CONSOLIDATED") continue;
+    if (round.results.some((result) => result.status === "TIED")) continue;
+
+    const participantIds = new Set<string>();
+    for (const form of round.forms) {
+      for (const entry of form.entries) {
+        participantIds.add(entry.participantId);
+      }
+    }
+    if (participantIds.size > 1) {
+      resolved.add(tieBlockKey([...participantIds]));
+    }
+  }
+  return resolved;
 }
 
 function roundFormStatusBadge(status: RoundManagementItem["forms"][number]["status"]) {
@@ -222,12 +268,24 @@ export function DirectorRounds({
       );
     }
 
-    const hasTie = f2.results.some((row) => row.status === "TIED");
-    const tiedCount = f2.results.filter((row) => row.status === "TIED").length;
+    const resolvedTieBlockKeys = getResolvedTieBlockKeys(rounds);
+    const pendingTieBlock =
+      getBlockingTieBlocks(f2.results).find(
+        (block) => !resolvedTieBlockKeys.has(tieBlockKey(block.map((row) => row.participantId)))
+      ) ?? null;
+
+    const blockInfo: TieBlockInfo | null = pendingTieBlock
+      ? {
+          startPosition: Math.min(...pendingTieBlock.map((row) => row.finalPosition ?? 0)),
+          endPosition: Math.max(...pendingTieBlock.map((row) => row.finalPosition ?? 0)),
+          trackPositions: pendingTieBlock.map((row) => row.trackPosition).sort((a, b) => a - b),
+        }
+      : null;
+
     return (
       <div className="space-y-4">
-        {hasTie ? (
-          <TieBreakPanel busy={busy} tiedCount={tiedCount} onOpen={onOpenTieBreak} />
+        {pendingTieBlock && blockInfo ? (
+          <TieBreakPanel busy={busy} blockInfo={blockInfo} onOpen={onOpenTieBreak} />
         ) : (
           <Button
             className="w-full bg-emerald-600 text-white hover:bg-emerald-700"

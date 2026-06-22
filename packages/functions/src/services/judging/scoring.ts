@@ -37,7 +37,10 @@ export type ScoredParticipant = {
   participantId: string;
   positionSum: number;
   firstPlaceVotes: number;
-  /** Número de jueces que asignaron un puesto a este ejemplar. */
+  /**
+   * Número real de jueces que asignaron un puesto a este ejemplar.
+   * No incluye jueces que aplicaron voto de castigo.
+   */
   cardsCount: number;
   /** Puesto final provisional (1 = ganador). Se asigna siempre, incluso con empate. */
   finalPosition: number;
@@ -50,12 +53,40 @@ export type DesertedPositionResult = {
   votesCount: number;
 };
 
+/**
+ * Grupo de participantes empatados en suma de posiciones.
+ * Contiene metadatos de rango y si bloquea el cierre del resultado oficial.
+ */
+export type TiedGroup = {
+  /** IDs de los participantes que comparten la misma suma. */
+  participantIds: string[];
+  /** Suma compartida por todos los miembros del grupo. */
+  positionSum: number;
+  /** Puesto final más alto (mejor) del grupo (1-indexed). */
+  startPosition: number;
+  /** Puesto final más bajo (peor) del grupo (1-indexed). */
+  endPosition: number;
+  /**
+   * True si este empate debe resolverse antes de cerrar el resultado oficial.
+   * blocksClosure = startPosition <= MAX_AWARD_POSITIONS.
+   * Cubre empates dentro del top 5 y empates que cruzan el quinto puesto (5-6),
+   * pero excluye empates completamente fuera de premiación (6-7+).
+   */
+  blocksClosure: boolean;
+};
+
 export type ScoringResult = {
   participants: ScoredParticipant[];
   desertedResults: DesertedPositionResult[];
+  /** True si existe al menos un grupo empatado (incluye no bloqueantes). */
   hasTie: boolean;
-  /** Grupos de participantIds empatados que requieren ronda de desempate. */
-  tiedGroups: string[][];
+  /**
+   * True si al menos un grupo empatado bloquea el resultado oficial
+   * (startPosition <= MAX_AWARD_POSITIONS).
+   */
+  hasBlockingTie: boolean;
+  /** Todos los grupos empatados con metadatos de rango y bloqueo. */
+  tiedGroups: TiedGroup[];
   majorityWinnerId: string | null;
 };
 
@@ -71,6 +102,7 @@ type Aggregate = {
   participantId: string;
   positionSum: number;
   firstPlaceVotes: number;
+  /** Jueces que efectivamente asignaron puesto (excluye votos de castigo). */
   cardsCount: number;
 };
 
@@ -81,13 +113,25 @@ type Aggregate = {
  * recibe automáticamente la posición PENALTY_POSITION (= MAX_AWARD_POSITIONS + 1 = 6).
  * Por tanto, TODOS los participantes elegibles aparecen en el ranking final.
  *
+ * El `cardsCount` refleja cuántos jueces realmente asignaron un puesto (sin contar votos
+ * de castigo), para validar mayoría de consideración si se requiere en el futuro.
+ *
+ * Los grupos de empate (`tiedGroups`) llevan metadatos de rango y bandera `blocksClosure`
+ * que indica si el empate afecta posiciones premiables (1..MAX_AWARD_POSITIONS).
+ *
  * @param cards Tarjetas de cada juez (una por juez) con los puestos asignados.
  * @param judgeCount Número total de jueces de la feria (para el umbral de mayoría).
  */
 export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult {
-  if (cards.length === 0) {
-    return { participants: [], desertedResults: [], hasTie: false, tiedGroups: [], majorityWinnerId: null };
-  }
+  const empty: ScoringResult = {
+    participants: [],
+    desertedResults: [],
+    hasTie: false,
+    hasBlockingTie: false,
+    tiedGroups: [],
+    majorityWinnerId: null
+  };
+  if (cards.length === 0) return empty;
 
   const threshold = majorityThreshold(judgeCount);
 
@@ -100,27 +144,25 @@ export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult
     }
   }
 
-  if (rosterIds.size === 0) {
-    return { participants: [], desertedResults: [], hasTie: false, tiedGroups: [], majorityWinnerId: null };
-  }
+  if (rosterIds.size === 0) return empty;
 
-  // Agregación con voto de castigo para jueces que no puntúan al participante.
+  // Agregación: voto de castigo afecta la suma pero no el cardsCount real.
   const aggregates: Aggregate[] = [];
   for (const participantId of rosterIds) {
     let positionSum = 0;
     let firstPlaceVotes = 0;
+    let realCardsCount = 0;
     for (const card of cards) {
       const assigned = card.positions.find((p) => p.participantId === participantId);
       if (assigned) {
         positionSum += assigned.position;
-        if (assigned.position === 1) {
-          firstPlaceVotes += 1;
-        }
+        realCardsCount += 1;
+        if (assigned.position === 1) firstPlaceVotes += 1;
       } else {
         positionSum += PENALTY_POSITION;
       }
     }
-    aggregates.push({ participantId, positionSum, firstPlaceVotes, cardsCount: cards.length });
+    aggregates.push({ participantId, positionSum, firstPlaceVotes, cardsCount: realCardsCount });
   }
 
   const majorityWinner = aggregates.find((agg) => agg.firstPlaceVotes >= threshold) ?? null;
@@ -137,6 +179,20 @@ export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult
     return a.participantId.localeCompare(b.participantId);
   });
 
+  // Asignar posiciones finales provisionales antes de calcular rangos de empate.
+  let nextFinalPosition = 1;
+  const participants: ScoredParticipant[] = ordered.map((agg) => {
+    return {
+      participantId: agg.participantId,
+      positionSum: agg.positionSum,
+      firstPlaceVotes: agg.firstPlaceVotes,
+      cardsCount: agg.cardsCount,
+      finalPosition: nextFinalPosition++,
+      tied: false // se actualiza abajo
+    };
+  });
+  const positionById = new Map(participants.map((p) => [p.participantId, p.finalPosition]));
+
   // Detección de empates: misma suma entre participantes no cubiertos por la mayoría.
   const sumGroups = new Map<number, string[]>();
   for (const agg of aggregates) {
@@ -145,28 +201,37 @@ export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult
     group.push(agg.participantId);
     sumGroups.set(agg.positionSum, group);
   }
-  const tiedGroups = [...sumGroups.values()].filter((group) => group.length > 1);
-  const tiedIds = new Set(tiedGroups.flat());
 
-  let nextFinalPosition = 1;
-  const participants: ScoredParticipant[] = ordered.map((agg) => {
-    const finalPosition = nextFinalPosition;
-    nextFinalPosition += 1;
-    return {
-      participantId: agg.participantId,
-      positionSum: agg.positionSum,
-      firstPlaceVotes: agg.firstPlaceVotes,
-      cardsCount: agg.cardsCount,
-      finalPosition,
-      tied: tiedIds.has(agg.participantId)
-    };
-  });
+  const tiedGroups: TiedGroup[] = [];
+  for (const [positionSum, participantIds] of sumGroups.entries()) {
+    if (participantIds.length < 2) continue;
+    const positions = participantIds.map((id) => positionById.get(id) ?? Number.MAX_SAFE_INTEGER);
+    const startPosition = Math.min(...positions);
+    const endPosition = Math.max(...positions);
+    tiedGroups.push({
+      participantIds,
+      positionSum,
+      startPosition,
+      endPosition,
+      // Bloquea cierre si afecta posiciones premiables: cubre empates dentro del top 5
+      // y empates que cruzan el quinto puesto (5-6); excluye empates 6-7+.
+      blocksClosure: startPosition <= MAX_AWARD_POSITIONS
+    });
+  }
+
+  const tiedIds = new Set(tiedGroups.flatMap((g) => g.participantIds));
+  for (const p of participants) {
+    p.tied = tiedIds.has(p.participantId);
+  }
+
+  const hasBlockingTie = tiedGroups.some((g) => g.blocksClosure);
 
   return {
     participants,
     // Con votos de castigo todos los puestos quedan cubiertos por participantes; no hay desiertos agregados.
     desertedResults: [],
     hasTie: tiedGroups.length > 0,
+    hasBlockingTie,
     tiedGroups,
     majorityWinnerId
   };

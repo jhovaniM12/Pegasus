@@ -169,9 +169,7 @@ export function RoundsSummarySection({
   );
   const f2 = visibleRounds.find((round) => round.roundType === "F2");
   const resolvedByTieBreak =
-    Boolean(f2) &&
-    !f2?.results.some((row) => row.status === "TIED") &&
-    rounds.some((round) => round.roundType === "TIE_BREAK" && round.status === "CONSOLIDATED");
+    Boolean(f2) && rounds.some((round) => round.roundType === "TIE_BREAK" && round.status === "CONSOLIDATED");
 
   if (visibleRounds.length === 0) return null;
 

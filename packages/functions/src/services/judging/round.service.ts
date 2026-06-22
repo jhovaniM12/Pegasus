@@ -410,8 +410,10 @@ export async function updateRoundForm(
       const desertedPositions = Array.from(new Set(input.desertedPositions ?? []));
       const eligibleEntries = entries.filter((entry) => isEligible(entry.judgingParticipantId));
       const eligibleCount = eligibleEntries.length;
-      const maxDesertablePosition = Math.min(eligibleCount, MAX_AWARD_POSITIONS);
-      const maxAssignablePosition = eligibleCount + desertedPositions.length;
+      const maxDesertablePosition =
+        round.roundType === "TIE_BREAK" ? MAX_AWARD_POSITIONS : Math.min(eligibleCount, MAX_AWARD_POSITIONS);
+      const maxAssignablePosition =
+        round.roundType === "TIE_BREAK" ? MAX_AWARD_POSITIONS : eligibleCount + desertedPositions.length;
       const positionByParticipant = new Map(positions.map((p) => [p.participantId, p.position]));
       for (const { participantId, position } of positions) {
         if (!entryByParticipant.has(participantId)) {
@@ -420,7 +422,7 @@ export async function updateRoundForm(
         if (!isEligible(participantId)) {
           throw new BadRequestError("No puedes asignar puesto a un ejemplar descalificado.");
         }
-        if (!Number.isInteger(position) || position < 1 || position > maxAssignablePosition) {
+        if (!Number.isInteger(position) || position < MIN_AWARD_POSITION || position > maxAssignablePosition) {
           throw new BadRequestError("Los puestos deben ser números válidos.");
         }
       }
@@ -607,12 +609,14 @@ export async function closeRoundForm(user: User, stageId: string) {
       const desertedRows = await manager
         .getRepository(JudgingRoundFormDesertedPosition)
         .find({ where: { roundFormId: form.id } });
-      const maxDesertablePosition = Math.min(eligibleCount, MAX_AWARD_POSITIONS);
+      const maxDesertablePosition =
+        round.roundType === "TIE_BREAK" ? MAX_AWARD_POSITIONS : Math.min(eligibleCount, MAX_AWARD_POSITIONS);
       const deserted = new Set(desertedRows.map((row) => row.position));
       const positioned = eligibleEntries.filter((entry) => entry.position !== null);
       const assigned = positioned.map((entry) => entry.position as number);
 
-      // F2 / desempate: los puestos no asignados en el rango premiable (1..5) quedan desiertos al cerrar.
+      // F2 / desempate: los puestos no asignados en el rango premiable quedan desiertos al cerrar.
+      // En desempate se permiten puestos absolutos del bloque F2, por ejemplo 4° y 5°.
       if (round.roundType === "F2" || round.roundType === "TIE_BREAK") {
         if (assigned.some((position) => position < MIN_AWARD_POSITION || position > maxDesertablePosition)) {
           throw new BadRequestError(
@@ -811,6 +815,81 @@ async function loadJudgeCards(manager: EntityManager, roundId: string): Promise<
   return cards;
 }
 
+function tieBlockKey(participantIds: string[]): string {
+  return [...participantIds].sort().join("|");
+}
+
+function getBlockingTiedBlocks(results: JudgingRoundResult[]): JudgingRoundResult[][] {
+  const byScore = new Map<number, JudgingRoundResult[]>();
+  for (const result of results) {
+    if (result.status !== "TIED" || result.scoreValue == null) continue;
+    const group = byScore.get(result.scoreValue) ?? [];
+    group.push(result);
+    byScore.set(result.scoreValue, group);
+  }
+
+  return [...byScore.values()]
+    .filter((group) => {
+      if (group.length < 2) return false;
+      const startPosition = Math.min(...group.map((row) => row.finalPosition ?? Number.MAX_SAFE_INTEGER));
+      return startPosition <= MAX_AWARD_POSITIONS;
+    })
+    .sort((a, b) => {
+      const startA = Math.min(...a.map((row) => row.finalPosition ?? Number.MAX_SAFE_INTEGER));
+      const startB = Math.min(...b.map((row) => row.finalPosition ?? Number.MAX_SAFE_INTEGER));
+      return startA - startB;
+    });
+}
+
+async function loadTieBreakParticipantIds(manager: EntityManager, roundId: string): Promise<string[]> {
+  const forms = await manager.getRepository(JudgingRoundForm).find({ where: { roundId } });
+  if (forms.length === 0) return [];
+
+  const entries = await manager.getRepository(JudgingRoundEntry).find({
+    where: forms.map((form) => ({ roundFormId: form.id }))
+  });
+
+  return [...new Set(entries.map((entry) => entry.judgingParticipantId))];
+}
+
+async function loadResolvedTieBlockKeys(
+  manager: EntityManager,
+  stageId: string,
+  parentRoundId: string
+): Promise<Set<string>> {
+  const tieBreakRounds = await manager.getRepository(JudgingRound).find({
+    where: { fairCategoryStageId: stageId, roundType: "TIE_BREAK", parentRoundId, status: "CONSOLIDATED" }
+  });
+
+  const resolved = new Set<string>();
+  for (const tieBreakRound of tieBreakRounds) {
+    const results = await manager.getRepository(JudgingRoundResult).find({
+      where: { roundId: tieBreakRound.id }
+    });
+    const stillTied = results.some((row) => row.status === "TIED");
+    if (stillTied) continue;
+
+    const participantIds = await loadTieBreakParticipantIds(manager, tieBreakRound.id);
+    if (participantIds.length > 1) {
+      resolved.add(tieBlockKey(participantIds));
+    }
+  }
+
+  return resolved;
+}
+
+async function getNextPendingTieBlock(manager: EntityManager, f2: JudgingRound): Promise<JudgingRoundResult[] | null> {
+  const results = await manager.getRepository(JudgingRoundResult).find({
+    where: { roundId: f2.id },
+    order: { finalPosition: "ASC" }
+  });
+  const blocks = getBlockingTiedBlocks(results);
+  if (blocks.length === 0) return null;
+
+  const resolvedKeys = await loadResolvedTieBlockKeys(manager, f2.fairCategoryStageId, f2.id);
+  return blocks.find((block) => !resolvedKeys.has(tieBlockKey(block.map((row) => row.judgingParticipantId)))) ?? null;
+}
+
 async function consolidateRankingRound(
   manager: EntityManager,
   round: JudgingRound,
@@ -819,6 +898,13 @@ async function consolidateRankingRound(
   const judges = await getUsersByFairRole(manager, fairId, "2");
   const cards = await loadJudgeCards(manager, round.id);
   const scoring = computeF2(cards, judges.length);
+
+  // El F2 queda como fotografía original: todos los bloques bloqueantes se marcan como TIED.
+  // Los desempates se guardan como rondas separadas y no reescriben las sumas/posiciones F2.
+  const blockingGroups = scoring.tiedGroups
+    .filter((g) => g.blocksClosure)
+    .sort((a, b) => a.startPosition - b.startPosition);
+  const blockingIds = new Set(blockingGroups.flatMap((group) => group.participantIds));
 
   await manager.getRepository(JudgingRoundResult).delete({ roundId: round.id });
   await manager.getRepository(JudgingRoundDesertedResult).delete({ roundId: round.id });
@@ -831,7 +917,7 @@ async function consolidateRankingRound(
           scoreValue: participant.positionSum,
           firstPlaceVotes: participant.firstPlaceVotes,
           finalPosition: participant.finalPosition,
-          status: (participant.tied ? "TIED" : "PROVISIONAL") as JudgingRoundResultStatus
+          status: (blockingIds.has(participant.participantId) ? "TIED" : "PROVISIONAL") as JudgingRoundResultStatus
         })
       )
     );
@@ -848,13 +934,21 @@ async function consolidateRankingRound(
     );
   }
 
-  if (scoring.hasTie) {
+  if (scoring.hasBlockingTie) {
     const stage = await getStageOrThrow(manager, round.fairCategoryStageId);
     await recordEvent(manager, {
       stageId: round.fairCategoryStageId,
       userId: null,
       eventType: "TIE_DETECTED",
-      payload: { roundId: round.id, tiedGroups: scoring.tiedGroups }
+      payload: {
+        roundId: round.id,
+        tiedGroups: scoring.tiedGroups.map((g) => ({
+          participantIds: g.participantIds,
+          startPosition: g.startPosition,
+          endPosition: g.endPosition,
+          blocksClosure: g.blocksClosure
+        }))
+      }
     });
     const notification = stageNotificationContext(stage);
     await queueRoleNotifications(manager, stage, "3", {
@@ -895,48 +989,28 @@ async function consolidateTieBreak(
       )
     );
   }
-  if (scoring.desertedResults.length > 0) {
-    await manager.getRepository(JudgingRoundDesertedResult).save(
-      scoring.desertedResults.map((row) =>
-        manager.getRepository(JudgingRoundDesertedResult).create({
-          roundId: round.id,
-          finalPosition: row.finalPosition,
-          votesCount: row.votesCount
-        })
-      )
+
+  // No se modifica el F2 padre: sus sumas, posiciones provisionales y empates
+  // deben permanecer como la fotografía original de la tarjeta F2.
+  const parentRound = await manager.getRepository(JudgingRound).findOne({
+    where: { id: round.parentRoundId }
+  });
+  let hasRemainingBlockingTie = false;
+  if (parentRound) {
+    const parentResults = await manager.getRepository(JudgingRoundResult).find({
+      where: { roundId: parentRound.id },
+      order: { finalPosition: "ASC" }
+    });
+    const resolvedKeys = await loadResolvedTieBlockKeys(manager, parentRound.fairCategoryStageId, parentRound.id);
+    if (!scoring.hasBlockingTie) {
+      resolvedKeys.add(tieBlockKey(await loadTieBreakParticipantIds(manager, round.id)));
+    }
+    hasRemainingBlockingTie = getBlockingTiedBlocks(parentResults).some(
+      (block) => !resolvedKeys.has(tieBlockKey(block.map((row) => row.judgingParticipantId)))
     );
   }
 
-  // Mezcla el orden del desempate dentro del bloque empatado de la ronda F2 padre.
-  const parentResults = await manager.getRepository(JudgingRoundResult).find({
-    where: { roundId: round.parentRoundId },
-    order: { finalPosition: "ASC" }
-  });
-  const tiedBlock = parentResults.filter((row) => row.status === "TIED");
-  if (tiedBlock.length === 0) return;
-  const blockStart = Math.min(...tiedBlock.map((row) => row.finalPosition ?? 0));
-  const orderById = new Map(scoring.participants.map((p) => [p.participantId, p]));
-
-  const reordered = [...tiedBlock].sort((a, b) => {
-    const pa = orderById.get(a.judgingParticipantId)?.finalPosition ?? Number.MAX_SAFE_INTEGER;
-    const pb = orderById.get(b.judgingParticipantId)?.finalPosition ?? Number.MAX_SAFE_INTEGER;
-    return pa - pb;
-  });
-
-  let unresolvedByMajority = false;
-  reordered.forEach((row, index) => {
-    const scored = orderById.get(row.judgingParticipantId);
-    if (!scored) {
-      unresolvedByMajority = true;
-      row.status = "TIED";
-      return;
-    }
-    row.finalPosition = blockStart + index;
-    row.status = (scored.tied ? "TIED" : "PROVISIONAL") as JudgingRoundResultStatus;
-  });
-  await manager.getRepository(JudgingRoundResult).save(reordered);
-
-  if (scoring.hasTie || unresolvedByMajority) {
+  if (hasRemainingBlockingTie) {
     const stage = await getStageOrThrow(manager, round.fairCategoryStageId);
     const notification = stageNotificationContext(stage);
     await queueRoleNotifications(manager, stage, "3", {
@@ -967,10 +1041,8 @@ export async function openTieBreak(
       throw new BadRequestError("Necesitas una ronda F2 consolidada para abrir un desempate.");
     }
 
-    const tiedResults = await manager.getRepository(JudgingRoundResult).find({
-      where: { roundId: f2.id, status: "TIED" }
-    });
-    if (tiedResults.length < 2) {
+    const tiedResults = await getNextPendingTieBlock(manager, f2);
+    if (!tiedResults || tiedResults.length < 2) {
       throw new BadRequestError("No hay un empate pendiente para resolver.");
     }
 
@@ -1064,12 +1136,16 @@ export async function closeResults(user: User, stageId: string): Promise<StagedC
     if (results.length === 0) {
       throw new BadRequestError("No hay ejemplares premiables. Declara la competencia como desierta.");
     }
-    if (results.some((row) => row.status === "TIED")) {
-      throw new BadRequestError("Hay un empate sin resolver. Abre un desempate antes de cerrar.");
+    // Solo bloquear si queda algún bloque F2 premiable sin desempate consolidado.
+    // El F2 conserva sus TIED originales como trazabilidad, incluso si el bloque ya fue resuelto aparte.
+    if ((await getNextPendingTieBlock(manager, f2)) !== null) {
+      throw new BadRequestError("Hay un empate sin resolver en puestos premiables. Abre un desempate antes de cerrar.");
     }
 
     for (const row of results) {
-      row.status = "FINAL";
+      if (row.status === "PROVISIONAL") {
+        row.status = "FINAL";
+      }
     }
     await manager.getRepository(JudgingRoundResult).save(results);
 
@@ -1340,6 +1416,7 @@ export async function getRoundsManagement(user: User, stageId: string) {
         })),
         results: results.map((row) => ({
           id: row.id,
+          participantId: row.judgingParticipantId,
           trackPosition: row.judgingParticipant.fairEntry.trackPosition,
           riderName: row.judgingParticipant.fairEntry.riderName,
           registrationNumber: row.judgingParticipant.fairEntry.registrationNumber,

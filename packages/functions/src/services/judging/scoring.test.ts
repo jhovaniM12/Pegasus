@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeF2, majorityThreshold, type JudgeCard } from "./scoring.js";
+import { computeF2, majorityThreshold, type JudgeCard, type TiedGroup } from "./scoring.js";
 
 /**
  * Construye una tarjeta de juez donde el juez puntúa a todos los participantes indicados en orden.
@@ -92,13 +92,14 @@ describe("computeF2 - empates", () => {
     // A: 1+2+2 = 5, B: 2+1+3 = 6, C: 3+3+1 = 7 -> sin empate
     const noTie = computeF2(cards, 3);
     expect(noTie.hasTie).toBe(false);
+    expect(noTie.hasBlockingTie).toBe(false);
 
     // Forzamos empate real entre A y B.
     const tieCards = [card("j1", ["A", "B"]), card("j2", ["B", "A"])];
     const result = computeF2(tieCards, 2);
     expect(result.hasTie).toBe(true);
     expect(result.tiedGroups).toHaveLength(1);
-    expect(result.tiedGroups[0].sort()).toEqual(["A", "B"]);
+    expect(result.tiedGroups[0].participantIds.sort()).toEqual(["A", "B"]);
     expect(result.participants.every((p) => p.tied)).toBe(true);
   });
 
@@ -202,10 +203,14 @@ describe("computeF2 - voto de castigo", () => {
     expect(new Set([pos5, pos6])).toEqual(new Set(["p1", "p8"]));
 
     expect(result.desertedResults).toHaveLength(0);
-    // p1 (sum=15) y p8 (sum=15) están empatados → se requiere desempate para resolver quién lleva el 5° puesto
+    // p1 (sum=15) y p8 (sum=15) están empatados en puestos 5-6 → cruza el límite del quinto puesto → bloquea cierre
     expect(result.hasTie).toBe(true);
-    const tiedGroup = result.tiedGroups[0].sort();
-    expect(tiedGroup).toEqual(["p1", "p8"]);
+    expect(result.hasBlockingTie).toBe(true);
+    const tiedGroup = result.tiedGroups[0];
+    expect(tiedGroup.participantIds.sort()).toEqual(["p1", "p8"]);
+    expect(tiedGroup.startPosition).toBe(5);
+    expect(tiedGroup.endPosition).toBe(6);
+    expect(tiedGroup.blocksClosure).toBe(true);
   });
 
   it("todos los participantes aparecen aunque solo un juez los haya puntuado", () => {
@@ -218,11 +223,32 @@ describe("computeF2 - voto de castigo", () => {
     ];
     const result = computeF2(cards, 3);
 
-    // A: 1+6+6=13, B: 6+1+6=13, C: 6+6+1=13 → empate triple
+    // A: 1+6+6=13, B: 6+1+6=13, C: 6+6+1=13 → empate triple en posiciones 1-3 → bloqueante
     expect(result.participants).toHaveLength(3);
     expect(result.hasTie).toBe(true);
-    expect(result.tiedGroups[0].sort()).toEqual(["A", "B", "C"]);
+    expect(result.hasBlockingTie).toBe(true);
+    expect(result.tiedGroups[0].participantIds.sort()).toEqual(["A", "B", "C"]);
+    expect(result.tiedGroups[0].blocksClosure).toBe(true);
     expect(result.desertedResults).toHaveLength(0);
+  });
+
+  it("cardsCount refleja el número real de jueces que asignaron puesto (no incluye votos de castigo)", () => {
+    const allEligible = ["A", "B", "C"];
+    const cards: JudgeCard[] = [
+      // j1 puntúa solo A y B; C recibe castigo de j1
+      card("j1", ["A", "B"], ["C"]),
+      // j2 puntúa a todos
+      card("j2", ["A", "C", "B"])
+    ];
+    const result = computeF2(cards, 2);
+
+    const a = result.participants.find((p) => p.participantId === "A");
+    const b = result.participants.find((p) => p.participantId === "B");
+    const c = result.participants.find((p) => p.participantId === "C");
+
+    expect(a?.cardsCount).toBe(2); // ambos jueces asignaron puesto a A
+    expect(b?.cardsCount).toBe(2); // ambos jueces asignaron puesto a B
+    expect(c?.cardsCount).toBe(1); // solo j2 asignó puesto a C (j1 aplicó castigo)
   });
 });
 
@@ -231,6 +257,7 @@ describe("computeF2 - casos borde", () => {
     const result = computeF2([], 3);
     expect(result.participants).toHaveLength(0);
     expect(result.hasTie).toBe(false);
+    expect(result.hasBlockingTie).toBe(false);
   });
 
   it("un solo juez asigna puestos directamente sin empates", () => {
@@ -238,6 +265,7 @@ describe("computeF2 - casos borde", () => {
     expect(positionOf(result, "A")).toBe(1);
     expect(positionOf(result, "C")).toBe(3);
     expect(result.hasTie).toBe(false);
+    expect(result.hasBlockingTie).toBe(false);
   });
 
   it("los puestos son siempre secuenciales (1, 2, 3 ...) sin saltos", () => {
@@ -261,5 +289,115 @@ describe("computeF2 - casos borde", () => {
     const result = computeF2(cards, 2);
     expect(result.desertedResults).toHaveLength(0);
     expect(positionOf(result, "A")).toBe(1);
+  });
+});
+
+describe("computeF2 - grupos de empate y bloqueo de cierre", () => {
+  it("empate en posiciones 1-2 bloquea cierre (blocksClosure = true)", () => {
+    // A y B empatan para el 1° puesto.
+    const cards = [card("j1", ["A", "B", "C"]), card("j2", ["B", "A", "C"])];
+    // A: 1+2=3, B: 2+1=3, C: 3+3=6
+    const result = computeF2(cards, 2);
+
+    expect(result.hasTie).toBe(true);
+    expect(result.hasBlockingTie).toBe(true);
+
+    const group = result.tiedGroups.find((g) => g.participantIds.includes("A"));
+    expect(group).toBeDefined();
+    expect(group!.startPosition).toBe(1);
+    expect(group!.endPosition).toBe(2);
+    expect(group!.blocksClosure).toBe(true);
+  });
+
+  it("empate 5-6 (cruzando quinto puesto) bloquea cierre", () => {
+    // Participantes A, B, C, D ganan claramente; E y F empatan para el 5° puesto.
+    const allEligible = ["A", "B", "C", "D", "E", "F"];
+    const cards: JudgeCard[] = [
+      card("j1", ["A", "B", "C", "D", "E", "F"]),
+      card("j2", ["A", "B", "C", "D", "F", "E"]) // E y F intercambian 5° y 6°
+    ];
+    // A: 1+1=2, B: 2+2=4, C: 3+3=6, D: 4+4=8, E: 5+6=11, F: 6+5=11
+    const result = computeF2(cards, 2);
+
+    expect(positionOf(result, "A")).toBe(1);
+    expect(positionOf(result, "B")).toBe(2);
+    expect(positionOf(result, "C")).toBe(3);
+    expect(positionOf(result, "D")).toBe(4);
+    expect(result.hasTie).toBe(true);
+    expect(result.hasBlockingTie).toBe(true);
+
+    const tieGroup = result.tiedGroups.find((g) => g.participantIds.includes("E"));
+    expect(tieGroup).toBeDefined();
+    // Los puestos 5 y 6 están empatados; startPosition = 5 <= MAX_AWARD_POSITIONS → bloquea
+    expect(tieGroup!.startPosition).toBe(5);
+    expect(tieGroup!.endPosition).toBe(6);
+    expect(tieGroup!.blocksClosure).toBe(true);
+  });
+
+  it("empate 6-7 (fuera del top 5) NO bloquea cierre", () => {
+    // Los 5 primeros puestos están definidos; solo hay empate en posiciones 6-7+.
+    const allEligible = ["A", "B", "C", "D", "E", "F", "G"];
+    const cards: JudgeCard[] = [
+      card("j1", ["A", "B", "C", "D", "E", "F", "G"]),
+      card("j2", ["A", "B", "C", "D", "E", "G", "F"]) // F y G intercambian 6° y 7°
+    ];
+    // A:1+1=2, B:2+2=4, C:3+3=6, D:4+4=8, E:5+5=10, F:6+7=13, G:7+6=13
+    const result = computeF2(cards, 2);
+
+    expect(positionOf(result, "A")).toBe(1);
+    expect(positionOf(result, "E")).toBe(5);
+    expect(result.hasTie).toBe(true);
+    // El empate F-G está en posiciones 6-7 → NO bloquea cierre
+    expect(result.hasBlockingTie).toBe(false);
+
+    const tieGroup = result.tiedGroups.find((g) => g.participantIds.includes("F"));
+    expect(tieGroup).toBeDefined();
+    expect(tieGroup!.startPosition).toBe(6);
+    expect(tieGroup!.endPosition).toBe(7);
+    expect(tieGroup!.blocksClosure).toBe(false);
+  });
+
+  it("dos bloques empatados independientes: solo el bloqueante activa hasBlockingTie", () => {
+    // A-B empatan por puesto 2 (bloqueante); F-G empatan por puesto 6-7 (no bloqueante).
+    const allEligible = ["W", "A", "B", "C", "D", "F", "G"];
+    const cards: JudgeCard[] = [
+      card("j1", ["W", "A", "B", "C", "D", "F", "G"]),
+      card("j2", ["W", "B", "A", "C", "D", "G", "F"])
+    ];
+    // W:1+1=2, A:2+3=5, B:3+2=5, C:4+4=8, D:5+5=10, F:6+7=13, G:7+6=13
+    const result = computeF2(cards, 2);
+
+    expect(positionOf(result, "W")).toBe(1);
+    expect(result.hasTie).toBe(true);
+    expect(result.hasBlockingTie).toBe(true);
+    expect(result.tiedGroups).toHaveLength(2);
+
+    const blockingGroup = result.tiedGroups.find((g) => g.blocksClosure);
+    const nonBlockingGroup = result.tiedGroups.find((g) => !g.blocksClosure);
+
+    expect(blockingGroup).toBeDefined();
+    expect(blockingGroup!.participantIds.sort()).toEqual(["A", "B"]);
+    expect(blockingGroup!.startPosition).toBe(2);
+
+    expect(nonBlockingGroup).toBeDefined();
+    expect(nonBlockingGroup!.participantIds.sort()).toEqual(["F", "G"]);
+    expect(nonBlockingGroup!.startPosition).toBe(6);
+    expect(nonBlockingGroup!.blocksClosure).toBe(false);
+  });
+
+  it("empate único solo entre posiciones 6-7 no genera hasBlockingTie", () => {
+    // 5 participantes ganan claramente; dos más empatan fuera del top 5.
+    const allEligible = ["A", "B", "C", "D", "E", "F", "G"];
+    const cards: JudgeCard[] = [
+      card("j1", ["A", "B", "C", "D", "E", "F", "G"]),
+      card("j2", ["A", "B", "C", "D", "E", "G", "F"])
+    ];
+    const result = computeF2(cards, 2);
+
+    expect(result.hasBlockingTie).toBe(false);
+    expect(result.hasTie).toBe(true);
+    // El empate en 6-7 no es bloqueante → puede cerrarse sin desempate
+    const nonBlockingGroup = result.tiedGroups[0];
+    expect(nonBlockingGroup.blocksClosure).toBe(false);
   });
 });
