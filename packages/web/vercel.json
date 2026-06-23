@@ -2,12 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "installCommand": "cd ../.. && pnpm install",
   "buildCommand": "cd ../.. && pnpm build && pnpm --filter @pegasus/web build",
-  "crons": [
-    {
-      "path": "/api/internal/cron/dispatch-notifications",
-      "schedule": "* * * * *"
-    }
-  ],
   "functions": {
     "src/app/api/**": {
       "maxDuration": 30,

@@ -8,8 +8,8 @@ import {
   type UserRole
 } from "@pegasus/core";
 import type { EntityManager } from "typeorm";
-import { In, IsNull } from "typeorm";
 import { ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import { deliverNotification } from "../notification-send.service.js";
 
 /**
  * Helpers compartidos del flujo de juzgamiento (prepista, FA y rondas F1/F2/desempate).
@@ -171,38 +171,7 @@ export async function queueNotification(
   }
 ): Promise<void> {
   const repo = manager.getRepository(NotificationOutbox);
-  const activeStatuses = ["PENDING", "PROCESSING"] as const;
-
-  if (input.recipientUserId) {
-    const duplicate = await repo.findOne({
-      where: {
-        recipientUserId: input.recipientUserId,
-        fairCategoryStageId: input.stageId,
-        type: input.type,
-        status: In([...activeStatuses])
-      }
-    });
-
-    if (duplicate) {
-      return;
-    }
-  } else if (input.recipientRole) {
-    const duplicate = await repo.findOne({
-      where: {
-        recipientUserId: IsNull(),
-        recipientRole: input.recipientRole,
-        fairCategoryStageId: input.stageId,
-        type: input.type,
-        status: In([...activeStatuses])
-      }
-    });
-
-    if (duplicate) {
-      return;
-    }
-  }
-
-  await repo.save(
+  const notification = await repo.save(
     repo.create({
       recipientUserId: input.recipientUserId,
       recipientRole: input.recipientRole ?? null,
@@ -218,6 +187,8 @@ export async function queueNotification(
       errorMessage: null
     })
   );
+
+  await deliverNotification(manager, notification);
 }
 
 export async function queueRoleNotifications(
@@ -233,19 +204,17 @@ export async function queueRoleNotifications(
 ): Promise<void> {
   const users = await getUsersByFairRole(manager, stage.fairId, roleExternalId);
 
-  await Promise.all(
-    users.map((recipient) =>
-      queueNotification(manager, {
-        recipientUserId: recipient.id,
-        recipientRole: recipient.role,
-        stageId: stage.id,
-        type: input.type,
-        title: input.title,
-        body: input.body,
-        payload: input.payload
-      })
-    )
-  );
+  for (const recipient of users) {
+    await queueNotification(manager, {
+      recipientUserId: recipient.id,
+      recipientRole: recipient.role,
+      stageId: stage.id,
+      type: input.type,
+      title: input.title,
+      body: input.body,
+      payload: input.payload
+    });
+  }
 }
 
 export function stageNotificationContext(stage: FairCategoryStage) {

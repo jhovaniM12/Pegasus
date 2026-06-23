@@ -1245,17 +1245,3 @@ export async function resetStageForTesting(user: User, stageId: string): Promise
     return buildStageSummary(manager, await getStageOrThrow(manager, stage.id));
   });
 }
-
-export async function getPushNotificationTargets(dataSource: DataSource, notification: NotificationOutbox): Promise<string[]> {
-  if (notification.recipientUserId) {
-    return [notification.recipientUserId];
-  }
-
-  return dataSource
-    .getRepository(User)
-    .createQueryBuilder("user")
-    .where("user.role = :role", { role: notification.recipientRole })
-    .andWhere("user.is_active = true")
-    .getMany()
-    .then((users) => users.map((user) => user.id));
-}
