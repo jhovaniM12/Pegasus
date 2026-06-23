@@ -1,7 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { NetworkStatusProvider } from "@/components/network-status";
+import { RegisterServiceWorker } from "@/components/pwa/register-service-worker";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ToastProvider } from "@/components/ui/toast";
 
@@ -14,10 +15,26 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "Pegaso",
   description: "Panel administrativo Pegaso",
-  icons: {
-    icon: "/LOGO_OFICIAL_PEGASO.jpeg",
-    apple: "/LOGO_OFICIAL_PEGASO.jpeg",
+  applicationName: "Pegaso",
+  appleWebApp: {
+    capable: true,
+    title: "Pegaso",
+    statusBarStyle: "black-translucent",
   },
+  icons: {
+    icon: [
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: "/icons/icon-192.png",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#1d3d6b",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -34,6 +51,7 @@ export default function RootLayout({
         <TooltipProvider>
           <ToastProvider>
             <NetworkStatusProvider>
+              <RegisterServiceWorker />
               {children}
             </NetworkStatusProvider>
           </ToastProvider>
