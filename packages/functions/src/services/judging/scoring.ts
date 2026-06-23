@@ -53,7 +53,7 @@ export type DesertedPositionResult = {
   /**
    * Número de votos que respaldan el desierto para el puesto:
    * - Desierto explícito: cantidad de jueces que lo declararon desierto.
-   * - Desierto por consideración mínima: jueces que sí consideraron al ejemplar candidato.
+   * - Desierto por agotamiento: 0 (ningún candidato restante cumple consideración mínima).
    */
   votesCount: number;
 };
@@ -200,10 +200,13 @@ export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult
     }
   }
 
-  // Asignación de puestos:
-  // 1) Respetar desiertos explícitos por mayoría.
-  // 2) En puestos premiables, exigir consideración mínima para poder premiar.
-  // 3) Ejemplares no premiables se reubican desde el puesto 6 (sin cinta).
+  // Asignación de puestos (Reglamento FEDEQUINAS, notas aclaratorias 5.b y 5.c):
+  // 1) Respetar desiertos explícitos por mayoría de jueces.
+  // 2) En cada puesto premiable, recorrer candidatos en orden de mérito hasta encontrar
+  //    uno con consideración mínima (cardsCount >= threshold). Los que no cumplen quedan
+  //    diferidos (sin cinta) y no consumen el puesto.
+  // 3) Desierto por agotamiento: solo si no queda ningún candidato elegible para ese puesto.
+  // 4) Ejemplares no premiables se reubican desde el puesto 6 (sin cinta).
   const ranked: Array<Aggregate & { finalPosition: number }> = [];
   const deferred: Aggregate[] = [];
   const desertedResults: DesertedPositionResult[] = [];
@@ -215,17 +218,23 @@ export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult
       desertedResults.push({ finalPosition: position, votesCount: explicitVotes });
       continue;
     }
-    if (pointer >= ordered.length) continue;
 
-    const candidate = ordered[pointer];
-    pointer += 1;
-    if (candidate.cardsCount < threshold) {
-      desertedResults.push({ finalPosition: position, votesCount: candidate.cardsCount });
-      deferred.push(candidate);
-      continue;
+    let assigned = false;
+    while (pointer < ordered.length) {
+      const candidate = ordered[pointer];
+      pointer += 1;
+      if (candidate.cardsCount < threshold) {
+        deferred.push(candidate);
+        continue;
+      }
+      ranked.push({ ...candidate, finalPosition: position });
+      assigned = true;
+      break;
     }
 
-    ranked.push({ ...candidate, finalPosition: position });
+    if (!assigned) {
+      desertedResults.push({ finalPosition: position, votesCount: 0 });
+    }
   }
 
   while (pointer < ordered.length) {
