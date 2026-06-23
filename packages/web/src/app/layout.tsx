@@ -1,8 +1,8 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { NetworkStatusProvider } from "@/components/network-status";
-import { RegisterServiceWorker } from "@/components/pwa/register-service-worker";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ToastProvider } from "@/components/ui/toast";
 
@@ -48,10 +48,12 @@ export default function RootLayout({
       className={`${inter.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
+        <Script id="pegaso-sw-register" strategy="beforeInteractive">
+          {`if("serviceWorker"in navigator){navigator.serviceWorker.register("/service-worker.js",{scope:"/"})}`}
+        </Script>
         <TooltipProvider>
           <ToastProvider>
             <NetworkStatusProvider>
-              <RegisterServiceWorker />
               {children}
             </NetworkStatusProvider>
           </ToastProvider>

@@ -63,12 +63,12 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  if (isStaffSession && isPublicPage) {
+  if (isStaffSession && isLoginPage) {
     const staffUrl = new URL("/staff", request.url);
     return NextResponse.redirect(staffUrl);
   }
 
-  if (isStaffSession && !isStaffArea) {
+  if (isStaffSession && !isStaffArea && !isStaffLoginPage) {
     const staffUrl = new URL("/staff", request.url);
     return NextResponse.redirect(staffUrl);
   }
