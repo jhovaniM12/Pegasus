@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
-const LOGO_SRC = "/LOGO_PGS.png";
+const LOGO_SRC = "/LOGO_OFICIAL_PEGASO.jpeg";
 const LOGO_WIDTH = 1254;
 const LOGO_HEIGHT = 1254;
 
@@ -31,7 +31,7 @@ export function PegasusLogo({
   const image = (
     <Image
       src={LOGO_SRC}
-      alt="Pegasus"
+      alt="Pegaso"
       width={LOGO_WIDTH}
       height={LOGO_HEIGHT}
       priority={priority}

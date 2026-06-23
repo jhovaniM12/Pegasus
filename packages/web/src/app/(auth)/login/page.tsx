@@ -80,7 +80,7 @@ export default function LoginPage() {
               <Input
                 id="email"
                 type="email"
-                placeholder="root@pegasus.com"
+                placeholder="root@pegaso.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -117,7 +117,7 @@ export default function LoginPage() {
             )}
 
             <Button
-              className="h-12 w-full rounded-lg bg-slate-950 text-base font-medium text-white shadow-sm hover:bg-slate-800"
+              className="h-12 w-full rounded-lg bg-primary text-base font-medium text-primary-foreground shadow-sm hover:bg-primary/90"
               type="submit"
               disabled={isLoading}
             >

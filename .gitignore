@@ -10,3 +10,4 @@ dist
 !.env.example
 coverage
 *.tsbuildinfo
+docs/Imagenes_pegasus/

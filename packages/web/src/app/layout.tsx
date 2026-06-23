@@ -12,11 +12,11 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Pegasus",
-  description: "Panel administrativo Pegasus",
+  title: "Pegaso",
+  description: "Panel administrativo Pegaso",
   icons: {
-    icon: "/LOGO_PGS.png",
-    apple: "/LOGO_PGS.png",
+    icon: "/LOGO_OFICIAL_PEGASO.jpeg",
+    apple: "/LOGO_OFICIAL_PEGASO.jpeg",
   },
 };
 

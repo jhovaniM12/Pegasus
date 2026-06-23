@@ -48,7 +48,7 @@ export function PageLoader({
       </div>
 
       <div className="flex flex-col items-center gap-2 text-center">
-        <p className="text-xs font-bold uppercase tracking-[0.28em] text-zapote">Pegasus</p>
+        <p className="text-xs font-bold uppercase tracking-[0.28em] text-zapote">Pegaso</p>
         <p className="text-sm font-medium text-slate-500">{label}</p>
       </div>
     </div>

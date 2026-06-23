@@ -60,10 +60,16 @@ export type RootDashboardTask = {
   href: string | null;
 };
 
+export type RootDashboardChartPoint = {
+  month: string;
+  events: number;
+};
+
 export type RootDashboardSummary = {
   stats: RootDashboardStats;
   recentActivity: RootDashboardActivityItem[];
   nextTasks: RootDashboardTask[];
+  chartData: RootDashboardChartPoint[];
 };
 
 function todayIsoDate(): string {
@@ -94,6 +100,11 @@ export async function getRootDashboardSummary(): Promise<RootDashboardSummary> {
   const dataSource = await getDataSource();
   const today = todayIsoDate();
 
+  const sixMonthsAgo = new Date();
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
+  sixMonthsAgo.setDate(1);
+  sixMonthsAgo.setHours(0, 0, 0, 0);
+
   const [
     fairs,
     registeredEntries,
@@ -102,7 +113,8 @@ export async function getRootDashboardSummary(): Promise<RootDashboardSummary> {
     categories,
     notStartedStages,
     inactiveDistinctives,
-    recentEvents
+    recentEvents,
+    rawChartData
   ] = await Promise.all([
     dataSource.getRepository(Fair).count(),
     dataSource
@@ -130,7 +142,15 @@ export async function getRootDashboardSummary(): Promise<RootDashboardSummary> {
       },
       order: { createdAt: "DESC" },
       take: 8
-    })
+    }),
+    dataSource.getRepository(WorkflowEvent)
+      .createQueryBuilder("event")
+      .select("TO_CHAR(DATE_TRUNC('month', event.createdAt), 'YYYY-MM')", "month")
+      .addSelect("COUNT(*)", "count")
+      .where("event.createdAt >= :since", { since: sixMonthsAgo })
+      .groupBy("DATE_TRUNC('month', event.createdAt)")
+      .orderBy("DATE_TRUNC('month', event.createdAt)", "ASC")
+      .getRawMany<{ month: string; count: string }>()
   ]);
 
   const recentActivity: RootDashboardActivityItem[] = recentEvents.map((event) => ({
@@ -151,6 +171,8 @@ export async function getRootDashboardSummary(): Promise<RootDashboardSummary> {
     inactiveDistinctives
   });
 
+  const chartData = buildChartData(rawChartData);
+
   return {
     stats: {
       fairs,
@@ -160,8 +182,36 @@ export async function getRootDashboardSummary(): Promise<RootDashboardSummary> {
       categories
     },
     recentActivity,
-    nextTasks
+    nextTasks,
+    chartData
   };
+}
+
+const MONTH_LABELS: Record<string, string> = {
+  "01": "Ene", "02": "Feb", "03": "Mar", "04": "Abr",
+  "05": "May", "06": "Jun", "07": "Jul", "08": "Ago",
+  "09": "Sep", "10": "Oct", "11": "Nov", "12": "Dic"
+};
+
+function buildChartData(
+  raw: { month: string; count: string }[]
+): RootDashboardChartPoint[] {
+  const dataMap = new Map(raw.map((r) => [r.month, parseInt(r.count, 10)]));
+
+  const points: RootDashboardChartPoint[] = [];
+  const now = new Date();
+
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const monthPart = key.slice(5, 7);
+    points.push({
+      month: `${MONTH_LABELS[monthPart]} ${d.getFullYear()}`,
+      events: dataMap.get(key) ?? 0
+    });
+  }
+
+  return points;
 }
 
 function buildNextTasks(input: {

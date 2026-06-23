@@ -23,7 +23,7 @@ export type JudgeCard = {
   judgeUserId: string;
   /** Puesto asignado por este juez a cada participante (participantId -> puesto). */
   positions: Array<{ participantId: string; position: number }>;
-  /** Puestos declarados desiertos en esta tarjeta (conservado por compatibilidad, no usado en el cómputo). */
+  /** Puestos declarados desiertos en esta tarjeta. */
   desertedPositions: number[];
   /**
    * Todos los participantes elegibles asignados a este formulario.
@@ -50,6 +50,11 @@ export type ScoredParticipant = {
 
 export type DesertedPositionResult = {
   finalPosition: number;
+  /**
+   * Número de votos que respaldan el desierto para el puesto:
+   * - Desierto explícito: cantidad de jueces que lo declararon desierto.
+   * - Desierto por consideración mínima: jueces que sí consideraron al ejemplar candidato.
+   */
   votesCount: number;
 };
 
@@ -114,7 +119,7 @@ type Aggregate = {
  * Por tanto, TODOS los participantes elegibles aparecen en el ranking final.
  *
  * El `cardsCount` refleja cuántos jueces realmente asignaron un puesto (sin contar votos
- * de castigo), para validar mayoría de consideración si se requiere en el futuro.
+ * de castigo), para aplicar la regla reglamentaria de consideración mínima para premiación.
  *
  * Los grupos de empate (`tiedGroups`) llevan metadatos de rango y bandera `blocksClosure`
  * que indica si el empate afecta posiciones premiables (1..MAX_AWARD_POSITIONS).
@@ -179,18 +184,69 @@ export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult
     return a.participantId.localeCompare(b.participantId);
   });
 
-  // Asignar posiciones finales provisionales antes de calcular rangos de empate.
-  let nextFinalPosition = 1;
-  const participants: ScoredParticipant[] = ordered.map((agg) => {
-    return {
-      participantId: agg.participantId,
-      positionSum: agg.positionSum,
-      firstPlaceVotes: agg.firstPlaceVotes,
-      cardsCount: agg.cardsCount,
-      finalPosition: nextFinalPosition++,
-      tied: false // se actualiza abajo
-    };
-  });
+  // Conteo de puestos desiertos explícitos por mayoría de jueces.
+  const desertedVoteCountByPosition = new Map<number, number>();
+  for (const card of cards) {
+    const uniqueDeserted = new Set(card.desertedPositions);
+    for (const position of uniqueDeserted) {
+      if (!Number.isInteger(position) || position < 1) continue;
+      desertedVoteCountByPosition.set(position, (desertedVoteCountByPosition.get(position) ?? 0) + 1);
+    }
+  }
+  const explicitDesertedByMajority = new Map<number, number>();
+  for (const [position, votesCount] of desertedVoteCountByPosition.entries()) {
+    if (votesCount >= threshold) {
+      explicitDesertedByMajority.set(position, votesCount);
+    }
+  }
+
+  // Asignación de puestos:
+  // 1) Respetar desiertos explícitos por mayoría.
+  // 2) En puestos premiables, exigir consideración mínima para poder premiar.
+  // 3) Ejemplares no premiables se reubican desde el puesto 6 (sin cinta).
+  const ranked: Array<Aggregate & { finalPosition: number }> = [];
+  const deferred: Aggregate[] = [];
+  const desertedResults: DesertedPositionResult[] = [];
+  let pointer = 0;
+
+  for (let position = 1; position <= MAX_AWARD_POSITIONS; position += 1) {
+    const explicitVotes = explicitDesertedByMajority.get(position);
+    if (explicitVotes != null) {
+      desertedResults.push({ finalPosition: position, votesCount: explicitVotes });
+      continue;
+    }
+    if (pointer >= ordered.length) continue;
+
+    const candidate = ordered[pointer];
+    pointer += 1;
+    if (candidate.cardsCount < threshold) {
+      desertedResults.push({ finalPosition: position, votesCount: candidate.cardsCount });
+      deferred.push(candidate);
+      continue;
+    }
+
+    ranked.push({ ...candidate, finalPosition: position });
+  }
+
+  while (pointer < ordered.length) {
+    deferred.push(ordered[pointer]);
+    pointer += 1;
+  }
+
+  let nextNonAwardPosition = MAX_AWARD_POSITIONS + 1;
+  for (const participant of deferred) {
+    ranked.push({ ...participant, finalPosition: nextNonAwardPosition++ });
+  }
+
+  ranked.sort((a, b) => a.finalPosition - b.finalPosition);
+  const participants: ScoredParticipant[] = ranked.map((agg) => ({
+    participantId: agg.participantId,
+    positionSum: agg.positionSum,
+    firstPlaceVotes: agg.firstPlaceVotes,
+    cardsCount: agg.cardsCount,
+    finalPosition: agg.finalPosition,
+    tied: false // se actualiza abajo
+  }));
   const positionById = new Map(participants.map((p) => [p.participantId, p.finalPosition]));
 
   // Detección de empates: misma suma entre participantes no cubiertos por la mayoría.
@@ -228,8 +284,7 @@ export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult
 
   return {
     participants,
-    // Con votos de castigo todos los puestos quedan cubiertos por participantes; no hay desiertos agregados.
-    desertedResults: [],
+    desertedResults: desertedResults.sort((a, b) => a.finalPosition - b.finalPosition),
     hasTie: tiedGroups.length > 0,
     hasBlockingTie,
     tiedGroups,

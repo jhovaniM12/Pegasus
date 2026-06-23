@@ -19,8 +19,14 @@ export type RootDashboardTask = {
   href: string | null;
 };
 
+export type RootDashboardChartPoint = {
+  month: string;
+  events: number;
+};
+
 export type RootDashboardSummary = {
   stats: RootDashboardStats;
   recentActivity: RootDashboardActivityItem[];
   nextTasks: RootDashboardTask[];
+  chartData: RootDashboardChartPoint[];
 };

@@ -25,6 +25,7 @@ import { StageStatusBadge, stageStatusLabels } from "@/components/stage-status-b
 import { ConfirmActionDialog } from "@/components/confirm-action-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { NotificationInbox } from "@/components/notification-inbox";
 import { PushNotificationPrompt } from "@/components/push-notification-prompt";
 import { PegasusLogo } from "@/components/brand/pegasus-logo";
@@ -309,7 +310,7 @@ function CategoryFilters({
   const hasActiveFilters = statusFilter !== ALL_STATUS_VALUE || gaitFilter !== ALL_GAIT_VALUE;
 
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
@@ -408,18 +409,31 @@ export default function StaffPage() {
   const [startRoundTarget, setStartRoundTarget] = useState<StartRoundTarget | null>(null);
   const [statusFilter, setStatusFilter] = useState(ALL_STATUS_VALUE);
   const [gaitFilter, setGaitFilter] = useState(ALL_GAIT_VALUE);
+  const [activeTab, setActiveTab] = useState<"pending" | "closed">("pending");
+
+  const tabCategories = useMemo(() => {
+    return categories.filter((item) => {
+      const isClosed = item.status === "JUDGING_CLOSED" || item.status === "JUDGING_DESERTED";
+      return activeTab === "closed" ? isClosed : !isClosed;
+    });
+  }, [categories, activeTab]);
 
   const filteredCategories = useMemo(() => {
-    return categories.filter((item) => {
+    return tabCategories.filter((item) => {
       const matchesStatus = statusFilter === ALL_STATUS_VALUE || item.status === statusFilter;
       const matchesGait = gaitFilter === ALL_GAIT_VALUE || item.gait.id === gaitFilter;
       return matchesStatus && matchesGait;
     });
-  }, [categories, statusFilter, gaitFilter]);
+  }, [tabCategories, statusFilter, gaitFilter]);
 
   const clearFilters = () => {
     setStatusFilter(ALL_STATUS_VALUE);
     setGaitFilter(ALL_GAIT_VALUE);
+  };
+
+  const handleTabChange = (value: string) => {
+    setActiveTab(value as "pending" | "closed");
+    setStatusFilter(ALL_STATUS_VALUE);
   };
 
   const reloadCategories = useCallback(
@@ -548,28 +562,43 @@ export default function StaffPage() {
           </div>
         ) : (
           <ContentReveal>
-            <CategoryFilters
-              categories={categories}
-              statusFilter={statusFilter}
-              gaitFilter={gaitFilter}
-              onStatusChange={setStatusFilter}
-              onGaitChange={setGaitFilter}
-              onClear={clearFilters}
-            />
+            <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-slate-200/60 pb-px mb-6">
+                <TabsList variant="line" className="h-10">
+                  <TabsTrigger value="pending" className="px-4 py-2 text-sm">
+                    Pendientes
+                    {!loading && (
+                      <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-xs font-semibold">
+                        {categories.filter((c) => c.status !== "JUDGING_CLOSED" && c.status !== "JUDGING_DESERTED").length}
+                      </Badge>
+                    )}
+                  </TabsTrigger>
+                  <TabsTrigger value="closed" className="px-4 py-2 text-sm">
+                    Cerradas
+                    {!loading && (
+                      <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-xs font-semibold">
+                        {categories.filter((c) => c.status === "JUDGING_CLOSED" || c.status === "JUDGING_DESERTED").length}
+                      </Badge>
+                    )}
+                  </TabsTrigger>
+                </TabsList>
+
+                <CategoryFilters
+                  categories={tabCategories}
+                  statusFilter={statusFilter}
+                  gaitFilter={gaitFilter}
+                  onStatusChange={setStatusFilter}
+                  onGaitChange={setGaitFilter}
+                  onClear={clearFilters}
+                />
+              </div>
+            </Tabs>
 
             {filteredCategories.length === 0 ? (
               <div className="rounded-lg border border-slate-200 bg-white px-6 py-12 text-center">
                 <p className="text-sm font-medium text-slate-700">
                   No hay categorías que coincidan con los filtros seleccionados.
                 </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="mt-4"
-                  onClick={clearFilters}
-                >
-                  Limpiar filtros
-                </Button>
               </div>
             ) : (
           <div className="grid gap-4 lg:grid-cols-2">

@@ -1,6 +1,8 @@
 export type Fair = {
   id: string;
   name: string;
+  startDate?: string | null;
+  endDate?: string | null;
   city?: {
     name?: string;
   };
