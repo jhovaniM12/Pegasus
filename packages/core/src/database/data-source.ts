@@ -48,6 +48,9 @@ import {
   CreateJudgingReminders1717430400017,
   AddRoundEntryAnnotations1717430400018,
   AddRoundDisqualificationTraceability1717430400019,
+  AddNotificationOutboxAttemptCount1717430400020,
+  AddNotificationDispatchLocking1717430400021,
+  AddNotificationPublishIdempotency1717430400022,
   CreateFairEntriesTable1717430400004,
   CreateFairResultsTable1717430400008,
   CreateFairStaffTable1717430400007,
@@ -140,7 +143,10 @@ export const AppDataSource = new DataSource({
     CreateAwardDistinctives1717430400016,
     CreateJudgingReminders1717430400017,
     AddRoundEntryAnnotations1717430400018,
-    AddRoundDisqualificationTraceability1717430400019
+    AddRoundDisqualificationTraceability1717430400019,
+    AddNotificationOutboxAttemptCount1717430400020,
+    AddNotificationDispatchLocking1717430400021,
+    AddNotificationPublishIdempotency1717430400022
   ]
 });
 

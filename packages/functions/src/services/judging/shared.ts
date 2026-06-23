@@ -8,6 +8,7 @@ import {
   type UserRole
 } from "@pegasus/core";
 import type { EntityManager } from "typeorm";
+import { In, IsNull } from "typeorm";
 import { ForbiddenError, NotFoundError } from "../../lib/errors.js";
 
 /**
@@ -169,8 +170,40 @@ export async function queueNotification(
     payload?: Record<string, unknown>;
   }
 ): Promise<void> {
-  await manager.getRepository(NotificationOutbox).save(
-    manager.getRepository(NotificationOutbox).create({
+  const repo = manager.getRepository(NotificationOutbox);
+  const activeStatuses = ["PENDING", "PROCESSING"] as const;
+
+  if (input.recipientUserId) {
+    const duplicate = await repo.findOne({
+      where: {
+        recipientUserId: input.recipientUserId,
+        fairCategoryStageId: input.stageId,
+        type: input.type,
+        status: In([...activeStatuses])
+      }
+    });
+
+    if (duplicate) {
+      return;
+    }
+  } else if (input.recipientRole) {
+    const duplicate = await repo.findOne({
+      where: {
+        recipientUserId: IsNull(),
+        recipientRole: input.recipientRole,
+        fairCategoryStageId: input.stageId,
+        type: input.type,
+        status: In([...activeStatuses])
+      }
+    });
+
+    if (duplicate) {
+      return;
+    }
+  }
+
+  await repo.save(
+    repo.create({
       recipientUserId: input.recipientUserId,
       recipientRole: input.recipientRole ?? null,
       fairCategoryStageId: input.stageId,

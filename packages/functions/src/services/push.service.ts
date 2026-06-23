@@ -1,27 +1,6 @@
-import PushNotifications from "@pusher/push-notifications-server";
 import { getDataSource, NotificationOutbox, type User } from "@pegasus/core";
+import { getBeamsClient } from "../lib/beams-client.js";
 import { NotFoundError } from "../lib/errors.js";
-import { getPushNotificationTargets } from "./staged-flow.service.js";
-
-type BeamsClient = InstanceType<typeof PushNotifications>;
-
-let beamsClient: BeamsClient | null = null;
-
-function getBeamsClient(): BeamsClient {
-  if (beamsClient) {
-    return beamsClient;
-  }
-
-  const instanceId = process.env.PUSHER_BEAMS_INSTANCE_ID;
-  const secretKey = process.env.PUSHER_BEAMS_PRIMARY_KEY;
-
-  if (!instanceId || !secretKey) {
-    throw new Error("PUSHER_BEAMS_INSTANCE_ID y PUSHER_BEAMS_PRIMARY_KEY son requeridos.");
-  }
-
-  beamsClient = new PushNotifications({ instanceId, secretKey });
-  return beamsClient;
-}
 
 export function generateBeamsToken(user: User) {
   return getBeamsClient().generateToken(user.id);
@@ -29,36 +8,6 @@ export function generateBeamsToken(user: User) {
 
 function notificationDeepLink(notification: NotificationOutbox): string | null {
   return typeof notification.payload?.deepLink === "string" ? notification.payload.deepLink : null;
-}
-
-function getPublicWebOrigin(): string | null {
-  const origin =
-    process.env.PUSHER_BEAMS_WEB_ORIGIN ??
-    process.env.NEXT_PUBLIC_APP_URL ??
-    process.env.APP_URL ??
-    process.env.VERCEL_URL ??
-    null;
-
-  if (!origin) {
-    return null;
-  }
-
-  return origin.startsWith("http://") || origin.startsWith("https://") ? origin : `https://${origin}`;
-}
-
-function toBeamsDeepLink(notification: NotificationOutbox): string | undefined {
-  const deepLink = notificationDeepLink(notification) ?? "/staff";
-
-  try {
-    return new URL(deepLink).toString();
-  } catch {
-    const origin = getPublicWebOrigin();
-    if (!origin) {
-      return undefined;
-    }
-
-    return new URL(deepLink, origin).toString();
-  }
 }
 
 function toInboxNotification(notification: NotificationOutbox) {
@@ -156,60 +105,4 @@ export async function archiveInboxNotification(user: User, notificationId: strin
   }
 
   return { id: notification.id, archivedAt: notification.archivedAt.toISOString() };
-}
-
-export async function processPendingNotifications(limit = 25): Promise<{ sent: number; failed: number }> {
-  const dataSource = await getDataSource();
-  const repo = dataSource.getRepository(NotificationOutbox);
-  const notifications = await repo.find({
-    where: { status: "PENDING" },
-    order: { createdAt: "ASC" },
-    take: limit
-  });
-  let sent = 0;
-  let failed = 0;
-
-  for (const notification of notifications) {
-    try {
-      const userIds = await getPushNotificationTargets(dataSource, notification);
-
-      if (userIds.length === 0) {
-        notification.status = "SENT";
-        notification.sentAt = new Date();
-        await repo.save(notification);
-        sent += 1;
-        continue;
-      }
-
-      const deepLink = toBeamsDeepLink(notification);
-      const webNotification: { title: string; body: string; deep_link?: string } = {
-        title: notification.title,
-        body: notification.body
-      };
-
-      if (deepLink) {
-        webNotification.deep_link = deepLink;
-      }
-
-      await getBeamsClient().publishToUsers(userIds, {
-        web: {
-          notification: webNotification
-        }
-      });
-
-      notification.status = "SENT";
-      notification.sentAt = new Date();
-      notification.errorMessage = null;
-      await repo.save(notification);
-      sent += 1;
-    } catch (error) {
-      notification.status = "FAILED";
-      notification.failedAt = new Date();
-      notification.errorMessage = error instanceof Error ? error.message : "Error desconocido.";
-      await repo.save(notification);
-      failed += 1;
-    }
-  }
-
-  return { sent, failed };
 }

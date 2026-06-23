@@ -18,3 +18,6 @@ export { CreateAwardDistinctives1717430400016 } from "./1717430400016-CreateAwar
 export { CreateJudgingReminders1717430400017 } from "./1717430400017-CreateJudgingReminders.js";
 export { AddRoundEntryAnnotations1717430400018 } from "./1717430400018-AddRoundEntryAnnotations.js";
 export { AddRoundDisqualificationTraceability1717430400019 } from "./1717430400019-AddRoundDisqualificationTraceability.js";
+export { AddNotificationOutboxAttemptCount1717430400020 } from "./1717430400020-AddNotificationOutboxAttemptCount.js";
+export { AddNotificationDispatchLocking1717430400021 } from "./1717430400021-AddNotificationDispatchLocking.js";
+export { AddNotificationPublishIdempotency1717430400022 } from "./1717430400022-AddNotificationPublishIdempotency.js";

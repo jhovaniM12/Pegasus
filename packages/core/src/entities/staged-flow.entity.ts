@@ -26,7 +26,7 @@ export type JudgingParticipantStatus = "ELIGIBLE" | "DISQUALIFIED";
 
 export type JudgeEntryDecision = "SELECTED" | "DISCARDED" | "DISQUALIFIED";
 
-export type NotificationOutboxStatus = "PENDING" | "SENT" | "FAILED";
+export type NotificationOutboxStatus = "PENDING" | "PROCESSING" | "SENT" | "FAILED";
 
 @Unique("UQ_fair_category_stages_fair_category", ["fairId", "categoryId"])
 @Entity({ name: "fair_category_stages" })
@@ -338,6 +338,21 @@ export class NotificationOutbox extends PegasusBaseEntity {
 
   @Column({ name: "status", type: "varchar", default: "PENDING" })
   status!: NotificationOutboxStatus;
+
+  @Column({ name: "attempt_count", type: "int", default: 0 })
+  attemptCount!: number;
+
+  @Column({ name: "processing_started_at", type: "timestamp", nullable: true })
+  processingStartedAt!: Date | null;
+
+  @Column({ name: "next_retry_at", type: "timestamp", nullable: true })
+  nextRetryAt!: Date | null;
+
+  @Column({ name: "publish_attempted_at", type: "timestamp", nullable: true })
+  publishAttemptedAt!: Date | null;
+
+  @Column({ name: "beams_publish_id", type: "varchar", nullable: true })
+  beamsPublishId!: string | null;
 
   @Column({ name: "sent_at", type: "timestamp", nullable: true })
   sentAt!: Date | null;

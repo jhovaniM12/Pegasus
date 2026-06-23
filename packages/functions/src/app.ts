@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import { databaseMiddleware } from "./middlewares/database.middleware.js";
 import { errorHandler } from "./middlewares/error-handler.middleware.js";
 import { requireRootSession, requireStaffSession } from "./middlewares/auth.middleware.js";
+import { internalRoutes } from "./routes/internal.routes.js";
 import { awardDistinctivesRoutes } from "./routes/award-distinctives.routes.js";
 import { authRoutes } from "./routes/auth.routes.js";
 import { categoriesRoutes } from "./routes/categories.routes.js";
@@ -27,6 +28,7 @@ app.use("*", databaseMiddleware);
 app.onError(errorHandler);
 
 app.route("/", healthRoutes);
+app.route("/", internalRoutes);
 app.route("/", authRoutes);
 app.use("/fairs", requireRootSession);
 app.use("/fairs/*", requireRootSession);
