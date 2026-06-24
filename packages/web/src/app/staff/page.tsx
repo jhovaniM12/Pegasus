@@ -75,6 +75,22 @@ const STAGE_STATUS_ORDER: StageStatus[] = [
   "JUDGING_CLOSED",
 ];
 
+/** Estados en los que el juez puede abrir la categoría o actuar sobre formatos. */
+const JUDGE_ACTIONABLE_STATUSES: StageStatus[] = [
+  "JUDGING_STARTED",
+  "FA_CONSOLIDATED",
+  "F1_IN_PROGRESS",
+  "F1_CONSOLIDATED",
+  "F2_IN_PROGRESS",
+  "TIE_BREAK_IN_PROGRESS",
+  "JUDGING_DESERTED",
+  "JUDGING_CLOSED",
+];
+
+function judgeCanActOnCategory(role: string | undefined, status: StageStatus): boolean {
+  return role !== "JUDGE" || JUDGE_ACTIONABLE_STATUSES.includes(status);
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type CurrentUser = {
@@ -604,7 +620,9 @@ export default function StaffPage() {
           <div className="grid gap-4 lg:grid-cols-2">
             {filteredCategories.map((item) => {
               const action = getCardAction(currentUser?.role, item);
+              const showCategoryAction = judgeCanActOnCategory(currentUser?.role, item.status);
               const showJudgeFormats =
+                showCategoryAction &&
                 currentUser?.role === "JUDGE" &&
                 item.judge?.formats?.some((format) => format.formStatus !== "NOT_AVAILABLE");
 
@@ -679,7 +697,7 @@ export default function StaffPage() {
                         }
                       }}
                     />
-                  ) : action.kind === "confirm" ? (
+                  ) : showCategoryAction && action.kind === "confirm" ? (
                     <Button
                       className={`mt-5 w-full rounded-md ${actionButtonClass(action.color)}`}
                       disabled={busy}
@@ -688,7 +706,7 @@ export default function StaffPage() {
                       <action.icon className="size-4" />
                       {action.label}
                     </Button>
-                  ) : (
+                  ) : showCategoryAction ? (
                     <Button
                       className={`mt-5 w-full rounded-md ${actionButtonClass(action.color)}`}
                       nativeButton={false}
@@ -697,7 +715,7 @@ export default function StaffPage() {
                       <action.icon className="size-4" />
                       {action.label}
                     </Button>
-                  )}
+                  ) : null}
                 </article>
               );
             })}

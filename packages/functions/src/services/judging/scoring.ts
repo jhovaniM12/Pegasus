@@ -53,7 +53,7 @@ export type DesertedPositionResult = {
   /**
    * Número de votos que respaldan el desierto para el puesto:
    * - Desierto explícito: cantidad de jueces que lo declararon desierto.
-   * - Desierto por agotamiento: 0 (ningún candidato restante cumple consideración mínima).
+   * - Desierto por agotamiento: 0 (ningún candidato restante puede ocupar el puesto).
    */
   votesCount: number;
 };
@@ -200,13 +200,25 @@ export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult
     }
   }
 
-  // Asignación de puestos (Reglamento FEDEQUINAS, notas aclaratorias 5.b y 5.c):
+  const fifthPlaceVoteIds = new Set<string>();
+  for (const card of cards) {
+    for (const assigned of card.positions) {
+      if (assigned.position === MAX_AWARD_POSITIONS) {
+        fifthPlaceVoteIds.add(assigned.participantId);
+      }
+    }
+  }
+
+  // Asignación de puestos (Reglamento FEDEQUINAS, notas aclaratorias 5.b, 5.c y 5.e):
   // 1) Respetar desiertos explícitos por mayoría de jueces.
   // 2) En cada puesto premiable, recorrer candidatos en orden de mérito hasta encontrar
   //    uno con consideración mínima (cardsCount >= threshold). Los que no cumplen quedan
   //    diferidos (sin cinta) y no consumen el puesto.
-  // 3) Desierto por agotamiento: solo si no queda ningún candidato elegible para ese puesto.
-  // 4) Ejemplares no premiables se reubican desde el puesto 6 (sin cinta).
+  // 3) Para el quinto puesto, si no hay mayoría declarando desierto y hay votos reales de
+  //    quinto para ejemplares no premiados, esos ejemplares se toman en cuenta antes de
+  //    declarar desierto (nota 5.e).
+  // 4) Desierto por agotamiento: solo si no queda ningún candidato para ese puesto.
+  // 5) Ejemplares no premiables se reubican desde el puesto 6 (sin cinta).
   const ranked: Array<Aggregate & { finalPosition: number }> = [];
   const deferred: Aggregate[] = [];
   const desertedResults: DesertedPositionResult[] = [];
@@ -233,6 +245,27 @@ export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult
     }
 
     if (!assigned) {
+      if (position === MAX_AWARD_POSITIONS && fifthPlaceVoteIds.size > 0) {
+        const rankedIds = new Set(ranked.map((participant) => participant.participantId));
+        const fifthPlaceCandidates = ordered.filter(
+          (candidate) => fifthPlaceVoteIds.has(candidate.participantId) && !rankedIds.has(candidate.participantId)
+        );
+
+        if (fifthPlaceCandidates.length > 0) {
+          const fifthCandidateIds = new Set(fifthPlaceCandidates.map((candidate) => candidate.participantId));
+          let nextFifthPosition = position;
+          for (const candidate of fifthPlaceCandidates) {
+            ranked.push({ ...candidate, finalPosition: nextFifthPosition++ });
+          }
+          for (let index = deferred.length - 1; index >= 0; index -= 1) {
+            if (fifthCandidateIds.has(deferred[index].participantId)) {
+              deferred.splice(index, 1);
+            }
+          }
+          continue;
+        }
+      }
+
       desertedResults.push({ finalPosition: position, votesCount: 0 });
     }
   }
@@ -242,7 +275,8 @@ export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult
     pointer += 1;
   }
 
-  let nextNonAwardPosition = MAX_AWARD_POSITIONS + 1;
+  let nextNonAwardPosition =
+    Math.max(MAX_AWARD_POSITIONS, ...ranked.map((participant) => participant.finalPosition)) + 1;
   for (const participant of deferred) {
     ranked.push({ ...participant, finalPosition: nextNonAwardPosition++ });
   }

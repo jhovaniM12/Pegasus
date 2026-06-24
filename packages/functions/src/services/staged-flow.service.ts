@@ -74,6 +74,12 @@ const JUDGING_PHASE_STATUSES: FairCategoryStageStatus[] = [
   "JUDGING_CLOSED"
 ];
 
+function assertJudgeStageVisible(stage: FairCategoryStage): void {
+  if (!JUDGING_PHASE_STATUSES.includes(stage.status)) {
+    throw new NotFoundError("La categoria no esta disponible para juzgamiento.");
+  }
+}
+
 async function getEntries(manager: EntityManager, stage: FairCategoryStage): Promise<FairEntry[]> {
   return manager.getRepository(FairEntry).find({
     where: { fairId: stage.fairId, categoryId: stage.categoryId },
@@ -222,12 +228,13 @@ async function listStagesFromFairEntries(
   return stages;
 }
 
-async function listStartedStagesForStaff(
+async function listStagesForAssignedStaff(
   manager: EntityManager,
   personId: string,
-  roleExternalId: string
+  roleExternalId: string,
+  visibleStatuses: FairCategoryStageStatus[] | "ANY_STARTED"
 ): Promise<FairCategoryStage[]> {
-  return manager
+  const query = manager
     .getRepository(FairCategoryStage)
     .createQueryBuilder("stage")
     .innerJoinAndSelect("stage.fair", "fair")
@@ -236,11 +243,15 @@ async function listStartedStagesForStaff(
     .innerJoin(FairStaff, "staff", "staff.fair_id = stage.fair_id")
     .innerJoin(Role, "role", "role.id = staff.role_id")
     .where("staff.person_id = :personId", { personId })
-    .andWhere("role.external_id = :roleExternalId", { roleExternalId })
-    .andWhere("stage.status != :notStarted", { notStarted: "NOT_STARTED" })
-    .orderBy("fair.id", "ASC")
-    .addOrderBy("category.id", "ASC")
-    .getMany();
+    .andWhere("role.external_id = :roleExternalId", { roleExternalId });
+
+  if (visibleStatuses === "ANY_STARTED") {
+    query.andWhere("stage.status != :notStarted", { notStarted: "NOT_STARTED" });
+  } else {
+    query.andWhere("stage.status IN (:...statuses)", { statuses: visibleStatuses });
+  }
+
+  return query.orderBy("fair.id", "ASC").addOrderBy("category.id", "ASC").getMany();
 }
 
 async function countRoundFormParticipants(
@@ -384,9 +395,8 @@ export async function listStagedCategories(user: User): Promise<StagedCategoryDt
     }
 
     const roleExternalId = roleExternalIdForUser(user);
-    const onlyStartedStages = ROLES_SEE_ONLY_STARTED_STAGES.includes(user.role);
-    const stages = onlyStartedStages
-      ? await listStartedStagesForStaff(manager, user.personId, roleExternalId)
+    const stages = ROLES_SEE_ONLY_STARTED_STAGES.includes(user.role)
+      ? await listStagesForAssignedStaff(manager, user.personId, roleExternalId, "ANY_STARTED")
       : await listStagesFromFairEntries(manager, user.personId, roleExternalId);
 
     const summaries = await Promise.all(stages.map((stage) => buildStageSummary(manager, stage)));
@@ -405,6 +415,10 @@ export async function getStagedCategory(user: User, stageId: string): Promise<St
   return dataSource.transaction(async (manager) => {
     const stage = await getStageOrThrow(manager, stageId);
     await assertStageAccess(manager, user, stage);
+
+    if (user.role === "JUDGE") {
+      assertJudgeStageVisible(stage);
+    }
 
     let summary = await buildStageSummary(manager, stage);
 
@@ -677,6 +691,7 @@ export async function startFa(user: User, stageId: string) {
   return dataSource.transaction(async (manager) => {
     const stage = await getStageOrThrow(manager, stageId);
     await assertStageAccess(manager, user, stage, ["2"]);
+    assertJudgeStageVisible(stage);
 
     if (stage.status !== "JUDGING_STARTED") {
       throw new BadRequestError("El FA solo puede iniciarse con juzgamiento iniciado.");
@@ -713,6 +728,7 @@ export async function getFa(user: User, stageId: string) {
   return dataSource.transaction(async (manager) => {
     const stage = await getStageOrThrow(manager, stageId);
     await assertStageAccess(manager, user, stage, ["2"]);
+    assertJudgeStageVisible(stage);
     return getFaForStage(manager, user, stage);
   });
 }

@@ -196,13 +196,14 @@ describe("computeF2 - voto de castigo", () => {
     expect(positionOf(result, "p1")).toBe(4);
     expect(positionOf(result, "p7")).toBe(6);
     expect(positionOf(result, "p14")).toBe(8);
-    expect(positionOf(result, "p2")).toBe(9);
+    expect(positionOf(result, "p2")).toBe(5);
 
-    // El 5° queda desierto: p8, p14 y p2 no cumplen consideración mínima (1/2 cada uno).
+    // El 5° no queda desierto: p2 fue tomado en cuenta como 5° por un juez y no hay
+    // mayoría declarando desierto el quinto puesto.
     const pos7 = result.participants.find((p) => p.finalPosition === 7)?.participantId;
     expect(pos7).toBe("p8");
 
-    expect(result.desertedResults).toEqual([{ finalPosition: 5, votesCount: 0 }]);
+    expect(result.desertedResults).toEqual([]);
     // p1 (sum=15) y p8 (sum=15) siguen empatados y el bloque toca el top 5 → bloquea cierre.
     expect(result.hasTie).toBe(true);
     expect(result.hasBlockingTie).toBe(true);
@@ -211,6 +212,62 @@ describe("computeF2 - voto de castigo", () => {
     expect(tiedGroup.startPosition).toBe(4);
     expect(tiedGroup.endPosition).toBe(7);
     expect(tiedGroup.blocksClosure).toBe(true);
+  });
+
+  it("aplica la nota del quinto puesto: no lo declara desierto si hay votos reales de quinto sin mayoría desierta", () => {
+    // Caso de la captura reportada:
+    // J1: #2, #8, #4, #3, #9
+    // J2: #1, #3, #2, #4, #6
+    // J3: #2, #4, #3, #6 y deja 5° sin asignar.
+    const allEligible = ["p1", "p2", "p3", "p4", "p6", "p7", "p8", "p9"];
+    const cards: JudgeCard[] = [
+      {
+        judgeUserId: "j1",
+        positions: [
+          { participantId: "p2", position: 1 },
+          { participantId: "p8", position: 2 },
+          { participantId: "p4", position: 3 },
+          { participantId: "p3", position: 4 },
+          { participantId: "p9", position: 5 }
+        ],
+        desertedPositions: [],
+        eligibleParticipantIds: allEligible
+      },
+      {
+        judgeUserId: "j2",
+        positions: [
+          { participantId: "p1", position: 1 },
+          { participantId: "p3", position: 2 },
+          { participantId: "p2", position: 3 },
+          { participantId: "p4", position: 4 },
+          { participantId: "p6", position: 5 }
+        ],
+        desertedPositions: [],
+        eligibleParticipantIds: allEligible
+      },
+      {
+        judgeUserId: "j3",
+        positions: [
+          { participantId: "p2", position: 1 },
+          { participantId: "p4", position: 2 },
+          { participantId: "p3", position: 3 },
+          { participantId: "p6", position: 4 }
+        ],
+        desertedPositions: [5],
+        eligibleParticipantIds: allEligible
+      }
+    ];
+
+    const result = computeF2(cards, 3);
+
+    expect(positionOf(result, "p2")).toBe(1);
+    expect(positionOf(result, "p3")).toBe(2);
+    expect(positionOf(result, "p4")).toBe(3);
+    expect(positionOf(result, "p6")).toBe(4);
+    expect(positionOf(result, "p9")).toBe(5);
+    expect(result.desertedResults).toEqual([]);
+    expect(result.hasBlockingTie).toBe(true);
+    expect(result.tiedGroups[0].participantIds.sort()).toEqual(["p3", "p4"]);
   });
 
   it("con 3 jueces, candidato sin consideración mínima no consume el puesto: se evalúa el siguiente elegible", () => {
