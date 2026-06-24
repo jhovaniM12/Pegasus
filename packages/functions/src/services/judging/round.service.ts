@@ -1052,6 +1052,7 @@ async function consolidateTieBreak(
   const judges = await getUsersByFairRole(manager, fairId, "2");
   const cards = await loadJudgeCards(manager, round.id);
   const scoring = computeF2(cards, judges.length);
+  const positionBounds = await getRoundPositionBounds(manager, round);
 
   // Resultados propios de la ronda de desempate (trazabilidad).
   await manager.getRepository(JudgingRoundResult).delete({ roundId: round.id });
@@ -1064,7 +1065,7 @@ async function consolidateTieBreak(
           judgingParticipantId: participant.participantId,
           scoreValue: participant.positionSum,
           firstPlaceVotes: participant.firstPlaceVotes,
-          finalPosition: participant.finalPosition,
+          finalPosition: positionBounds.min + participant.finalPosition - 1,
           status: (participant.tied ? "TIED" : "PROVISIONAL") as JudgingRoundResultStatus
         })
       )

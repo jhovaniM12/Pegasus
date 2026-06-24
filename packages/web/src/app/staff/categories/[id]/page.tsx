@@ -23,6 +23,8 @@ import { FaConsolidatedBanner } from "./_components/fa-consolidated-banner";
 import { ManagementView } from "./_components/management-view";
 import { JudgeRoundWorkspace } from "./_components/judge-round-workspace";
 import { DirectorRounds } from "./_components/director-rounds";
+import { OfficialResultBoard } from "./_components/official-result-board";
+import { buildOfficialF2Results } from "./_components/official-f2-results";
 import { ClosePreRingDialog } from "./_components/close-pre-ring-dialog";
 import { StartFaDialog } from "./_components/start-fa-dialog";
 import { CloseFaDialog } from "./_components/close-fa-dialog";
@@ -85,47 +87,63 @@ async function loadJudgeWorkspace(
   stageId: string,
   current: StagedCategory,
   viewParam: string | null
-): Promise<{ summary: StagedCategory; fa: FaState | null; round: RoundState | null }> {
+): Promise<{
+  summary: StagedCategory;
+  fa: FaState | null;
+  round: RoundState | null;
+  roundsManagement: RoundsManagement | null;
+}> {
   const view = resolveJudgeView(viewParam);
   const judgeHasClosedFa = current.judge?.faFormStatus === "CLOSED";
 
   if (view === "FA") {
     const response = await stagedFlowService.getFa(stageId);
     const fa = response.data ?? null;
-    return { summary: fa?.stage ?? current, fa, round: null };
+    return { summary: fa?.stage ?? current, fa, round: null, roundsManagement: null };
   }
 
   if (view != null) {
     const response = await stagedFlowService.getRoundByType(stageId, view);
     const round = response.data ?? null;
-    return { summary: round?.stage ?? current, fa: null, round };
+    return { summary: round?.stage ?? current, fa: null, round, roundsManagement: null };
+  }
+
+  if (current.status === "JUDGING_CLOSED") {
+    const response = await stagedFlowService.getRoundsManagement(stageId);
+    const roundsManagement = response.data ?? null;
+    return {
+      summary: roundsManagement?.stage ?? current,
+      fa: null,
+      round: null,
+      roundsManagement,
+    };
   }
 
   if (current.status === "JUDGING_STARTED") {
     const response = await stagedFlowService.getFa(stageId);
     const fa = response.data ?? null;
-    return { summary: fa?.stage ?? current, fa, round: null };
+    return { summary: fa?.stage ?? current, fa, round: null, roundsManagement: null };
   }
 
   if (judgeHasClosedFa && current.status === "FA_CONSOLIDATED") {
     const response = await stagedFlowService.getFa(stageId);
     const fa = response.data ?? null;
-    return { summary: fa?.stage ?? current, fa, round: null };
+    return { summary: fa?.stage ?? current, fa, round: null, roundsManagement: null };
   }
 
   if (JUDGE_ROUND_STATUSES.includes(current.status)) {
     const response = await stagedFlowService.getRound(stageId);
     const round = response.data ?? null;
-    return { summary: round?.stage ?? current, fa: null, round };
+    return { summary: round?.stage ?? current, fa: null, round, roundsManagement: null };
   }
 
   if (judgeHasClosedFa) {
     const response = await stagedFlowService.getFa(stageId);
     const fa = response.data ?? null;
-    return { summary: fa?.stage ?? current, fa, round: null };
+    return { summary: fa?.stage ?? current, fa, round: null, roundsManagement: null };
   }
 
-  return { summary: current, fa: null, round: null };
+  return { summary: current, fa: null, round: null, roundsManagement: null };
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -222,6 +240,7 @@ export default function StaffCategoryPage() {
         setSummary(summaryData);
         setFa(faData);
         setRound(null);
+        setRoundsManagement(null);
         return;
       }
 
@@ -255,6 +274,7 @@ export default function StaffCategoryPage() {
         setSummary(summaryData);
         setFa(null);
         setRound(roundData);
+        setRoundsManagement(null);
         return;
       }
 
@@ -306,6 +326,8 @@ export default function StaffCategoryPage() {
         setSummary(management.summary);
         setManagement(management);
         setRoundsManagement(roundsData);
+        setFa(null);
+        setRound(null);
         return;
       }
 
@@ -329,6 +351,9 @@ export default function StaffCategoryPage() {
 
         setSummary(current);
         setChecks(checksResponse.data ?? []);
+        setFa(null);
+        setRound(null);
+        setRoundsManagement(null);
         return;
       }
 
@@ -353,6 +378,7 @@ export default function StaffCategoryPage() {
         setSummary(workspace.summary);
         setFa(workspace.fa);
         setRound(workspace.round);
+        setRoundsManagement(workspace.roundsManagement);
       }
     } catch (error) {
       if (!silent) {
@@ -557,6 +583,7 @@ export default function StaffCategoryPage() {
     ] as StagedCategory["status"][]).includes(
       summary.status
     );
+  const judgeOfficialF2 = roundsManagement ? buildOfficialF2Results(roundsManagement.rounds) : null;
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -810,6 +837,27 @@ export default function StaffCategoryPage() {
             <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
               El Director Técnico cerró esta categoría sin ejemplares premiables.
             </p>
+          </section>
+        )}
+
+        {currentUser?.role === "JUDGE" && summary.status === "JUDGING_CLOSED" && !fa && !round && (
+          <section className="mt-4 rounded-lg border border-slate-200 bg-white p-5">
+            {judgeOfficialF2 ? (
+              <OfficialResultBoard
+                results={judgeOfficialF2.results}
+                desertedResults={judgeOfficialF2.desertedResults}
+                showPodium
+                title="Resultado oficial"
+                forceOfficialStatus
+              />
+            ) : (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-6 py-8 text-center">
+                <p className="text-base font-semibold text-slate-900">Resultado oficial</p>
+                <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
+                  Aún no hay un resultado F2 consolidado para mostrar.
+                </p>
+              </div>
+            )}
           </section>
         )}
 

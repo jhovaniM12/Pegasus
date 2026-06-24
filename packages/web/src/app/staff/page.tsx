@@ -690,6 +690,7 @@ export default function StaffPage() {
                     <JudgeFormatActions
                       stageId={item.stageId}
                       formats={item.judge!.formats}
+                      officialResultAvailable={item.status === "JUDGING_CLOSED"}
                       onStartFa={() => setStartFaTarget(item)}
                       onStartRound={(format) => {
                         if (format.key === "F1" || format.key === "F2" || format.key === "TIE_BREAK") {

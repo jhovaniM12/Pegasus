@@ -16,6 +16,7 @@ type OfficialResultBoardProps = {
   note?: string;
   provisionalLabel?: string;
   provisionalVariant?: "neutral" | "tieBreak";
+  forceOfficialStatus?: boolean;
 };
 
 const POSITION_STYLES = {
@@ -148,11 +149,13 @@ function StatusBadge({
   desertedRow,
   provisionalLabel,
   provisionalVariant,
+  forceOfficialStatus,
 }: {
   row?: RoundResult;
   desertedRow?: DesertedRoundResult;
   provisionalLabel: string;
   provisionalVariant: "neutral" | "tieBreak";
+  forceOfficialStatus: boolean;
 }) {
   if (desertedRow && !row) {
     return (
@@ -161,18 +164,18 @@ function StatusBadge({
       </span>
     );
   }
+  if (row && (forceOfficialStatus || row.status === "FINAL")) {
+    return (
+      <span className="inline-flex rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+        Oficial
+      </span>
+    );
+  }
   if (row?.status === "TIED") {
     return (
       <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
         <AlertTriangle className="size-3" />
         Empate
-      </span>
-    );
-  }
-  if (row?.status === "FINAL") {
-    return (
-      <span className="inline-flex rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-        Oficial
       </span>
     );
   }
@@ -199,6 +202,7 @@ export function OfficialResultBoard({
   note,
   provisionalLabel = "Provisional",
   provisionalVariant = "neutral",
+  forceOfficialStatus = false,
 }: OfficialResultBoardProps) {
   if (results.length === 0) {
     return (
@@ -258,7 +262,7 @@ export function OfficialResultBoard({
               if (!row && !desertedRow) return null;
 
               const circleStyle = positionCircleStyle(position);
-              const isTied = row?.status === "TIED";
+              const isTied = row?.status === "TIED" && !forceOfficialStatus;
 
               return (
                 <tr
@@ -323,6 +327,7 @@ export function OfficialResultBoard({
                       desertedRow={desertedRow}
                       provisionalLabel={provisionalLabel}
                       provisionalVariant={provisionalVariant}
+                      forceOfficialStatus={forceOfficialStatus}
                     />
                   </td>
                 </tr>

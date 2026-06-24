@@ -59,6 +59,7 @@ function formatButtonClass(format: JudgeFormat): string {
 type JudgeFormatActionsProps = {
   stageId: string;
   formats: JudgeFormat[];
+  officialResultAvailable?: boolean;
   onStartFa?: () => void;
   onStartRound?: (format: JudgeFormat) => void;
 };
@@ -75,12 +76,20 @@ function shouldStartRound(format: JudgeFormat): boolean {
   );
 }
 
-export function JudgeFormatActions({ stageId, formats, onStartFa, onStartRound }: JudgeFormatActionsProps) {
+export function JudgeFormatActions({
+  stageId,
+  formats,
+  officialResultAvailable = false,
+  onStartFa,
+  onStartRound,
+}: JudgeFormatActionsProps) {
   const visibleFormats = formats.filter(
-    (format) => format.formStatus !== "NOT_AVAILABLE" || format.key !== "TIE_BREAK"
+    (format) =>
+      (format.formStatus !== "NOT_AVAILABLE" || format.key !== "TIE_BREAK") &&
+      !(officialResultAvailable && format.key === "TIE_BREAK")
   );
 
-  if (visibleFormats.length === 0) {
+  if (visibleFormats.length === 0 && !officialResultAvailable) {
     return null;
   }
 
@@ -147,6 +156,16 @@ export function JudgeFormatActions({ stageId, formats, onStartFa, onStartRound }
           </Button>
         );
       })}
+      {officialResultAvailable && (
+        <Button
+          className="w-full rounded-md bg-slate-800 text-white hover:bg-slate-900"
+          nativeButton={false}
+          render={<Link href={`/staff/categories/${stageId}`} />}
+        >
+          <Eye className="size-4" />
+          Ver resultado oficial
+        </Button>
+      )}
     </div>
   );
 }

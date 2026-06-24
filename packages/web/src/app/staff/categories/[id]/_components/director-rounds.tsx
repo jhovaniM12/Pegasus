@@ -10,6 +10,7 @@ import type {
   StagedCategory,
   TieBreakTestType,
 } from "@/types/staged-flow";
+import { buildOfficialF2Results } from "./official-f2-results";
 import { OfficialResultBoard } from "./official-result-board";
 import { TieBreakPanel, type TieBlockInfo } from "./tie-break-panel";
 
@@ -344,12 +345,14 @@ export function DirectorRounds({
 
   // Resultado oficial cerrado.
   if (status === "JUDGING_CLOSED" && f2) {
+    const officialF2 = buildOfficialF2Results(rounds);
     return (
       <OfficialResultBoard
-        results={f2.results}
-        desertedResults={f2.desertedResults}
+        results={officialF2?.results ?? f2.results}
+        desertedResults={officialF2?.desertedResults ?? f2.desertedResults}
         showPodium
         title="Resultado oficial"
+        forceOfficialStatus
       />
     );
   }
