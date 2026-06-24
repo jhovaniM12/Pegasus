@@ -28,26 +28,28 @@ const MAX_F2_POSITIONS = 5;
 function assignWithCascade(
   assignments: Array<{ participantId: string; position: number }>,
   participantId: string,
-  targetPosition: number
+  targetPosition: number,
+  allowedPositions: number[]
 ): Array<{ participantId: string; position: number }> {
   const without = assignments.filter((a) => a.participantId !== participantId);
+  const allowedSet = new Set(allowedPositions);
+  const maxPosition = allowedPositions.at(-1) ?? MAX_F2_POSITIONS;
   const targetIsOccupied = without.some((a) => a.position === targetPosition);
   const shifted = targetIsOccupied
     ? without.map((a) =>
         a.position >= targetPosition ? { ...a, position: a.position + 1 } : a
       )
     : without;
-  const bounded = shifted.filter((a) => a.position <= MAX_F2_POSITIONS);
+  const bounded = shifted.filter((a) => a.position <= maxPosition && allowedSet.has(a.position));
   return [...bounded, { participantId, position: targetPosition }];
 }
 
 function computeAutoDeserted(
   assignments: Array<{ participantId: string; position: number }>,
-  totalEligible: number
+  allowedPositions: number[]
 ): number[] {
   const assignedSet = new Set(assignments.map((a) => a.position));
-  const maxPositions = Math.min(MAX_F2_POSITIONS, totalEligible);
-  return Array.from({ length: maxPositions }, (_, i) => i + 1).filter((p) => !assignedSet.has(p));
+  return allowedPositions.filter((position) => !assignedSet.has(position));
 }
 
 type JudgeRoundWorkspaceProps = {
@@ -141,6 +143,15 @@ export function JudgeRoundWorkspace({
         .sort((a, b) => a.position - b.position),
     [eligibleParticipants]
   );
+  const allowedPositions = useMemo(() => {
+    if (round.positionRange) {
+      return Array.from(
+        { length: round.positionRange.max - round.positionRange.min + 1 },
+        (_, index) => round.positionRange!.min + index
+      );
+    }
+    return Array.from({ length: Math.min(MAX_F2_POSITIONS, eligibleParticipants.length) }, (_, index) => index + 1);
+  }, [eligibleParticipants.length, round.positionRange]);
 
   const confirmDisqualify = async (participantId: string, reasonId: string) => {
     if (!editable) return;
@@ -277,25 +288,23 @@ export function JudgeRoundWorkspace({
     const participant = localParticipantsRef.current.find((item) => item.id === participantId);
     if (!participant || participant.status === "DISQUALIFIED") return;
     const currentAssignments = getCurrentAssignments();
-    const eligibleCount = localParticipantsRef.current.filter((item) => item.status === "ELIGIBLE").length;
-    const nextAssignments = assignWithCascade(currentAssignments, participantId, targetPosition);
-    persistRankingState(nextAssignments, computeAutoDeserted(nextAssignments, eligibleCount));
+    if (!allowedPositions.includes(targetPosition)) return;
+    const nextAssignments = assignWithCascade(currentAssignments, participantId, targetPosition, allowedPositions);
+    persistRankingState(nextAssignments, computeAutoDeserted(nextAssignments, allowedPositions));
   };
 
   const unassignParticipantF2 = (participantId: string) => {
     if (!editable) return;
     const currentAssignments = getCurrentAssignments();
-    const eligibleCount = localParticipantsRef.current.filter((item) => item.status === "ELIGIBLE").length;
     const nextAssignments = currentAssignments.filter((row) => row.participantId !== participantId);
-    persistRankingState(nextAssignments, computeAutoDeserted(nextAssignments, eligibleCount));
+    persistRankingState(nextAssignments, computeAutoDeserted(nextAssignments, allowedPositions));
   };
 
   const totalEligible = eligibleParticipants.length;
   const isPositionBoardRound = roundType === "F2" || roundType === "TIE_BREAK";
-  const maxPositionBoardSlots = Math.min(MAX_F2_POSITIONS, totalEligible);
   const progressLabel = isSelectionRound
     ? `${selectedIds.size} / ${round.maxSelections ?? totalEligible} seleccionados`
-    : `${assignedByParticipant.length} / ${maxPositionBoardSlots} puestos asignados`;
+    : `${assignedByParticipant.length} / ${allowedPositions.length} puestos asignados`;
 
   const canClose = isSelectionRound || isPositionBoardRound;
 
@@ -423,6 +432,7 @@ export function JudgeRoundWorkspace({
               editable={editable}
               onAssignToPosition={assignParticipantToPosition}
               onUnassign={unassignParticipantF2}
+              allowedPositions={allowedPositions}
               onLocalUpdate={(updated) => {
                 latestConfirmedRoundRef.current = updated;
                 localParticipantsRef.current = updated.participants;

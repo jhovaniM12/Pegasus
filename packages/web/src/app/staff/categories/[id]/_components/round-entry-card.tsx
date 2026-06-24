@@ -27,6 +27,7 @@ export type F2RoundEntryCardProps = RoundEntryCardBaseProps & {
   variant: "f2";
   assignedPosition: number | null;
   occupiedPositions: number[];
+  allowedPositions: number[];
   awardDistinctives: AwardDistinctive[];
   onAssignToPosition: (participantId: string, position: number) => void;
   onUnassign: (participantId: string) => void;
@@ -89,7 +90,7 @@ export function RoundEntryCard(props: RoundEntryCardProps) {
   const disqualified = participant.status === "DISQUALIFIED";
 
   if (variant === "f2") {
-    const { assignedPosition, occupiedPositions, awardDistinctives, onAssignToPosition, onUnassign } = props;
+    const { assignedPosition, occupiedPositions, allowedPositions, awardDistinctives, onAssignToPosition, onUnassign } = props;
     const occupiedSet = new Set(occupiedPositions);
 
     return (
@@ -211,7 +212,7 @@ export function RoundEntryCard(props: RoundEntryCardProps) {
           </div>
         ) : (
           <div className={cn("flex gap-1.5", !editable && "opacity-80")}>
-            {Array.from({ length: MAX_POSITIONS }, (_, i) => i + 1).map((pos) => {
+            {(allowedPositions.length > 0 ? allowedPositions : Array.from({ length: MAX_POSITIONS }, (_, i) => i + 1)).map((pos) => {
               const isActive = assignedPosition === pos;
               const activeStyle = getPositionActiveStyle(pos, awardDistinctives);
               return (

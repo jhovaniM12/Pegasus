@@ -199,6 +199,7 @@ export type RoundState = {
   round: { id: string; roundType: RoundType; sequence: number; status: RoundStatus };
   form: { id: string; status: RoundFormStatus; closedAt: string | null; desertedPositions: number[] } | null;
   maxSelections: number | null;
+  positionRange: { min: number; max: number } | null;
   availableReminders: RoundAvailableReminder[];
   reminderHistory: RoundReminderHistoryItem[];
   disqualificationReasons: DisqualificationReason[];

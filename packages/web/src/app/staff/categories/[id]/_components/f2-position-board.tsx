@@ -16,6 +16,7 @@ type F2PositionBoardProps = {
   editable: boolean;
   onAssignToPosition: (participantId: string, position: number) => void;
   onUnassign: (participantId: string) => void;
+  allowedPositions: number[];
   onLocalUpdate: (round: RoundState) => void;
   onOpenDisqualify: (participant: RoundParticipant) => void;
 };
@@ -26,6 +27,7 @@ export function F2PositionBoard({
   editable,
   onAssignToPosition,
   onUnassign,
+  allowedPositions,
   onLocalUpdate,
   onOpenDisqualify,
 }: F2PositionBoardProps) {
@@ -96,6 +98,7 @@ export function F2PositionBoard({
             editable={editable}
             assignedPosition={participant.position}
             occupiedPositions={occupiedPositions}
+            allowedPositions={allowedPositions}
             awardDistinctives={awardDistinctives}
             onAssignToPosition={onAssignToPosition}
             onUnassign={onUnassign}
@@ -118,6 +121,7 @@ export function F2PositionBoard({
                 editable={false}
                 assignedPosition={null}
                 occupiedPositions={occupiedPositions}
+                allowedPositions={allowedPositions}
                 awardDistinctives={awardDistinctives}
                 onAssignToPosition={() => undefined}
                 onUnassign={() => undefined}
