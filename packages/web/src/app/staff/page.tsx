@@ -706,7 +706,7 @@ export default function StaffPage() {
                       <action.icon className="size-4" />
                       {action.label}
                     </Button>
-                  ) : showCategoryAction ? (
+                  ) : showCategoryAction && action.kind === "navigate" ? (
                     <Button
                       className={`mt-5 w-full rounded-md ${actionButtonClass(action.color)}`}
                       nativeButton={false}
