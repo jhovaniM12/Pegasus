@@ -6,7 +6,8 @@ Este documento lista pruebas manuales para validar que la consolidación F2 est�
 - Mayoría de primeros puestos prevalece para el primer lugar.
 - Puestos desiertos solo por mayoría de jueces.
 - Un ejemplar premiado debe haber sido considerado por mínimo 2 de 3 jueces, o 3 de 5 jueces.
-- Si el quinto puesto no fue declarado desierto por mayoría y hay ejemplares tomados en cuenta para quinto, no debe quedar desierto automáticamente.
+- El quinto puesto también exige consideración mínima. Un voto real de quinto no basta para recibir cinta.
+- Si varios candidatos válidos fueron seleccionados para quinto y ningún juez declaró quinto desierto, debe abrirse desempate de quinto.
 
 ## Preparación general
 
@@ -17,9 +18,23 @@ Este documento lista pruebas manuales para validar que la consolidación F2 est�
 5. Verificar la tabla `Resultado F2`: puesto, distintivo, suma, primeros y estado.
 6. Si el resultado no cambia después de corregir lógica, abrir una ronda/categoría nueva o reconsolidar limpiando el resultado previo, porque los resultados consolidados quedan persistidos.
 
-## Caso 1: captura reportada, quinto no debe quedar desierto
+En todos los casos con tres jueces:
 
-Objetivo: validar la nota especial del quinto puesto.
+- El castigo por no considerar a un ejemplar es `6`.
+- La consideración mínima para recibir cinta es `2` jueces.
+- Un ejemplar con `1` solo voto real no puede ocupar ningún puesto premiable.
+
+Checklist común:
+
+- Revisar que cada tarjeta cerrada muestre exactamente lo que digitó el juez.
+- Revisar que `Suma` coincida con puestos reales + castigos.
+- Revisar que `1.os` cuente solo primeros puestos reales.
+- Revisar que los ejemplares sin cinta queden desde puesto 6 en adelante.
+- Intentar cerrar resultado oficial cuando exista empate bloqueante; debe impedirlo.
+
+## Caso 1: captura reportada, quinto debe quedar desierto
+
+Objetivo: validar que el quinto puesto no se asigna a un ejemplar que no cumple consideración mínima.
 
 Tarjetas:
 
@@ -39,15 +54,44 @@ Cálculo esperado:
 | #1 | 13 | 1 | Sin cinta |
 | #8 | 14 | 1 | Sin cinta |
 | #6 | 15 | 2 | 4.º |
-| #9 | 17 | 1 | 5.º por voto real de quinto, no desierto |
+| #9 | 17 | 1 | Sin cinta |
 
 Validaciones:
 
+- El puesto 1 debe ser `#2`.
+- Los puestos 2 y 3 deben ser `#3` y `#4` en empate bloqueante.
 - El puesto 4 debe ser `#6`.
-- El puesto 5 debe ser `#9`.
-- No deben aparecer 4.º ni 5.º como desiertos.
-- Debe marcar empate bloqueante entre `#3` y `#4`.
+- El puesto 5 debe quedar desierto.
+- `#9` no debe ocupar el quinto puesto porque solo fue considerado por 1 juez.
+- No debe aparecer 4.º como desierto.
 - El sistema debe permitir abrir desempate para resolver el 2.º/3.º.
+- El resultado oficial no debe poder cerrarse antes de resolver el empate `#3/#4`.
+
+## Caso 1B: desempate especial para quinto
+
+Objetivo: validar que la nota especial del quinto genera desempate, no asignación automática.
+
+Tarjetas:
+
+| Juez | 1.º | 2.º | 3.º | 4.º | 5.º |
+|---|---|---|---|---|---|
+| J1 | #1 | #2 | #3 | #4 | #5 |
+| J2 | #1 | #2 | #3 | #4 | #6 |
+| J3 | #1 | #2 | #3 | #5 | #6 |
+
+Cálculo esperado:
+
+- `#4` queda 4.º porque cumple consideración mínima y tiene mejor suma que los candidatos restantes.
+- `#5` y `#6` fueron seleccionados para quinto por jueces diferentes.
+- `#5` y `#6` cumplen consideración mínima.
+- Ningún juez declaró explícitamente quinto desierto.
+
+Resultado esperado:
+
+- `#5` y `#6` deben quedar marcados como empate/desempate bloqueante para quinto.
+- No debe existir fila de 5.º desierto.
+- El estado de ambos candidatos debe indicar empate.
+- El sistema no debe cerrar resultado oficial hasta resolver ese desempate.
 
 ## Caso 2: desierto explícito por mayoría
 
@@ -66,6 +110,25 @@ Resultado esperado:
 - 3.º debe quedar desierto con 2 votos.
 - `#3` debe bajar al siguiente puesto disponible.
 - La fila desierta debe mostrar distintivo de tercer puesto desierto.
+
+## Caso 2B: quinto desierto explícito por mayoría
+
+Objetivo: validar que el 5.º queda desierto si la mayoría de jueces lo declara desierto, aunque un juez tenga candidato para quinto.
+
+Tarjetas:
+
+| Juez | 1.º | 2.º | 3.º | 4.º | 5.º |
+|---|---|---|---|---|---|
+| J1 | #1 | #2 | #3 | #4 | Desierto |
+| J2 | #1 | #2 | #3 | #4 | Desierto |
+| J3 | #1 | #2 | #3 | #4 | #5 |
+
+Resultado esperado:
+
+- El 5.º debe quedar desierto con `2` votos.
+- `#5` no debe recibir quinto puesto.
+- `#5` debe aparecer sin cinta desde el puesto 6 en adelante.
+- El resultado no debe quedar bloqueado solo por este desierto explícito.
 
 ## Caso 3: un juez declara desierto, no hay mayoría
 
@@ -100,6 +163,7 @@ Resultado esperado:
 
 - `#8` no debe recibir 1.º aunque su voto de J1 sea alto, porque solo fue considerado por un juez.
 - El sistema debe saltar `#8` para premiación y seguir con el siguiente ejemplar elegible.
+- Ningún puesto premiable debe ser ocupado por ejemplares con un solo voto real.
 
 ## Caso 5: mayoría de primeros puestos prevalece
 
@@ -135,6 +199,7 @@ Resultado esperado:
 - Los ejemplares empatados por suma deben aparecer con estado `Empate`.
 - El Director Técnico no debe poder cerrar resultado oficial hasta resolver el empate.
 - Debe estar disponible la acción para abrir desempate.
+- Después de resolver el desempate, el resultado debe mantener trazabilidad del F2 original y permitir cierre oficial si no quedan otros empates bloqueantes.
 
 ## Caso 7: empate fuera de premiación no bloquea cierre
 
@@ -172,6 +237,7 @@ Resultado esperado:
 - `#1` debe ganar 1.º por tres primeros puestos.
 - El 2.º debe quedar desierto si tres jueces lo declararon desierto.
 - `#2` no debe recibir 2.º si no alcanza la regla aplicable por desierto mayoritario.
+- La consideración mínima para cualquier cinta debe ser 3 jueces.
 
 ## Validaciones de regresión en UI
 
@@ -183,6 +249,8 @@ Revisar en cada prueba:
 - Los ejemplares sin cinta deben aparecer desde el puesto 6 o posterior.
 - La columna `Suma` debe reflejar castigo `6` para cada juez que no tuvo en cuenta al ejemplar.
 - La columna `1.os` debe contar solo primeros lugares reales.
+- Un único voto real de 5.º no debe generar cinta de quinto.
+- El desempate especial de quinto debe verse como empate bloqueante, no como resultado final cerrable.
 
 ## Comandos automatizados recomendados
 
@@ -190,4 +258,3 @@ Revisar en cada prueba:
 pnpm --filter @pegasus/functions exec vitest run src/services/judging/scoring.test.ts
 pnpm --filter @pegasus/functions build
 ```
-

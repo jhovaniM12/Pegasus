@@ -828,7 +828,7 @@ function getBlockingTiedBlocks(results: JudgingRoundResult[]): JudgingRoundResul
     byScore.set(result.scoreValue, group);
   }
 
-  return [...byScore.values()]
+  const scoreBlocks = [...byScore.values()]
     .filter((group) => {
       if (group.length < 2) return false;
       const startPosition = Math.min(...group.map((row) => row.finalPosition ?? Number.MAX_SAFE_INTEGER));
@@ -839,6 +839,36 @@ function getBlockingTiedBlocks(results: JudgingRoundResult[]): JudgingRoundResul
       const startB = Math.min(...b.map((row) => row.finalPosition ?? Number.MAX_SAFE_INTEGER));
       return startA - startB;
     });
+
+  const blocksByKey = new Map<string, JudgingRoundResult[]>();
+  for (const block of scoreBlocks) {
+    blocksByKey.set(tieBlockKey(block.map((row) => row.judgingParticipantId)), block);
+  }
+
+  const tiedByPosition = results
+    .filter((result) => result.status === "TIED" && result.finalPosition != null)
+    .sort((a, b) => (a.finalPosition ?? 0) - (b.finalPosition ?? 0));
+  let current: JudgingRoundResult[] = [];
+  for (const result of tiedByPosition) {
+    const previous = current.at(-1);
+    if (!previous || (result.finalPosition ?? 0) === (previous.finalPosition ?? 0) + 1) {
+      current.push(result);
+    } else {
+      if (current.length > 1 && Math.min(...current.map((row) => row.finalPosition ?? Number.MAX_SAFE_INTEGER)) <= MAX_AWARD_POSITIONS) {
+        blocksByKey.set(tieBlockKey(current.map((row) => row.judgingParticipantId)), current);
+      }
+      current = [result];
+    }
+  }
+  if (current.length > 1 && Math.min(...current.map((row) => row.finalPosition ?? Number.MAX_SAFE_INTEGER)) <= MAX_AWARD_POSITIONS) {
+    blocksByKey.set(tieBlockKey(current.map((row) => row.judgingParticipantId)), current);
+  }
+
+  return [...blocksByKey.values()].sort((a, b) => {
+    const startA = Math.min(...a.map((row) => row.finalPosition ?? Number.MAX_SAFE_INTEGER));
+    const startB = Math.min(...b.map((row) => row.finalPosition ?? Number.MAX_SAFE_INTEGER));
+    return startA - startB;
+  });
 }
 
 async function loadTieBreakParticipantIds(manager: EntityManager, roundId: string): Promise<string[]> {

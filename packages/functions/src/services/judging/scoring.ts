@@ -209,19 +209,23 @@ export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult
     }
   }
 
+  const fifthPlaceDesertedVotes = desertedVoteCountByPosition.get(MAX_AWARD_POSITIONS) ?? 0;
+
   // Asignación de puestos (Reglamento FEDEQUINAS, notas aclaratorias 5.b, 5.c y 5.e):
   // 1) Respetar desiertos explícitos por mayoría de jueces.
   // 2) En cada puesto premiable, recorrer candidatos en orden de mérito hasta encontrar
   //    uno con consideración mínima (cardsCount >= threshold). Los que no cumplen quedan
   //    diferidos (sin cinta) y no consumen el puesto.
-  // 3) Para el quinto puesto, si no hay mayoría declarando desierto y hay votos reales de
-  //    quinto para ejemplares no premiados, esos ejemplares se toman en cuenta antes de
-  //    declarar desierto (nota 5.e).
-  // 4) Desierto por agotamiento: solo si no queda ningún candidato para ese puesto.
+  // 3) Para el quinto puesto, si ningún juez lo declaró desierto y varios jueces
+  //    seleccionaron ejemplares diferentes que cumplen consideración mínima, se marca
+  //    empate bloqueante para quinto en vez de asignarlo automáticamente (nota 5.e).
+  // 4) Desierto por agotamiento: si no queda ningún candidato que cumpla consideración
+  //    mínima para ese puesto.
   // 5) Ejemplares no premiables se reubican desde el puesto 6 (sin cinta).
   const ranked: Array<Aggregate & { finalPosition: number }> = [];
   const deferred: Aggregate[] = [];
   const desertedResults: DesertedPositionResult[] = [];
+  const forcedFifthTieIds = new Set<string>();
   let pointer = 0;
 
   for (let position = 1; position <= MAX_AWARD_POSITIONS; position += 1) {
@@ -229,6 +233,31 @@ export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult
     if (explicitVotes != null) {
       desertedResults.push({ finalPosition: position, votesCount: explicitVotes });
       continue;
+    }
+
+    if (position === MAX_AWARD_POSITIONS && fifthPlaceDesertedVotes === 0 && fifthPlaceVoteIds.size > 1) {
+      const rankedIds = new Set(ranked.map((participant) => participant.participantId));
+      const fifthPlaceCandidates = ordered.filter(
+        (candidate) =>
+          fifthPlaceVoteIds.has(candidate.participantId) &&
+          !rankedIds.has(candidate.participantId) &&
+          candidate.cardsCount >= threshold
+      );
+
+      if (fifthPlaceCandidates.length > 1) {
+        const fifthCandidateIds = new Set(fifthPlaceCandidates.map((candidate) => candidate.participantId));
+        let nextFifthPosition = position;
+        for (const candidate of fifthPlaceCandidates) {
+          ranked.push({ ...candidate, finalPosition: nextFifthPosition++ });
+          forcedFifthTieIds.add(candidate.participantId);
+        }
+        for (let index = deferred.length - 1; index >= 0; index -= 1) {
+          if (fifthCandidateIds.has(deferred[index].participantId)) {
+            deferred.splice(index, 1);
+          }
+        }
+        continue;
+      }
     }
 
     let assigned = false;
@@ -245,33 +274,14 @@ export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult
     }
 
     if (!assigned) {
-      if (position === MAX_AWARD_POSITIONS && fifthPlaceVoteIds.size > 0) {
-        const rankedIds = new Set(ranked.map((participant) => participant.participantId));
-        const fifthPlaceCandidates = ordered.filter(
-          (candidate) => fifthPlaceVoteIds.has(candidate.participantId) && !rankedIds.has(candidate.participantId)
-        );
-
-        if (fifthPlaceCandidates.length > 0) {
-          const fifthCandidateIds = new Set(fifthPlaceCandidates.map((candidate) => candidate.participantId));
-          let nextFifthPosition = position;
-          for (const candidate of fifthPlaceCandidates) {
-            ranked.push({ ...candidate, finalPosition: nextFifthPosition++ });
-          }
-          for (let index = deferred.length - 1; index >= 0; index -= 1) {
-            if (fifthCandidateIds.has(deferred[index].participantId)) {
-              deferred.splice(index, 1);
-            }
-          }
-          continue;
-        }
-      }
-
       desertedResults.push({ finalPosition: position, votesCount: 0 });
     }
   }
 
   while (pointer < ordered.length) {
-    deferred.push(ordered[pointer]);
+    if (!forcedFifthTieIds.has(ordered[pointer].participantId)) {
+      deferred.push(ordered[pointer]);
+    }
     pointer += 1;
   }
 
@@ -315,6 +325,19 @@ export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult
       // Bloquea cierre si afecta posiciones premiables: cubre empates dentro del top 5
       // y empates que cruzan el quinto puesto (5-6); excluye empates 6-7+.
       blocksClosure: startPosition <= MAX_AWARD_POSITIONS
+    });
+  }
+  if (forcedFifthTieIds.size > 1) {
+    const participantIds = [...forcedFifthTieIds];
+    const positions = participantIds.map((id) => positionById.get(id) ?? Number.MAX_SAFE_INTEGER);
+    tiedGroups.push({
+      participantIds,
+      positionSum: Math.min(
+        ...participants.filter((participant) => forcedFifthTieIds.has(participant.participantId)).map((p) => p.positionSum)
+      ),
+      startPosition: Math.min(...positions),
+      endPosition: Math.max(...positions),
+      blocksClosure: true
     });
   }
 
