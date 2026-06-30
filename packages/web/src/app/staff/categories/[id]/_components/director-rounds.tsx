@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { CheckCheck, CheckCircle2, Clock, Flag, Gavel, Trophy } from "lucide-react";
+import { getBlockingTiedBlocks, tieBlockKey } from "@pegasus/core/judging/tie-blocks";
 import { Button } from "@/components/ui/button";
 import { stagedFlowService } from "@/services/staged-flow.service";
 import type {
@@ -34,32 +35,6 @@ function latestOfType(rounds: RoundManagementItem[], type: RoundManagementItem["
 
 function allFormsClosed(round: RoundManagementItem | null): boolean {
   return Boolean(round && round.forms.length > 0 && round.forms.every((form) => form.status === "CLOSED"));
-}
-
-function tieBlockKey(participantIds: string[]): string {
-  return [...participantIds].sort().join("|");
-}
-
-function getBlockingTieBlocks(results: RoundResult[]): RoundResult[][] {
-  const byScore = new Map<number, RoundResult[]>();
-  for (const result of results) {
-    if (result.status !== "TIED") continue;
-    const group = byScore.get(result.scoreValue) ?? [];
-    group.push(result);
-    byScore.set(result.scoreValue, group);
-  }
-
-  return [...byScore.values()]
-    .filter((group) => {
-      if (group.length < 2) return false;
-      const startPosition = Math.min(...group.map((row) => row.finalPosition ?? Number.MAX_SAFE_INTEGER));
-      return startPosition <= 5;
-    })
-    .sort((a, b) => {
-      const startA = Math.min(...a.map((row) => row.finalPosition ?? Number.MAX_SAFE_INTEGER));
-      const startB = Math.min(...b.map((row) => row.finalPosition ?? Number.MAX_SAFE_INTEGER));
-      return startA - startB;
-    });
 }
 
 function getResolvedTieBlockKeys(rounds: RoundManagementItem[]): Set<string> {
@@ -271,7 +246,7 @@ export function DirectorRounds({
 
     const resolvedTieBlockKeys = getResolvedTieBlockKeys(rounds);
     const pendingTieBlock =
-      getBlockingTieBlocks(f2.results).find(
+      getBlockingTiedBlocks(f2.results, (row) => row.participantId).find(
         (block) => !resolvedTieBlockKeys.has(tieBlockKey(block.map((row) => row.participantId)))
       ) ?? null;
 
