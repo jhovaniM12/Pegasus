@@ -10,6 +10,7 @@ import {
   FairEntry,
   FairResult,
   FairStaff,
+  Horse,
   DisqualificationReason,
   FaConsolidatedResult,
   FaJudgeEntryDecision,
@@ -32,6 +33,9 @@ import {
   Person,
   Role,
   Sex,
+  SyncBatch,
+  SyncError,
+  SyncMapping,
   Title,
   User,
   VeterinaryCheck,
@@ -51,6 +55,8 @@ import {
   AddNotificationOutboxAttemptCount1717430400020,
   AddNotificationDispatchLocking1717430400021,
   AddNotificationPublishIdempotency1717430400022,
+  CreateHorsesAndLinkFairEntries1717430400023,
+  CreateSyncControlTables1717430400024,
   CreateFairEntriesTable1717430400004,
   CreateFairResultsTable1717430400008,
   CreateFairStaffTable1717430400007,
@@ -96,6 +102,7 @@ export const AppDataSource = new DataSource({
     FairEntry,
     FairResult,
     FairStaff,
+    Horse,
     DisqualificationReason,
     FaConsolidatedResult,
     FaJudgeEntryDecision,
@@ -118,6 +125,9 @@ export const AppDataSource = new DataSource({
     Person,
     Role,
     Sex,
+    SyncBatch,
+    SyncError,
+    SyncMapping,
     Title,
     User,
     VeterinaryCheck,
@@ -146,7 +156,9 @@ export const AppDataSource = new DataSource({
     AddRoundDisqualificationTraceability1717430400019,
     AddNotificationOutboxAttemptCount1717430400020,
     AddNotificationDispatchLocking1717430400021,
-    AddNotificationPublishIdempotency1717430400022
+    AddNotificationPublishIdempotency1717430400022,
+    CreateHorsesAndLinkFairEntries1717430400023,
+    CreateSyncControlTables1717430400024
   ]
 });
 

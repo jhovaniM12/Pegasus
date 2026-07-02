@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Calendar, Home, List, Settings, Users } from "lucide-react";
+import { Bell, Calendar, DatabaseZap, Home, List, Settings, Shield, Users } from "lucide-react";
 
 import { NavMain } from "@/components/layout/nav-main";
 import { NavUser } from "@/components/layout/nav-user";
@@ -30,6 +30,11 @@ const navigationItems = [
     icon: Users,
   },
   {
+    title: "Ejemplares",
+    url: "/horses",
+    icon: Shield,
+  },
+  {
     title: "Categorías",
     url: "/categories",
     icon: List,
@@ -38,6 +43,11 @@ const navigationItems = [
     title: "Recordatorios",
     url: "/recordatorios",
     icon: Bell,
+  },
+  {
+    title: "Sincronizador",
+    url: "/sincronizador",
+    icon: DatabaseZap,
   },
   {
     title: "Configuración",

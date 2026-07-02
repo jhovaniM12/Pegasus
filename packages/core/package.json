@@ -35,6 +35,7 @@
     "db:seed:grades": "tsx src/scripts/seed-grades-fedequinas.ts",
     "db:seed:categories": "tsx src/scripts/seed-categories-fedequinas.ts",
     "db:seed:fairs": "tsx src/scripts/seed-fairs-fedequinas.ts",
+    "db:seed:horses": "tsx src/scripts/seed-horses-fedequinas.ts",
     "db:seed:fair-entries": "tsx src/scripts/seed-fair-entries-fedequinas.ts",
     "db:seed:people": "tsx src/scripts/seed-people-fedequinas.ts",
     "db:seed:fair-staff": "tsx src/scripts/seed-fair-staff-fedequinas.ts",
