@@ -332,7 +332,15 @@ function validateRunFile(file: SyncRunFile): void {
     throw new BadRequestError("El archivo CSV supera el tamaño máximo permitido de 10 MB.");
   }
 
-  if (file.type && !["text/csv", "application/csv", "application/vnd.ms-excel"].includes(file.type)) {
+  const allowedMimeTypes = new Set([
+    "text/csv",
+    "application/csv",
+    "application/vnd.ms-excel",
+    "text/plain",
+    "application/octet-stream"
+  ]);
+
+  if (file.type && !allowedMimeTypes.has(file.type)) {
     throw new BadRequestError("El tipo MIME del archivo no es compatible con CSV.");
   }
 }
