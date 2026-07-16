@@ -1,5 +1,4 @@
 import type { Context } from "hono";
-import { waitUntil as waitUntilVercel } from "@vercel/functions";
 import { BadRequestError, ForbiddenError } from "../lib/errors.js";
 import { success } from "../lib/http.js";
 import { getSessionFromCookie } from "../lib/session.js";
@@ -75,8 +74,8 @@ function requiredParam(c: Context, name: string): string {
   return value;
 }
 
-function scheduleNotificationDispatch(c: Context): void {
-  const dispatchPromise = dispatchPendingNotifications({ limit: 50 }).catch((error) => {
+async function dispatchNotificationsAfterAction(): Promise<void> {
+  await dispatchPendingNotifications({ limit: 50 }).catch((error) => {
     console.log(
       JSON.stringify({
         level: "ERROR",
@@ -87,25 +86,6 @@ function scheduleNotificationDispatch(c: Context): void {
       })
     );
   });
-  let contextWaitUntil: ((promise: Promise<unknown>) => void) | undefined;
-
-  try {
-    contextWaitUntil = (c as unknown as { executionCtx?: { waitUntil?: (promise: Promise<unknown>) => void } })
-      .executionCtx?.waitUntil;
-  } catch {
-    contextWaitUntil = undefined;
-  }
-
-  if (contextWaitUntil) {
-    contextWaitUntil(dispatchPromise);
-    return;
-  }
-
-  try {
-    waitUntilVercel(dispatchPromise);
-  } catch {
-    void dispatchPromise;
-  }
 }
 
 export async function listStagedCategoriesController(c: Context) {
@@ -121,7 +101,7 @@ export async function getStagedCategoryController(c: Context) {
 export async function startPreRingController(c: Context) {
   const user = await getStaffUser(c);
   const result = await startPreRing(user, requiredParam(c, "id"));
-  scheduleNotificationDispatch(c);
+  await dispatchNotificationsAfterAction();
   return c.json(success(result));
 }
 
@@ -139,14 +119,14 @@ export async function updateVeterinaryCheckController(c: Context) {
 export async function closePreRingController(c: Context) {
   const user = await getStaffUser(c);
   const result = await closePreRing(user, requiredParam(c, "id"));
-  scheduleNotificationDispatch(c);
+  await dispatchNotificationsAfterAction();
   return c.json(success(result));
 }
 
 export async function startJudgingController(c: Context) {
   const user = await getStaffUser(c);
   const result = await startJudging(user, requiredParam(c, "id"));
-  scheduleNotificationDispatch(c);
+  await dispatchNotificationsAfterAction();
   return c.json(success(result));
 }
 
@@ -174,14 +154,14 @@ export async function disqualifyParticipantController(c: Context) {
   const user = await getStaffUser(c);
   const body = disqualifyParticipantSchema.parse(await c.req.json());
   const result = await disqualifyParticipant(user, requiredParam(c, "id"), requiredParam(c, "judgingParticipantId"), body.reasonId);
-  scheduleNotificationDispatch(c);
+  await dispatchNotificationsAfterAction();
   return c.json(success(result));
 }
 
 export async function closeFaController(c: Context) {
   const user = await getStaffUser(c);
   const result = await closeFa(user, requiredParam(c, "id"));
-  scheduleNotificationDispatch(c);
+  await dispatchNotificationsAfterAction();
   return c.json(success(result));
 }
 
@@ -193,7 +173,7 @@ export async function getManagementController(c: Context) {
 export async function consolidateFaController(c: Context) {
   const user = await getStaffUser(c);
   const result = await consolidateFa(user, requiredParam(c, "id"));
-  scheduleNotificationDispatch(c);
+  await dispatchNotificationsAfterAction();
   return c.json(success(result));
 }
 
@@ -202,7 +182,7 @@ export async function consolidateFaController(c: Context) {
 export async function openNextRoundController(c: Context) {
   const user = await getStaffUser(c);
   const result = await openNextRound(user, requiredParam(c, "id"));
-  scheduleNotificationDispatch(c);
+  await dispatchNotificationsAfterAction();
   return c.json(success(result));
 }
 
@@ -260,7 +240,7 @@ export async function disqualifyRoundParticipantController(c: Context) {
     requiredParam(c, "participantId"),
     body.reasonId
   );
-  scheduleNotificationDispatch(c);
+  await dispatchNotificationsAfterAction();
   return c.json(success(result));
 }
 
@@ -274,14 +254,14 @@ export async function getRoundEntryReminderHistoryController(c: Context) {
 export async function closeRoundFormController(c: Context) {
   const user = await getStaffUser(c);
   const result = await closeRoundForm(user, requiredParam(c, "id"));
-  scheduleNotificationDispatch(c);
+  await dispatchNotificationsAfterAction();
   return c.json(success(result));
 }
 
 export async function consolidateRoundController(c: Context) {
   const user = await getStaffUser(c);
   const result = await consolidateRound(user, requiredParam(c, "id"));
-  scheduleNotificationDispatch(c);
+  await dispatchNotificationsAfterAction();
   return c.json(success(result));
 }
 
@@ -289,14 +269,14 @@ export async function openTieBreakController(c: Context) {
   const user = await getStaffUser(c);
   const body = openTieBreakSchema.parse(await c.req.json());
   const result = await openTieBreak(user, requiredParam(c, "id"), body);
-  scheduleNotificationDispatch(c);
+  await dispatchNotificationsAfterAction();
   return c.json(success(result));
 }
 
 export async function closeResultsController(c: Context) {
   const user = await getStaffUser(c);
   const result = await closeResults(user, requiredParam(c, "id"));
-  scheduleNotificationDispatch(c);
+  await dispatchNotificationsAfterAction();
   return c.json(success(result));
 }
 
@@ -304,7 +284,7 @@ export async function desertCompetitionController(c: Context) {
   const user = await getStaffUser(c);
   const body = desertCompetitionSchema.parse(await c.req.json().catch(() => ({})));
   const result = await desertCompetition(user, requiredParam(c, "id"), body);
-  scheduleNotificationDispatch(c);
+  await dispatchNotificationsAfterAction();
   return c.json(success(result));
 }
 
