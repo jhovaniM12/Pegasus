@@ -101,7 +101,11 @@ function scheduleNotificationDispatch(c: Context): void {
     return;
   }
 
-  waitUntilVercel(dispatchPromise);
+  try {
+    waitUntilVercel(dispatchPromise);
+  } catch {
+    void dispatchPromise;
+  }
 }
 
 export async function listStagedCategoriesController(c: Context) {
