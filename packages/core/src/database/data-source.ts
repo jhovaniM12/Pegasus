@@ -57,6 +57,7 @@ import {
   AddNotificationPublishIdempotency1717430400022,
   CreateHorsesAndLinkFairEntries1717430400023,
   CreateSyncControlTables1717430400024,
+  RelaxNotificationOutboxIdempotency1717430400025,
   CreateFairEntriesTable1717430400004,
   CreateFairResultsTable1717430400008,
   CreateFairStaffTable1717430400007,
@@ -158,7 +159,8 @@ export const AppDataSource = new DataSource({
     AddNotificationDispatchLocking1717430400021,
     AddNotificationPublishIdempotency1717430400022,
     CreateHorsesAndLinkFairEntries1717430400023,
-    CreateSyncControlTables1717430400024
+    CreateSyncControlTables1717430400024,
+    RelaxNotificationOutboxIdempotency1717430400025
   ]
 });
 

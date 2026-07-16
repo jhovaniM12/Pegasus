@@ -26,7 +26,7 @@ export type JudgingParticipantStatus = "ELIGIBLE" | "DISQUALIFIED";
 
 export type JudgeEntryDecision = "SELECTED" | "DISCARDED" | "DISQUALIFIED";
 
-export type NotificationOutboxStatus = "PENDING" | "SENT" | "FAILED";
+export type NotificationOutboxStatus = "PENDING" | "PROCESSING" | "SENT" | "FAILED";
 
 @Unique("UQ_fair_category_stages_fair_category", ["fairId", "categoryId"])
 @Entity({ name: "fair_category_stages" })

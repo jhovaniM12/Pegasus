@@ -23,3 +23,4 @@ export { AddNotificationDispatchLocking1717430400021 } from "./1717430400021-Add
 export { AddNotificationPublishIdempotency1717430400022 } from "./1717430400022-AddNotificationPublishIdempotency.js";
 export { CreateHorsesAndLinkFairEntries1717430400023 } from "./1717430400023-CreateHorsesAndLinkFairEntries.js";
 export { CreateSyncControlTables1717430400024 } from "./1717430400024-CreateSyncControlTables.js";
+export { RelaxNotificationOutboxIdempotency1717430400025 } from "./1717430400025-RelaxNotificationOutboxIdempotency.js";

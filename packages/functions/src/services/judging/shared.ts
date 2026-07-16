@@ -9,7 +9,6 @@ import {
 } from "@pegasus/core";
 import type { EntityManager } from "typeorm";
 import { ForbiddenError, NotFoundError } from "../../lib/errors.js";
-import { deliverNotification } from "../notification-send.service.js";
 
 /**
  * Helpers compartidos del flujo de juzgamiento (prepista, FA y rondas F1/F2/desempate).
@@ -171,7 +170,7 @@ export async function queueNotification(
   }
 ): Promise<void> {
   const repo = manager.getRepository(NotificationOutbox);
-  const notification = await repo.save(
+  await repo.save(
     repo.create({
       recipientUserId: input.recipientUserId,
       recipientRole: input.recipientRole ?? null,
@@ -187,8 +186,6 @@ export async function queueNotification(
       errorMessage: null
     })
   );
-
-  await deliverNotification(manager, notification);
 }
 
 export async function queueRoleNotifications(
@@ -203,18 +200,30 @@ export async function queueRoleNotifications(
   }
 ): Promise<void> {
   const users = await getUsersByFairRole(manager, stage.fairId, roleExternalId);
+  const repo = manager.getRepository(NotificationOutbox);
 
-  for (const recipient of users) {
-    await queueNotification(manager, {
-      recipientUserId: recipient.id,
-      recipientRole: recipient.role,
-      stageId: stage.id,
-      type: input.type,
-      title: input.title,
-      body: input.body,
-      payload: input.payload
-    });
+  if (users.length === 0) {
+    return;
   }
+
+  await repo.save(
+    users.map((recipient) =>
+      repo.create({
+        recipientUserId: recipient.id,
+        recipientRole: recipient.role,
+        fairCategoryStageId: stage.id,
+        provider: "PUSHER_BEAMS",
+        type: input.type,
+        title: input.title,
+        body: input.body,
+        payload: input.payload ?? null,
+        status: "PENDING",
+        sentAt: null,
+        failedAt: null,
+        errorMessage: null
+      })
+    )
+  );
 }
 
 export function stageNotificationContext(stage: FairCategoryStage) {
