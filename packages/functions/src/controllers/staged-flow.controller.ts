@@ -87,11 +87,17 @@ function scheduleNotificationDispatch(c: Context): void {
       })
     );
   });
-  const waitUntil = (c as unknown as { executionCtx?: { waitUntil?: (promise: Promise<unknown>) => void } })
-    .executionCtx?.waitUntil;
+  let contextWaitUntil: ((promise: Promise<unknown>) => void) | undefined;
 
-  if (waitUntil) {
-    waitUntil(dispatchPromise);
+  try {
+    contextWaitUntil = (c as unknown as { executionCtx?: { waitUntil?: (promise: Promise<unknown>) => void } })
+      .executionCtx?.waitUntil;
+  } catch {
+    contextWaitUntil = undefined;
+  }
+
+  if (contextWaitUntil) {
+    contextWaitUntil(dispatchPromise);
     return;
   }
 
