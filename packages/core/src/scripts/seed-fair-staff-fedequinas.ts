@@ -16,9 +16,21 @@ const FEDEQUINAS_FAIR_STAFF: Array<{
   roleExternalId: string;
 }> = [
   {
-    externalId: "4254",
+    externalId: "manual-staff-juez-2",
+    fairExternalId: "999992036",
+    personExternalId: "manual-juez-2",
+    roleExternalId: "2"
+  },
+  {
+    externalId: "manual-staff-juez-jairo",
     fairExternalId: "999992036",
     personExternalId: "93237635",
+    roleExternalId: "2"
+  },
+  {
+    externalId: "manual-staff-juez-3",
+    fairExternalId: "999992036",
+    personExternalId: "manual-juez-3",
     roleExternalId: "2"
   }
 ];
@@ -65,7 +77,6 @@ async function main(): Promise<void> {
         select: { id: true, externalId: true }
       }),
       dataSource.getRepository(Person).find({
-        where: { sourceSystem: SOURCE_SYSTEM },
         select: { id: true, externalId: true }
       }),
       dataSource.getRepository(Role).find({

@@ -21,3 +21,5 @@ export { AddRoundDisqualificationTraceability1717430400019 } from "./17174304000
 export { AddNotificationOutboxAttemptCount1717430400020 } from "./1717430400020-AddNotificationOutboxAttemptCount.js";
 export { AddNotificationDispatchLocking1717430400021 } from "./1717430400021-AddNotificationDispatchLocking.js";
 export { AddNotificationPublishIdempotency1717430400022 } from "./1717430400022-AddNotificationPublishIdempotency.js";
+export { CreateHorsesAndLinkFairEntries1717430400023 } from "./1717430400023-CreateHorsesAndLinkFairEntries.js";
+export { CreateSyncControlTables1717430400024 } from "./1717430400024-CreateSyncControlTables.js";

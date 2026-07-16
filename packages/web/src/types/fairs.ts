@@ -27,6 +27,7 @@ export type FairDetail = {
 export type FairEntry = {
   id: string;
   registrationNumber: string;
+  horseId: string | null;
   trackPosition: number;
   riderName: string;
   riderDocumentNumber: string;
@@ -84,4 +85,3 @@ export type FairStaff = {
     name: string | null;
   };
 };
-

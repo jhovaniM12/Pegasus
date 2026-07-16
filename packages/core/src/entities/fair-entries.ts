@@ -1,7 +1,8 @@
-import { Column, Entity, JoinColumn, ManyToOne} from "typeorm";
+import { Column, Entity, JoinColumn, ManyToOne } from "typeorm";
 import { SyncableEntity } from "./base.entity.js";
 import { Fair } from "./fair.entity.js";
 import { Category } from "./category.entity.js";
+import { Horse } from "./horse.entity.js";
 
 @Entity({ name: "fair_entries" })
 export class FairEntry extends SyncableEntity {
@@ -14,6 +15,13 @@ export class FairEntry extends SyncableEntity {
 
   @Column({name: "registration_number", type: "varchar"})
   registrationNumber!: string;
+
+  @Column({ name: "horse_id", type: "uuid", nullable: true })
+  horseId!: string | null;
+
+  @ManyToOne(() => Horse, (horse) => horse.fairEntries, { nullable: true })
+  @JoinColumn({ name: "horse_id" })
+  horse!: Horse | null;
 
   @Column({name: "category_id", type: "uuid"})
   categoryId!: string;

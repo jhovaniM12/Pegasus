@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { Category } from "../entities/category.entity.js";
 import { Fair } from "../entities/fair.entity.js";
 import { FairEntry } from "../entities/fair-entries.js";
+import { Horse } from "../entities/horse.entity.js";
 import { loadLocalEnv } from "../shared/load-env.js";
 
 loadLocalEnv();
@@ -79,17 +80,26 @@ function parseFlag(value: string): boolean {
 function mapInscripcionRow(
   row: InscripcionJsonRow,
   fairLookup: LookupMap,
-  categoryLookup: LookupMap
+  categoryLookup: LookupMap,
+  horseLookup: LookupMap,
+  unresolvedRegistrations: Set<string>
 ) {
   const inscriptionNumber = row.NUMERO_INSCRIPCION.trim();
   const fairExternalId = row.ID_FERIA.trim();
   const categoryExternalId = row.CODIGO_CATEGORIA.trim();
+  const registrationNumber = row.NUMERO_REGISTRO.trim();
+  const horseId = horseLookup.get(registrationNumber) ?? null;
+
+  if (!horseId) {
+    unresolvedRegistrations.add(registrationNumber || `(vacío en inscripción ${inscriptionNumber})`);
+  }
 
   return {
     externalId: inscriptionNumber,
     sourceSystem: SOURCE_SYSTEM,
     fairId: resolveInternalId(fairLookup, fairExternalId, "feria", inscriptionNumber),
-    registrationNumber: row.NUMERO_REGISTRO.trim(),
+    registrationNumber,
+    horseId,
     categoryId: resolveInternalId(
       categoryLookup,
       categoryExternalId,
@@ -112,7 +122,7 @@ async function main(): Promise<void> {
   const dataSource = await getDataSource();
 
   try {
-    const [fairs, categories] = await Promise.all([
+    const [fairs, categories, horses] = await Promise.all([
       dataSource.getRepository(Fair).find({
         where: { sourceSystem: SOURCE_SYSTEM },
         select: { id: true, externalId: true }
@@ -120,13 +130,19 @@ async function main(): Promise<void> {
       dataSource.getRepository(Category).find({
         where: { sourceSystem: SOURCE_SYSTEM },
         select: { id: true, externalId: true }
+      }),
+      dataSource.getRepository(Horse).find({
+        where: { sourceSystem: SOURCE_SYSTEM },
+        select: { id: true, registrationNumber: true }
       })
     ]);
 
     const fairLookup = toLookupMap(fairs);
     const categoryLookup = toLookupMap(categories);
+    const horseLookup = new Map(horses.map((horse) => [horse.registrationNumber, horse.id]));
+    const unresolvedRegistrations = new Set<string>();
     const mappedEntries = inscripciones.map((row) =>
-      mapInscripcionRow(row, fairLookup, categoryLookup)
+      mapInscripcionRow(row, fairLookup, categoryLookup, horseLookup, unresolvedRegistrations)
     );
     const fairEntryRepo = dataSource.getRepository(FairEntry);
 
@@ -144,6 +160,13 @@ async function main(): Promise<void> {
     });
 
     console.log(`Inscripciones Fedequinas cargadas: ${loadedCount} de ${inscripciones.length}.`);
+
+    if (unresolvedRegistrations.size > 0) {
+      console.warn(
+        `Inscripciones sin ejemplar relacionado en horses: ${unresolvedRegistrations.size}. ` +
+          `NUMERO_REGISTRO pendientes: ${Array.from(unresolvedRegistrations).join(", ")}.`
+      );
+    }
   } finally {
     await dataSource.destroy();
   }

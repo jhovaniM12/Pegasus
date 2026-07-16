@@ -20,7 +20,7 @@ const FEDEQUINAS_FAIRS: Array<{
   registeredCount?: number;
 }> = [
   {
-    externalId: "999992057",
+    externalId: "999992036",
     name: "EXPOSEDE",
     year: 2026,
     startDate: "2026-05-20",

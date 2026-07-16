@@ -28,6 +28,7 @@
     "db:seed:grades": "pnpm --filter @pegasus/core db:seed:grades",
     "db:seed:categories": "pnpm --filter @pegasus/core db:seed:categories",
     "db:seed:fairs": "pnpm --filter @pegasus/core db:seed:fairs",
+    "db:seed:horses": "pnpm --filter @pegasus/core db:seed:horses",
     "db:seed:fair-entries": "pnpm --filter @pegasus/core db:seed:fair-entries",
     "db:seed:people": "pnpm --filter @pegasus/core db:seed:people",
     "db:seed:fair-staff": "pnpm --filter @pegasus/core db:seed:fair-staff",
