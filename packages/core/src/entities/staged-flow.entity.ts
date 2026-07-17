@@ -26,8 +26,6 @@ export type JudgingParticipantStatus = "ELIGIBLE" | "DISQUALIFIED";
 
 export type JudgeEntryDecision = "SELECTED" | "DISCARDED" | "DISQUALIFIED";
 
-export type NotificationOutboxStatus = "PENDING" | "PROCESSING" | "SENT" | "FAILED";
-
 @Unique("UQ_fair_category_stages_fair_category", ["fairId", "categoryId"])
 @Entity({ name: "fair_category_stages" })
 export class FairCategoryStage extends PegasusBaseEntity {
@@ -311,9 +309,6 @@ export class NotificationOutbox extends PegasusBaseEntity {
   @JoinColumn({ name: "recipient_user_id" })
   recipientUser!: User | null;
 
-  @Column({ name: "recipient_role", type: "varchar", nullable: true })
-  recipientRole!: string | null;
-
   @Column({ name: "fair_category_stage_id", type: "uuid", nullable: true })
   fairCategoryStageId!: string | null;
 
@@ -336,24 +331,7 @@ export class NotificationOutbox extends PegasusBaseEntity {
   @Column({ name: "payload", type: "jsonb", nullable: true })
   payload!: Record<string, unknown> | null;
 
-  @Column({ name: "status", type: "varchar", default: "PENDING" })
-  status!: NotificationOutboxStatus;
-
-  @Column({ name: "attempt_count", type: "int", default: 0 })
-  attemptCount!: number;
-
-  @Column({ name: "processing_started_at", type: "timestamp", nullable: true })
-  processingStartedAt!: Date | null;
-
-  @Column({ name: "next_retry_at", type: "timestamp", nullable: true })
-  nextRetryAt!: Date | null;
-
-  @Column({ name: "publish_attempted_at", type: "timestamp", nullable: true })
-  publishAttemptedAt!: Date | null;
-
-  @Column({ name: "beams_publish_id", type: "varchar", nullable: true })
-  beamsPublishId!: string | null;
-
+  /** Null hasta que la publicación a Pusher Beams se confirma; sin colas ni reintentos. */
   @Column({ name: "sent_at", type: "timestamp", nullable: true })
   sentAt!: Date | null;
 
@@ -362,10 +340,4 @@ export class NotificationOutbox extends PegasusBaseEntity {
 
   @Column({ name: "archived_at", type: "timestamp", nullable: true })
   archivedAt!: Date | null;
-
-  @Column({ name: "failed_at", type: "timestamp", nullable: true })
-  failedAt!: Date | null;
-
-  @Column({ name: "error_message", type: "text", nullable: true })
-  errorMessage!: string | null;
 }

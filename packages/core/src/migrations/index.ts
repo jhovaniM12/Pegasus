@@ -24,3 +24,4 @@ export { AddNotificationPublishIdempotency1717430400022 } from "./1717430400022-
 export { CreateHorsesAndLinkFairEntries1717430400023 } from "./1717430400023-CreateHorsesAndLinkFairEntries.js";
 export { CreateSyncControlTables1717430400024 } from "./1717430400024-CreateSyncControlTables.js";
 export { RelaxNotificationOutboxIdempotency1717430400025 } from "./1717430400025-RelaxNotificationOutboxIdempotency.js";
+export { SimplifyNotificationOutboxDelivery1717430400026 } from "./1717430400026-SimplifyNotificationOutboxDelivery.js";

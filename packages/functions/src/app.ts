@@ -10,7 +10,6 @@ import { dashboardRoutes } from "./routes/dashboard.routes.js";
 import { fairsRoutes } from "./routes/fairs.routes.js";
 import { healthRoutes } from "./routes/health.routes.js";
 import { horsesRoutes } from "./routes/horses.routes.js";
-import { internalRoutes } from "./routes/internal.routes.js";
 import { judgingRemindersRoutes } from "./routes/judging-reminders.routes.js";
 import { peopleRoutes } from "./routes/people.routes.js";
 import { staffRoutes } from "./routes/staff.routes.js";
@@ -30,7 +29,6 @@ app.use("*", databaseMiddleware);
 app.onError(errorHandler);
 
 app.route("/", healthRoutes);
-app.route("/", internalRoutes);
 app.route("/", authRoutes);
 app.use("/fairs", requireRootSession);
 app.use("/fairs/*", requireRootSession);

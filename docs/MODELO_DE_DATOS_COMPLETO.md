@@ -541,35 +541,29 @@ Auditoría de transiciones y eventos del flujo.
 
 ### `notification_outbox` — Entidad: `NotificationOutbox`
 
-Cola de notificaciones push (Pusher Beams) e inbox del usuario.
+Registro de notificaciones (push vía Pusher Beams + inbox del usuario). El envío es directo
+y síncrono: al confirmar la acción de negocio se inserta una fila por destinatario y, acto
+seguido, se publica una sola vez a Beams. Sin colas, estados intermedios, reintentos ni cron:
+si la publicación falla solo se registra en logs; la fila sigue disponible en el inbox.
 
 | Campo | Tipo | Null | FK | Descripción |
 |-------|------|------|----|-------------|
 | `id` | uuid | NO | PK | |
-| `recipient_user_id` | uuid | SÍ | → `users` | Destinatario directo |
-| `recipient_role` | varchar | SÍ | | Rol destinatario (broadcast por rol) |
+| `recipient_user_id` | uuid | SÍ | → `users` | Destinatario (resuelto al encolar) |
 | `fair_category_stage_id` | uuid | SÍ | → `fair_category_stages` | Contexto |
 | `provider` | varchar | NO | | Default `PUSHER_BEAMS` |
 | `type` | varchar | NO | | Tipo semántico de notificación |
 | `title` | varchar | NO | | Título |
 | `body` | text | NO | | Cuerpo |
 | `payload` | jsonb | SÍ | | Datos extra |
-| `status` | varchar | NO | | `PENDING` · `SENT` · `FAILED` |
-| `attempt_count` | int | NO | | Reintentos de envío |
-| `processing_started_at` | timestamp | SÍ | | Lock de despacho |
-| `next_retry_at` | timestamp | SÍ | | Próximo reintento |
-| `publish_attempted_at` | timestamp | SÍ | | Intento de publicación |
-| `beams_publish_id` | varchar | SÍ | | ID idempotencia Pusher |
-| `sent_at` | timestamp | SÍ | | Enviada |
+| `sent_at` | timestamp | SÍ | | Publicada en Beams con éxito |
 | `read_at` | timestamp | SÍ | | Leída por el usuario |
 | `archived_at` | timestamp | SÍ | | Archivada en inbox |
-| `failed_at` | timestamp | SÍ | | Fallo definitivo |
-| `error_message` | text | SÍ | | Detalle del error |
 | `created_at` | timestamp | NO | | |
 | `updated_at` | timestamp | NO | | |
 
 **Índices:**
-- `IDX_notification_outbox_status`
+- `IDX_notification_outbox_stage_pending (fair_category_stage_id, sent_at)`
 - `IDX_notification_outbox_inbox (recipient_user_id, archived_at, read_at, created_at)`
 
 ---

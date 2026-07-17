@@ -157,37 +157,11 @@ export async function recordEvent(
   );
 }
 
-export async function queueNotification(
-  manager: EntityManager,
-  input: {
-    recipientUserId: string | null;
-    recipientRole?: string | null;
-    stageId: string;
-    type: WorkflowEventType;
-    title: string;
-    body: string;
-    payload?: Record<string, unknown>;
-  }
-): Promise<void> {
-  const repo = manager.getRepository(NotificationOutbox);
-  await repo.save(
-    repo.create({
-      recipientUserId: input.recipientUserId,
-      recipientRole: input.recipientRole ?? null,
-      fairCategoryStageId: input.stageId,
-      provider: "PUSHER_BEAMS",
-      type: input.type,
-      title: input.title,
-      body: input.body,
-      payload: input.payload ?? null,
-      status: "PENDING",
-      sentAt: null,
-      failedAt: null,
-      errorMessage: null
-    })
-  );
-}
-
+/**
+ * Encola una notificación de inbox por cada usuario activo con el rol dado en la feria.
+ * El envío push real (síncrono, sin colas ni reintentos) lo hace el controlador justo
+ * después de que esta transacción confirma, vía `sendStageNotifications`.
+ */
 export async function queueRoleNotifications(
   manager: EntityManager,
   stage: FairCategoryStage,
@@ -200,27 +174,23 @@ export async function queueRoleNotifications(
   }
 ): Promise<void> {
   const users = await getUsersByFairRole(manager, stage.fairId, roleExternalId);
-  const repo = manager.getRepository(NotificationOutbox);
 
   if (users.length === 0) {
     return;
   }
 
+  const repo = manager.getRepository(NotificationOutbox);
   await repo.save(
     users.map((recipient) =>
       repo.create({
         recipientUserId: recipient.id,
-        recipientRole: recipient.role,
         fairCategoryStageId: stage.id,
         provider: "PUSHER_BEAMS",
         type: input.type,
         title: input.title,
         body: input.body,
         payload: input.payload ?? null,
-        status: "PENDING",
-        sentAt: null,
-        failedAt: null,
-        errorMessage: null
+        sentAt: null
       })
     )
   );

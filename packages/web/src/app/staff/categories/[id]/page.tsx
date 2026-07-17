@@ -618,7 +618,7 @@ export default function StaffCategoryPage() {
         {currentUser?.role === "TECHNICAL_DIRECTOR" && (
           <section className="mt-4 space-y-4 rounded-lg border border-slate-200 bg-white p-5">
             <h2 className="text-base font-semibold text-slate-950">Gestión</h2>
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <Button
                 size="lg"
                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-white disabled:bg-emerald-600/50"
@@ -648,22 +648,6 @@ export default function StaffCategoryPage() {
               >
                 <Gavel className="size-4" />
                 Iniciar juzgamiento
-              </Button>
-              <Button
-                size="lg"
-                className="w-full bg-slate-700 hover:bg-slate-800 text-white disabled:bg-slate-700/50"
-                disabled={busy || summary.status === "JUDGING_CLOSED" || summary.status === "JUDGING_DESERTED"}
-                onClick={() =>
-                  runAction(
-                    "Declarar competencia desierta",
-                    "La categoría quedará cerrada sin ejemplares premiables. Esta acción es irreversible para el flujo actual.",
-                    () => stagedFlowService.desertCompetition(stageId),
-                    "destructive"
-                  )
-                }
-              >
-                <Lock className="size-4" />
-                Declarar desierta
               </Button>
             </div>
 
