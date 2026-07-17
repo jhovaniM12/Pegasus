@@ -49,7 +49,10 @@ function computeAutoDeserted(
   allowedPositions: number[]
 ): number[] {
   const assignedSet = new Set(assignments.map((a) => a.position));
-  return allowedPositions.filter((position) => !assignedSet.has(position));
+  // Solo puestos premiables (1..5) pueden declararse desiertos; el 6.º+ no es desierto.
+  return allowedPositions.filter(
+    (position) => !assignedSet.has(position) && position <= MAX_F2_POSITIONS
+  );
 }
 
 type JudgeRoundWorkspaceProps = {

@@ -454,10 +454,11 @@ export async function updateRoundForm(
         round,
         eligibleEntries.map((entry) => entry.judgingParticipantId)
       );
-      const maxDesertablePosition =
-        round.roundType === "TIE_BREAK" ? positionBounds.max : Math.min(eligibleCount, MAX_AWARD_POSITIONS);
+      const minAssignablePosition = round.roundType === "TIE_BREAK" ? positionBounds.min : MIN_AWARD_POSITION;
       const maxAssignablePosition =
         round.roundType === "TIE_BREAK" ? positionBounds.max : eligibleCount + desertedPositions.length;
+      // Desiertos solo en puestos premiables (1..5); el desempate puede asignar hasta el 6.º (nota 5.e).
+      const maxDesertablePosition = Math.min(maxAssignablePosition, MAX_AWARD_POSITIONS);
       const positionByParticipant = new Map(positions.map((p) => [p.participantId, p.position]));
       for (const { participantId, position } of positions) {
         if (!entryByParticipant.has(participantId)) {
@@ -466,7 +467,6 @@ export async function updateRoundForm(
         if (!isEligible(participantId)) {
           throw new BadRequestError("No puedes asignar puesto a un ejemplar descalificado.");
         }
-        const minAssignablePosition = round.roundType === "TIE_BREAK" ? positionBounds.min : MIN_AWARD_POSITION;
         if (!Number.isInteger(position) || position < minAssignablePosition || position > maxAssignablePosition) {
           throw new BadRequestError("Los puestos deben ser números válidos.");
         }
@@ -476,13 +476,9 @@ export async function updateRoundForm(
         throw new BadRequestError("No puedes repetir un mismo puesto.");
       }
       for (const position of desertedPositions) {
-        if (
-          !Number.isInteger(position) ||
-          position < (round.roundType === "TIE_BREAK" ? positionBounds.min : MIN_AWARD_POSITION) ||
-          position > maxDesertablePosition
-        ) {
+        if (!Number.isInteger(position) || position < minAssignablePosition || position > maxDesertablePosition) {
           throw new BadRequestError(
-            `Los puestos desiertos válidos están entre ${round.roundType === "TIE_BREAK" ? positionBounds.min : 1} y ${maxDesertablePosition}.`
+            `Los puestos desiertos válidos están entre ${minAssignablePosition} y ${maxDesertablePosition}.`
           );
         }
       }
@@ -661,9 +657,10 @@ export async function closeRoundForm(user: User, stageId: string) {
         round,
         eligibleEntries.map((entry) => entry.judgingParticipantId)
       );
-      const maxDesertablePosition =
-        round.roundType === "TIE_BREAK" ? positionBounds.max : Math.min(eligibleCount, MAX_AWARD_POSITIONS);
       const minAssignablePosition = round.roundType === "TIE_BREAK" ? positionBounds.min : MIN_AWARD_POSITION;
+      const maxAssignablePosition =
+        round.roundType === "TIE_BREAK" ? positionBounds.max : Math.min(eligibleCount, MAX_AWARD_POSITIONS);
+      const maxDesertablePosition = Math.min(maxAssignablePosition, MAX_AWARD_POSITIONS);
       const deserted = new Set(desertedRows.map((row) => row.position));
       const positioned = eligibleEntries.filter((entry) => entry.position !== null);
       const assigned = positioned.map((entry) => entry.position as number);
@@ -676,9 +673,9 @@ export async function closeRoundForm(user: User, stageId: string) {
             "En desempate debes asignar un puesto a cada ejemplar empatado antes de cerrar."
           );
         }
-        if (assigned.some((position) => position < minAssignablePosition || position > maxDesertablePosition)) {
+        if (assigned.some((position) => position < minAssignablePosition || position > maxAssignablePosition)) {
           throw new BadRequestError(
-            `En ${round.roundType === "F2" ? "F2" : "desempate"} solo puedes asignar puestos entre ${minAssignablePosition} y ${maxDesertablePosition}.`
+            `En ${round.roundType === "F2" ? "F2" : "desempate"} solo puedes asignar puestos entre ${minAssignablePosition} y ${maxAssignablePosition}.`
           );
         }
         if (new Set(assigned).size !== assigned.length) {
@@ -686,9 +683,9 @@ export async function closeRoundForm(user: User, stageId: string) {
         }
 
         const autoDeserted = Array.from(
-          { length: maxDesertablePosition - minAssignablePosition + 1 },
+          { length: Math.max(0, maxDesertablePosition - minAssignablePosition + 1) },
           (_, index) => minAssignablePosition + index
-        ).filter((position) => !assigned.includes(position));
+        ).filter((position) => !assigned.includes(position) && position <= MAX_AWARD_POSITIONS);
 
         await manager.getRepository(JudgingRoundFormDesertedPosition).delete({ roundFormId: form.id });
         if (autoDeserted.length > 0) {

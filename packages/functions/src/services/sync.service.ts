@@ -45,7 +45,8 @@ const SYNC_CLEANUP_TABLES = [
   "sync_mappings",
   "sync_batches"
 ] as const;
-const FILTERED_SYNC_CLEANUP_TABLES = ["fair_staff", "people"] as const;
+const FILTERED_SYNC_CLEANUP_TABLES = ["people"] as const;
+const PRESERVED_OPERATIONAL_TABLES = ["fair_staff", "users", "fairs"] as const;
 const PRESERVED_CATALOG_TABLES = [
   "cities",
   "roles",
@@ -925,6 +926,7 @@ export type SyncCleanupResult = {
   ok: true;
   cleanedTables: string[];
   preservedCatalogTables: string[];
+  preservedOperationalTables: string[];
 };
 
 export async function cleanupDevelopmentSyncData(createdBy: string): Promise<SyncCleanupResult> {
@@ -945,7 +947,6 @@ export async function cleanupDevelopmentSyncData(createdBy: string): Promise<Syn
     await manager.query(`TRUNCATE TABLE
       ${tablesSql}
       RESTART IDENTITY CASCADE`);
-    await manager.getRepository(FairStaff).delete({ sourceSystem: SOURCE_SYSTEM });
     await manager.query(
       `
         DELETE FROM "people" "person"
@@ -970,12 +971,14 @@ export async function cleanupDevelopmentSyncData(createdBy: string): Promise<Syn
     executedAt: new Date().toISOString(),
     environment,
     cleanedTables: [...SYNC_CLEANUP_TABLES, ...FILTERED_SYNC_CLEANUP_TABLES],
-    preservedCatalogTables: PRESERVED_CATALOG_TABLES
+    preservedCatalogTables: PRESERVED_CATALOG_TABLES,
+    preservedOperationalTables: PRESERVED_OPERATIONAL_TABLES
   });
 
   return {
     ok: true,
     cleanedTables: [...SYNC_CLEANUP_TABLES, ...FILTERED_SYNC_CLEANUP_TABLES],
-    preservedCatalogTables: [...PRESERVED_CATALOG_TABLES]
+    preservedCatalogTables: [...PRESERVED_CATALOG_TABLES],
+    preservedOperationalTables: [...PRESERVED_OPERATIONAL_TABLES]
   };
 }

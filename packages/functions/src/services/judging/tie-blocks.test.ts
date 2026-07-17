@@ -41,4 +41,23 @@ describe("getBlockingTiedBlocks", () => {
 
     expect(blocks).toHaveLength(0);
   });
+
+  it("excluye del bloque por suma a ejemplares fuera del top 5 aunque compartan suma", () => {
+    const blocks = getBlockingTiedBlocks(
+      [row("p14", 3, 13), row("p3", 6, 13), row("p1", 7, 13)],
+      (r) => r.id
+    );
+
+    expect(blocks).toHaveLength(0);
+  });
+
+  it("mantiene empate por suma cuando ambos están en puestos premiables", () => {
+    const blocks = getBlockingTiedBlocks(
+      [row("p14", 3, 13), row("p10", 4, 13)],
+      (r) => r.id
+    );
+
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]?.map((r) => r.id).sort()).toEqual(["p10", "p14"]);
+  });
 });

@@ -203,14 +203,11 @@ describe("computeF2 - voto de castigo", () => {
     expect(pos7).toBe("p8");
 
     expect(result.desertedResults).toEqual([{ finalPosition: 5, votesCount: 0 }]);
-    // p1 (sum=15) y p8 (sum=15) siguen empatados y el bloque toca el top 5 → bloquea cierre.
-    expect(result.hasTie).toBe(true);
-    expect(result.hasBlockingTie).toBe(true);
-    const tiedGroup = result.tiedGroups[0];
-    expect(tiedGroup.participantIds.sort()).toEqual(["p1", "p8"]);
-    expect(tiedGroup.startPosition).toBe(4);
-    expect(tiedGroup.endPosition).toBe(7);
-    expect(tiedGroup.blocksClosure).toBe(true);
+    // p1 cumple consideración (2 jueces) y p8 no (1 juez): misma suma no genera empate
+    // bloqueante; solo compiten por desempate quienes pueden recibir cinta.
+    expect(result.participants.find((p) => p.participantId === "p1")?.tied).toBe(false);
+    expect(result.participants.find((p) => p.participantId === "p8")?.tied).toBe(false);
+    expect(result.hasBlockingTie).toBe(false);
   });
 
   it("declara desierto el quinto si los candidatos restantes no cumplen consideración mínima", () => {
@@ -267,6 +264,54 @@ describe("computeF2 - voto de castigo", () => {
     expect(result.desertedResults).toEqual([{ finalPosition: 5, votesCount: 0 }]);
     expect(result.hasBlockingTie).toBe(true);
     expect(result.tiedGroups[0].participantIds.sort()).toEqual(["p3", "p4"]);
+  });
+
+  it("no marca empate con ejemplares sin consideración mínima aunque compartan suma", () => {
+    const allEligible = ["p5", "p6", "p3", "p7", "p1", "p8", "p14", "p2"];
+    const cards: JudgeCard[] = [
+      {
+        judgeUserId: "j1",
+        positions: [
+          { participantId: "p7", position: 1 },
+          { participantId: "p8", position: 3 }
+        ],
+        desertedPositions: [],
+        eligibleParticipantIds: allEligible
+      },
+      {
+        judgeUserId: "j2",
+        positions: [
+          { participantId: "p5", position: 1 },
+          { participantId: "p6", position: 2 },
+          { participantId: "p3", position: 3 },
+          { participantId: "p1", position: 4 },
+          { participantId: "p2", position: 5 }
+        ],
+        desertedPositions: [],
+        eligibleParticipantIds: allEligible
+      },
+      {
+        judgeUserId: "j3",
+        positions: [
+          { participantId: "p5", position: 1 },
+          { participantId: "p6", position: 2 },
+          { participantId: "p3", position: 3 },
+          { participantId: "p14", position: 4 },
+          { participantId: "p1", position: 5 }
+        ],
+        desertedPositions: [],
+        eligibleParticipantIds: allEligible
+      }
+    ];
+
+    const result = computeF2(cards, 3);
+    // p1 (suma 15, 2 jueces) y p8 (suma 15, 1 juez): no hay empate bloqueante.
+    expect(sumOf(result, "p1")).toBe(15);
+    expect(sumOf(result, "p8")).toBe(15);
+    expect(result.participants.find((p) => p.participantId === "p1")?.cardsCount).toBe(2);
+    expect(result.participants.find((p) => p.participantId === "p8")?.cardsCount).toBe(1);
+    expect(result.participants.find((p) => p.participantId === "p8")?.tied).toBe(false);
+    expect(result.hasBlockingTie).toBe(false);
   });
 
   it("declara el quinto desierto explícito cuando hay mayoría de jueces", () => {
@@ -415,12 +460,11 @@ describe("computeF2 - voto de castigo", () => {
     // A: 1+6+6=13, B: 6+1+6=13, C: 6+6+1=13
     // Ninguno cumple consideración mínima (2 de 3) para premiación:
     // los tres quedan diferidos y los puestos 1-5 se declaran desiertos por agotamiento.
+    // Sin consideración mínima no hay grupo de empate (ni bloqueante ni informativo).
     expect(result.participants).toHaveLength(3);
-    expect(result.hasTie).toBe(true);
+    expect(result.hasTie).toBe(false);
     expect(result.hasBlockingTie).toBe(false);
-    expect(result.tiedGroups[0].participantIds.sort()).toEqual(["A", "B", "C"]);
-    expect(result.tiedGroups[0].startPosition).toBe(6);
-    expect(result.tiedGroups[0].blocksClosure).toBe(false);
+    expect(result.tiedGroups).toHaveLength(0);
     expect(result.desertedResults).toEqual([
       { finalPosition: 1, votesCount: 0 },
       { finalPosition: 2, votesCount: 0 },

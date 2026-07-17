@@ -380,7 +380,9 @@ function SyncCleanupDialog({
         <DialogHeader>
           <DialogTitle>Confirmar limpieza</DialogTitle>
           <DialogDescription>
-            Esta acción elimina datos sincronizados y operativos de desarrollo. No borra catálogos base.
+            Esta acción elimina datos sincronizados y operativos de desarrollo (inscripciones,
+            ejemplares, juzgamiento, lotes de sync). No borra catálogos base ni el personal de
+            feria, usuarios o ferias.
           </DialogDescription>
         </DialogHeader>
         <div className="flex gap-3 rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">

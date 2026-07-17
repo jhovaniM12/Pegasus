@@ -14,9 +14,10 @@ import { MAX_AWARD_POSITIONS } from "@pegasus/core";
  * 4. Excepción de "mayoría de primeros puestos": si un ejemplar recibe el primer
  *    puesto en la mayoría de las tarjetas, gana el primer lugar aunque su suma no
  *    sea la menor.
- * 5. Empate: si dos o más ejemplares quedan con la misma suma (y ninguno está
- *    cubierto por la regla de mayoría), el sistema marca empate y bloquea el cierre
- *    hasta resolverlo con una ronda de desempate.
+ * 5. Empate: si dos o más ejemplares con consideración mínima quedan con la misma
+ *    suma (y ninguno está cubierto por la regla de mayoría), el sistema marca empate
+ *    y bloquea el cierre hasta resolverlo con una ronda de desempate. Quienes no
+ *    cumplen consideración mínima no entran al desempate aunque compartan suma.
  */
 
 export type JudgeCard = {
@@ -303,9 +304,12 @@ export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult
   const positionById = new Map(participants.map((p) => [p.participantId, p.finalPosition]));
 
   // Detección de empates: misma suma entre participantes no cubiertos por la mayoría.
+  // Solo entran al grupo quienes cumplen consideración mínima (nota 5.c): el desempate
+  // define puestos premiables, no reordena ejemplares "sin cinta".
   const sumGroups = new Map<number, string[]>();
   for (const agg of aggregates) {
     if (agg.participantId === majorityWinnerId) continue;
+    if (agg.cardsCount < threshold) continue;
     const group = sumGroups.get(agg.positionSum) ?? [];
     group.push(agg.participantId);
     sumGroups.set(agg.positionSum, group);

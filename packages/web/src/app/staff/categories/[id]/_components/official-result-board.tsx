@@ -178,7 +178,7 @@ function StatusBadge({
       </span>
     );
   }
-  if (row?.status === "TIED") {
+  if (row?.status === "TIED" && (row.finalPosition == null || row.finalPosition <= 5)) {
     return (
       <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
         <AlertTriangle className="size-3" />
