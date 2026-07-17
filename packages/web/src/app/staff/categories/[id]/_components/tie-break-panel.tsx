@@ -38,16 +38,7 @@ function blockLabel(startPosition: number, endPosition: number): string {
 }
 
 export function TieBreakPanel({ busy, blockInfo, onOpen }: TieBreakPanelProps) {
-  const [selected, setSelected] = useState<Set<TieBreakTestType>>(new Set());
-
-  const toggle = (type: TieBreakTestType) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(type)) next.delete(type);
-      else next.add(type);
-      return next;
-    });
-  };
+  const [selected, setSelected] = useState<TieBreakTestType | null>(null);
 
   return (
     <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-5">
@@ -64,22 +55,23 @@ export function TieBreakPanel({ busy, blockInfo, onOpen }: TieBreakPanelProps) {
         </span>
       </p>
       <p className="mt-2 text-xs text-amber-800">
-        Selecciona las pruebas opcionales que se realizarán en pista. Los jueces volverán a emitir una
+        Selecciona la prueba opcional que se realizará en pista. Los jueces volverán a emitir una
         tarjeta solo para los ejemplares empatados de este bloque.
       </p>
 
       <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
         {TEST_OPTIONS.map((option) => {
-          const active = selected.has(option.type);
+          const active = selected === option.type;
           return (
             <button
               key={option.type}
               type="button"
-              onClick={() => toggle(option.type)}
+              onClick={() => setSelected((prev) => (prev === option.type ? null : option.type))}
+              aria-pressed={active}
               className={cn(
                 "rounded-lg border px-3 py-2 text-left text-xs font-medium transition-colors",
                 active
-                  ? "border-amber-500 bg-amber-100 text-amber-900"
+                  ? "border-amber-500 bg-amber-100 text-amber-900 ring-2 ring-amber-300"
                   : "border-amber-200 bg-white text-slate-600 hover:bg-amber-50"
               )}
             >
@@ -91,8 +83,11 @@ export function TieBreakPanel({ busy, blockInfo, onOpen }: TieBreakPanelProps) {
 
       <Button
         className="mt-4 w-full bg-amber-600 text-white hover:bg-amber-700 disabled:bg-amber-600/50"
-        disabled={busy || selected.size === 0}
-        onClick={() => onOpen([...selected])}
+        disabled={busy || !selected}
+        onClick={() => {
+          if (!selected) return;
+          onOpen([selected]);
+        }}
       >
         <Scale className="size-4" />
         Abrir ronda de desempate

@@ -306,7 +306,13 @@ export function JudgeRoundWorkspace({
     ? `${selectedIds.size} / ${round.maxSelections ?? totalEligible} seleccionados`
     : `${assignedByParticipant.length} / ${allowedPositions.length} puestos asignados`;
 
-  const canClose = isSelectionRound || isPositionBoardRound;
+  const allTiedParticipantsRanked =
+    roundType !== "TIE_BREAK" ||
+    (totalEligible > 0 && assignedByParticipant.length === totalEligible);
+
+  const canClose =
+    (isSelectionRound || isPositionBoardRound) &&
+    (roundType !== "TIE_BREAK" || allTiedParticipantsRanked);
 
   // Estados de la ronda ajenos a la edición del juez.
   if (round.round.status !== "OPEN") {
@@ -465,6 +471,12 @@ export function JudgeRoundWorkspace({
             <Lock className="size-5" />
             Cerrar prueba individual
           </Button>
+          {roundType === "TIE_BREAK" && !allTiedParticipantsRanked && (
+            <p className="mt-2 text-center text-xs text-amber-700">
+              Asigna un puesto a cada ejemplar empatado antes de cerrar ({assignedByParticipant.length}/
+              {totalEligible}).
+            </p>
+          )}
         </div>
       )}
 

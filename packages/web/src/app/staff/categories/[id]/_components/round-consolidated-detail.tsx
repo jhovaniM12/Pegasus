@@ -31,14 +31,14 @@ function resultTitle(round: RoundManagementItem): string {
 
 type RoundConsolidatedDetailProps = {
   round: RoundManagementItem;
-  resolvedByTieBreak: boolean;
   onBack: () => void;
 };
 
-export function RoundConsolidatedDetail({ round, resolvedByTieBreak, onBack }: RoundConsolidatedDetailProps) {
+export function RoundConsolidatedDetail({ round, onBack }: RoundConsolidatedDetailProps) {
   const isF1 = round.roundType === "F1";
   const isTieBreak = round.roundType === "TIE_BREAK";
-  const isF2ResolvedByTieBreak = round.roundType === "F2" && resolvedByTieBreak;
+  const hasResolvedTieBreaks =
+    round.roundType === "F2" && round.results.some((result) => result.resolvedByTieBreak);
   const sortedF1Finalists = [...round.results].sort((a, b) => a.trackPosition - b.trackPosition);
 
   return (
@@ -159,16 +159,16 @@ export function RoundConsolidatedDetail({ round, resolvedByTieBreak, onBack }: R
                 showScoring
                 title={resultTitle(round)}
                 note={
-                  isF2ResolvedByTieBreak
-                    ? "La suma y los primeros puestos corresponden al F2 original; el orden final fue definido por desempate."
+                  hasResolvedTieBreaks
+                    ? "La suma y los primeros puestos corresponden al F2 original. Solo las filas indicadas fueron actualizadas por desempates consolidados."
                     : isTieBreak
                       ? "Este consolidado muestra cómo los jueces ordenaron a los ejemplares empatados para resolver el F2."
                       : undefined
                 }
                 provisionalLabel={
-                  isF2ResolvedByTieBreak ? "Resuelto por desempate" : isTieBreak ? "Resultado desempate" : undefined
+                  isTieBreak ? "Resultado desempate" : undefined
                 }
-                provisionalVariant={isF2ResolvedByTieBreak || isTieBreak ? "tieBreak" : "neutral"}
+                provisionalVariant={isTieBreak ? "tieBreak" : "neutral"}
               />
             </div>
           )

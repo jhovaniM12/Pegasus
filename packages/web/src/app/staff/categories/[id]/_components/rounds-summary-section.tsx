@@ -4,6 +4,7 @@ import { useState } from "react";
 import { CheckCircle2, Clock, Eye, Gavel, Timer, Trophy } from "lucide-react";
 import { RoundConsolidatedDetail } from "./round-consolidated-detail";
 import { formatRoundFormDuration, formatRoundFormTime } from "./round-form-timing";
+import { buildOfficialF2Results } from "./official-f2-results";
 import type { RoundFormStatus, RoundManagementItem } from "@/types/staged-flow";
 
 function roundTitle(round: RoundManagementItem): string {
@@ -50,11 +51,9 @@ function canViewDetail(round: RoundManagementItem): boolean {
 
 export function RoundCompactSection({
   round,
-  resolvedByTieBreak = false,
   isActive = false,
 }: {
   round: RoundManagementItem;
-  resolvedByTieBreak?: boolean;
   isActive?: boolean;
 }) {
   const [showDetail, setShowDetail] = useState(false);
@@ -64,7 +63,6 @@ export function RoundCompactSection({
     return (
       <RoundConsolidatedDetail
         round={round}
-        resolvedByTieBreak={resolvedByTieBreak}
         onBack={() => setShowDetail(false)}
       />
     );
@@ -167,9 +165,16 @@ export function RoundsSummarySection({
       round.status !== "OPEN" &&
       (round.roundType === "F1" || round.roundType === "F2" || round.roundType === "TIE_BREAK")
   );
-  const f2 = visibleRounds.find((round) => round.roundType === "F2");
-  const resolvedByTieBreak =
-    Boolean(f2) && rounds.some((round) => round.roundType === "TIE_BREAK" && round.status === "CONSOLIDATED");
+  const updatedF2 = buildOfficialF2Results(rounds);
+  const displayRounds = visibleRounds.map((round) =>
+    round.roundType === "F2" && updatedF2
+      ? {
+          ...round,
+          results: updatedF2.results,
+          desertedResults: updatedF2.desertedResults,
+        }
+      : round
+  );
 
   if (visibleRounds.length === 0) return null;
 
@@ -181,8 +186,8 @@ export function RoundsSummarySection({
           Consulta el estado de las tarjetas y abre el detalle consolidado con tiempos por juez.
         </p>
       </div>
-      {visibleRounds.map((round) => (
-        <RoundCompactSection key={round.id} round={round} resolvedByTieBreak={resolvedByTieBreak} />
+      {displayRounds.map((round) => (
+        <RoundCompactSection key={round.id} round={round} />
       ))}
     </div>
   );

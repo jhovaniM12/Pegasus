@@ -58,7 +58,7 @@ export const desertCompetitionSchema = z.object({
   });
 
 export const openTieBreakSchema = z.object({
-  testTypes: z.array(tieBreakTestTypeSchema).min(1).max(7)
+  testTypes: z.array(tieBreakTestTypeSchema).min(1).max(1)
 });
 
 export const roundEntryReminderEffectSchema = z.enum(["SUMA", "RESTA"]);

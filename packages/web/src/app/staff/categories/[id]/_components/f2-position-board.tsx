@@ -79,10 +79,13 @@ export function F2PositionBoard({
   const eligible = round.participants.filter((p) => p.status === "ELIGIBLE");
   const disqualified = round.participants.filter((p) => p.status === "DISQUALIFIED");
 
-  const sorted = [
-    ...eligible.filter((p) => p.position !== null).sort((a, b) => (a.position ?? 0) - (b.position ?? 0)),
-    ...eligible.filter((p) => p.position === null).sort((a, b) => a.trackPosition - b.trackPosition),
-  ];
+  // Reorden visual desactivado: las tarjetas se quedan en orden de pista.
+  // Lógica anterior (puestos asignados arriba, sin puesto abajo):
+  // const sorted = [
+  //   ...eligible.filter((p) => p.position !== null).sort((a, b) => (a.position ?? 0) - (b.position ?? 0)),
+  //   ...eligible.filter((p) => p.position === null).sort((a, b) => a.trackPosition - b.trackPosition),
+  // ];
+  const sorted = [...eligible].sort((a, b) => a.trackPosition - b.trackPosition);
   const occupiedPositions = eligible
     .map((participant) => participant.position)
     .filter((position): position is number => position !== null);

@@ -218,3 +218,22 @@ export function stageNotificationContext(stage: FairCategoryStage) {
     }
   };
 }
+
+/** Nombre visible de un usuario de staff (juez, director, etc.). */
+export function formatStaffDisplayName(user: User, fallback = "Juez"): string {
+  if (user.person) {
+    const fullName = `${user.person.name} ${user.person.lastName}`.trim();
+    if (fullName) return fullName;
+  }
+  return fallback;
+}
+
+export type DisqualifiedByDto = {
+  id: string;
+  name: string;
+};
+
+export function toDisqualifiedByDto(user: User | null | undefined): DisqualifiedByDto | null {
+  if (!user) return null;
+  return { id: user.id, name: formatStaffDisplayName(user) };
+}

@@ -1,6 +1,6 @@
 import type { DesertedRoundResult, RoundManagementItem, RoundResult } from "@/types/staged-flow";
 
-type OfficialF2Results = {
+export type OfficialF2Results = {
   results: RoundResult[];
   desertedResults: DesertedRoundResult[];
 };
@@ -39,14 +39,17 @@ export function buildOfficialF2Results(rounds: RoundManagementItem[]): OfficialF
   const results = f2.results.map((result) => {
     const resolved = tieBreakResultByParticipant.get(result.participantId);
     if (!resolved) {
-      return result;
+      return { ...result, resolvedByTieBreak: false };
     }
 
     return {
       ...result,
       finalPosition: resolved.finalPosition,
-      status: "FINAL" as const,
+      // El desempate define el orden, pero el resultado sigue siendo provisional
+      // hasta que el Director cierre oficialmente la categoría.
+      status: "PROVISIONAL" as const,
       awardDistinctive: resolved.awardDistinctive,
+      resolvedByTieBreak: true,
     };
   });
 

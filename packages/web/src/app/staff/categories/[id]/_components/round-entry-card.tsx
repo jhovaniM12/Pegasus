@@ -101,7 +101,7 @@ export function RoundEntryCard(props: RoundEntryCardProps) {
             ? "border-slate-200 bg-slate-50/80 opacity-70"
             : !editable
               ? "border-slate-200 bg-slate-50/60 opacity-85"
-              : "border-slate-200 bg-white shadow-sm"
+              : "border-slate-300 bg-slate-300/60 shadow-md"
         )}
       >
         {/* Top-left action buttons */}
@@ -208,7 +208,10 @@ export function RoundEntryCard(props: RoundEntryCardProps) {
         {/* Position strip */}
         {disqualified ? (
           <div className="rounded-lg bg-red-50 px-2 py-2 text-center text-xs font-medium text-red-700">
-            {participant.disqualificationReason?.name ?? "Descalificado"}
+            <p>{participant.disqualificationReason?.name ?? "Descalificado"}</p>
+            {participant.disqualifiedBy && (
+              <p className="mt-0.5 font-normal text-red-600/90">Por: {participant.disqualifiedBy.name}</p>
+            )}
           </div>
         ) : (
           <div className={cn("flex gap-1.5", !editable && "opacity-80")}>
@@ -360,6 +363,11 @@ export function RoundEntryCard(props: RoundEntryCardProps) {
       {disqualified && participant.disqualificationReason && (
         <p className="mt-1 rounded-lg bg-red-50 px-2 py-1.5 text-center text-[10px] font-medium text-red-700">
           {participant.disqualificationReason.name}
+          {participant.disqualifiedBy && (
+            <span className="mt-0.5 block font-normal text-red-600/90">
+              Por: {participant.disqualifiedBy.name}
+            </span>
+          )}
         </p>
       )}
     </div>

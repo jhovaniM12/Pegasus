@@ -36,11 +36,13 @@ import {
   ROLE_LABELS,
   assertStageAccess,
   assertUserRole,
+  formatStaffDisplayName,
   getStageOrThrow,
   getUsersByFairRole,
   queueRoleNotifications,
   recordEvent,
-  stageNotificationContext
+  stageNotificationContext,
+  toDisqualifiedByDto
 } from "./shared.js";
 
 const MAX_F1_SELECTIONS = 7;
@@ -87,7 +89,7 @@ async function loadParticipants(manager: EntityManager, participantIds: string[]
   if (participantIds.length === 0) return [];
   return manager.getRepository(JudgingParticipant).find({
     where: participantIds.map((id) => ({ id })),
-    relations: { fairEntry: true, disqualificationReason: true }
+    relations: { fairEntry: true, disqualificationReason: true, disqualifiedByUser: { person: true } }
   });
 }
 
@@ -591,27 +593,27 @@ export async function disqualifyRoundParticipant(
     });
 
     const notification = stageNotificationContext(stage);
+    const judgeName = formatStaffDisplayName(user);
+    const disqualifyBody = `${judgeName} descalificó el ejemplar. Motivo: ${reason.name}. Categoría: ${notification.detail}.`;
+    const disqualifyPayload = {
+      ...notification.payload,
+      judgingParticipantId: participant.id,
+      reasonId: reason.id,
+      roundId: round.id,
+      disqualifiedByUserId: user.id,
+      disqualifiedByName: judgeName
+    };
     await queueRoleNotifications(manager, stage, "2", {
       type: "JUDGING_PARTICIPANT_DISQUALIFIED",
       title: `Ejemplar ${participant.fairEntry?.trackPosition ?? ""} descalificado - ${notification.titleSuffix}`.trim(),
-      body: `Motivo: ${reason.name}. Categoría: ${notification.detail}.`,
-      payload: {
-        ...notification.payload,
-        judgingParticipantId: participant.id,
-        reasonId: reason.id,
-        roundId: round.id
-      }
+      body: disqualifyBody,
+      payload: disqualifyPayload
     });
     await queueRoleNotifications(manager, stage, "3", {
       type: "JUDGING_PARTICIPANT_DISQUALIFIED",
       title: `Ejemplar ${participant.fairEntry?.trackPosition ?? ""} descalificado - ${notification.titleSuffix}`.trim(),
-      body: `Motivo: ${reason.name}. Categoría: ${notification.detail}.`,
-      payload: {
-        ...notification.payload,
-        judgingParticipantId: participant.id,
-        reasonId: reason.id,
-        roundId: round.id
-      }
+      body: disqualifyBody,
+      payload: disqualifyPayload
     });
 
     return getRoundStateForJudge(manager, user, stage, round);
@@ -669,6 +671,11 @@ export async function closeRoundForm(user: User, stageId: string) {
       // F2 / desempate: los puestos no asignados en el rango premiable quedan desiertos al cerrar.
       // En desempate se permiten puestos absolutos del bloque F2, por ejemplo 4° y 5°.
       if (round.roundType === "F2" || round.roundType === "TIE_BREAK") {
+        if (round.roundType === "TIE_BREAK" && positioned.length !== eligibleCount) {
+          throw new BadRequestError(
+            "En desempate debes asignar un puesto a cada ejemplar empatado antes de cerrar."
+          );
+        }
         if (assigned.some((position) => position < minAssignablePosition || position > maxDesertablePosition)) {
           throw new BadRequestError(
             `En ${round.roundType === "F2" ? "F2" : "desempate"} solo puedes asignar puestos entre ${minAssignablePosition} y ${maxDesertablePosition}.`
@@ -1267,6 +1274,7 @@ type RoundParticipantDto = {
     name: string;
     description: string | null;
   } | null;
+  disqualifiedBy: { id: string; name: string } | null;
   selected: boolean;
   position: number | null;
   privateNote: string | null;
@@ -1316,6 +1324,7 @@ async function getRoundStateForJudge(
               description: participant.disqualificationReason.description
             }
           : null,
+        disqualifiedBy: toDisqualifiedByDto(participant?.disqualifiedByUser),
         selected: entry.selected,
         position: entry.position,
         privateNote: entry.privateNote,

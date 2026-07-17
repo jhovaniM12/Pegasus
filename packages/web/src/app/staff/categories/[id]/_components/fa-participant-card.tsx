@@ -107,11 +107,18 @@ export function FaParticipantCard({
         </div>
       </div>
 
-      {disqualified && participant.disqualificationReason && (
+      {disqualified && (participant.disqualificationReason || participant.disqualifiedBy) && (
         <div className="mt-3 border-t border-slate-100 pt-3">
-          <p className="rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
-            Motivo: {participant.disqualificationReason.name}
-          </p>
+          <div className="rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+            {participant.disqualificationReason && (
+              <p>Motivo: {participant.disqualificationReason.name}</p>
+            )}
+            {participant.disqualifiedBy && (
+              <p className={participant.disqualificationReason ? "mt-1 font-semibold text-red-800" : "font-semibold text-red-800"}>
+                Descalificado por: {participant.disqualifiedBy.name}
+              </p>
+            )}
+          </div>
         </div>
       )}
     </article>

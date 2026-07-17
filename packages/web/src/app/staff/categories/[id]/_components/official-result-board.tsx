@@ -21,19 +21,16 @@ type OfficialResultBoardProps = {
 
 const POSITION_STYLES = {
   1: {
-    circle: "bg-amber-400 text-amber-950 ring-2 ring-amber-300",
     podiumBar: "bg-gradient-to-b from-amber-400 to-amber-500 h-28",
     podiumLabel: "text-amber-950",
     medal: "🥇",
   },
   2: {
-    circle: "bg-slate-300 text-slate-800 ring-2 ring-slate-200",
     podiumBar: "bg-gradient-to-b from-slate-300 to-slate-400 h-20",
     podiumLabel: "text-slate-800",
     medal: "🥈",
   },
   3: {
-    circle: "bg-amber-700/80 text-amber-100 ring-2 ring-amber-600/40",
     podiumBar: "bg-gradient-to-b from-amber-700/80 to-amber-800/80 h-14",
     podiumLabel: "text-amber-100",
     medal: "🥉",
@@ -42,10 +39,6 @@ const POSITION_STYLES = {
 
 function positionStyle(position: number) {
   return POSITION_STYLES[position as keyof typeof POSITION_STYLES] ?? null;
-}
-
-function positionCircleStyle(position: number): string | null {
-  return positionStyle(position)?.circle ?? null;
 }
 
 function DistinctiveBadge({
@@ -164,7 +157,21 @@ function StatusBadge({
       </span>
     );
   }
-  if (row && (forceOfficialStatus || row.status === "FINAL")) {
+  if (row && forceOfficialStatus) {
+    return (
+      <span className="inline-flex rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+        Oficial
+      </span>
+    );
+  }
+  if (row?.resolvedByTieBreak) {
+    return (
+      <span className="inline-flex rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
+        Resuelto por desempate
+      </span>
+    );
+  }
+  if (row?.status === "FINAL") {
     return (
       <span className="inline-flex rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
         Oficial
@@ -261,7 +268,6 @@ export function OfficialResultBoard({
               const desertedRow = desertedByPosition.get(position);
               if (!row && !desertedRow) return null;
 
-              const circleStyle = positionCircleStyle(position);
               const isTied = row?.status === "TIED" && !forceOfficialStatus;
 
               return (
@@ -277,12 +283,7 @@ export function OfficialResultBoard({
                   )}
                 >
                   <td className="py-3 pl-4 pr-2">
-                    <span
-                      className={cn(
-                        "inline-flex size-8 items-center justify-center rounded-full text-sm font-extrabold tabular-nums",
-                        circleStyle ?? "bg-slate-100 text-slate-700"
-                      )}
-                    >
+                    <span className="inline-flex size-8 items-center justify-center rounded-full bg-slate-100 text-sm font-extrabold tabular-nums text-slate-700">
                       {position}
                     </span>
                   </td>

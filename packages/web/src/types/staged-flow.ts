@@ -85,6 +85,7 @@ export type FaParticipant = {
   registrationNumber: string;
   status: JudgingParticipantStatus;
   disqualificationReason: DisqualificationReason | null;
+  disqualifiedBy: { id: string; name: string } | null;
   decision: {
     id: string;
     decision: JudgeEntryDecision;
@@ -142,6 +143,7 @@ export type ManagementParticipant = {
   registrationNumber: string;
   status: JudgingParticipantStatus;
   disqualificationReason: string | null;
+  disqualifiedBy: { id: string; name: string } | null;
 };
 
 export type ManagementState = {
@@ -161,6 +163,7 @@ export type RoundParticipant = {
   registrationNumber: string;
   status: JudgingParticipantStatus;
   disqualificationReason: DisqualificationReason | null;
+  disqualifiedBy: { id: string; name: string } | null;
   selected: boolean;
   position: number | null;
   privateNote: string | null;
@@ -224,6 +227,8 @@ export type RoundResult = {
   finalPosition: number | null;
   status: RoundResultStatus;
   awardDistinctive: AwardDistinctiveDto | null;
+  /** Metadato de presentación agregado al combinar el F2 con desempates consolidados. */
+  resolvedByTieBreak?: boolean;
 };
 
 export type DesertedRoundResult = {

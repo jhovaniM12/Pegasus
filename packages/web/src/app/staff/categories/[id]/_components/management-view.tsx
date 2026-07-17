@@ -380,9 +380,12 @@ function FaSection({
                       {p.registrationNumber}
                     </span>
                   </div>
-                  {p.disqualificationReason && (
-                    <span className="inline-flex items-center rounded bg-red-50 border border-red-100/40 px-2 py-0.5 text-xs font-medium text-red-700 self-start sm:self-auto">
-                      {p.disqualificationReason}
+                  {(p.disqualificationReason || p.disqualifiedBy) && (
+                    <span className="inline-flex flex-col items-start gap-0.5 rounded bg-red-50 border border-red-100/40 px-2 py-0.5 text-xs font-medium text-red-700 self-start sm:self-auto sm:items-end">
+                      {p.disqualificationReason && <span>{p.disqualificationReason}</span>}
+                      {p.disqualifiedBy && (
+                        <span className="font-normal text-red-600/90">Por: {p.disqualifiedBy.name}</span>
+                      )}
                     </span>
                   )}
                 </li>

@@ -28,12 +28,14 @@ import {
   ROLE_LABELS,
   assertStageAccess,
   assertUserRole,
+  formatStaffDisplayName,
   getStageOrThrow,
   getUsersByFairRole,
   queueRoleNotifications,
   recordEvent,
   roleExternalIdForUser,
-  stageNotificationContext
+  stageNotificationContext,
+  toDisqualifiedByDto
 } from "./judging/shared.js";
 
 export type JudgeFormatKey = "FA" | "F1" | "F2" | "TIE_BREAK";
@@ -735,27 +737,43 @@ export async function getFa(user: User, stageId: string) {
 
 async function getFaForStage(manager: EntityManager, user: User, stage: FairCategoryStage) {
   const form = await getJudgeFormOrCreate(manager, stage, user);
-  const [participants, decisions, reasons, consolidatedRows] = await Promise.all([
-    manager.getRepository(JudgingParticipant).find({
-      where: { fairCategoryStageId: stage.id },
-      relations: { fairEntry: true, disqualificationReason: true },
-      order: { fairEntry: { trackPosition: "ASC" } }
-    }),
-    manager.getRepository(FaJudgeEntryDecision).find({
-      where: { faJudgeFormId: form.id },
-      relations: { disqualificationReason: true }
-    }),
-    manager.getRepository(DisqualificationReason).find({
-      where: { isActive: true },
-      order: { code: "ASC" }
-    }),
-    manager.getRepository(FaConsolidatedResult).find({
-      where: { fairCategoryStageId: stage.id },
-      relations: { judgingParticipant: { fairEntry: true } },
-      order: { finalPosition: "ASC" }
-    })
-  ]);
+  const [participants, decisions, reasons, consolidatedRows, faForms, stageDisqualifyDecisions] =
+    await Promise.all([
+      manager.getRepository(JudgingParticipant).find({
+        where: { fairCategoryStageId: stage.id },
+        relations: { fairEntry: true, disqualificationReason: true, disqualifiedByUser: { person: true } },
+        order: { fairEntry: { trackPosition: "ASC" } }
+      }),
+      manager.getRepository(FaJudgeEntryDecision).find({
+        where: { faJudgeFormId: form.id },
+        relations: { disqualificationReason: true }
+      }),
+      manager.getRepository(DisqualificationReason).find({
+        where: { isActive: true },
+        order: { code: "ASC" }
+      }),
+      manager.getRepository(FaConsolidatedResult).find({
+        where: { fairCategoryStageId: stage.id },
+        relations: { judgingParticipant: { fairEntry: true } },
+        order: { finalPosition: "ASC" }
+      }),
+      manager.getRepository(FaJudgeForm).find({
+        where: { fairCategoryStageId: stage.id },
+        relations: { judgeUser: { person: true } }
+      }),
+      manager.getRepository(FaJudgeEntryDecision).find({
+        where: {
+          decision: "DISQUALIFIED",
+          faJudgeForm: { fairCategoryStageId: stage.id }
+        },
+        relations: { faJudgeForm: { judgeUser: { person: true } } }
+      })
+    ]);
   const decisionsByParticipantId = new Map(decisions.map((decision) => [decision.judgingParticipantId, decision]));
+  const judgeByFaFormId = new Map(faForms.map((faForm) => [faForm.id, faForm.judgeUser]));
+  const judgeByDisqualifyDecision = new Map(
+    stageDisqualifyDecisions.map((decision) => [decision.judgingParticipantId, decision.faJudgeForm.judgeUser])
+  );
 
   return {
     stage: await buildStageSummary(manager, stage),
@@ -775,6 +793,14 @@ async function getFaForStage(manager: EntityManager, user: User, stage: FairCate
     })),
     participants: participants.map((participant) => {
       const decision = decisionsByParticipantId.get(participant.id);
+      const disqualifiedBy =
+        toDisqualifiedByDto(participant.disqualifiedByUser) ??
+        toDisqualifiedByDto(
+          participant.disqualifiedByJudgeFormId
+            ? judgeByFaFormId.get(participant.disqualifiedByJudgeFormId)
+            : null
+        ) ??
+        toDisqualifiedByDto(judgeByDisqualifyDecision.get(participant.id));
 
       return {
         id: participant.id,
@@ -791,6 +817,7 @@ async function getFaForStage(manager: EntityManager, user: User, stage: FairCate
               description: participant.disqualificationReason.description
             }
           : null,
+        disqualifiedBy,
         decision: decision
           ? {
               id: decision.id,
@@ -933,6 +960,7 @@ export async function disqualifyParticipant(
 
     participant.status = "DISQUALIFIED";
     participant.disqualifiedByJudgeFormId = form.id;
+    participant.disqualifiedByUserId = user.id;
     participant.disqualificationReasonId = reason.id;
     participant.disqualifiedAt = new Date();
     await manager.getRepository(JudgingParticipant).save(participant);
@@ -953,11 +981,18 @@ export async function disqualifyParticipant(
       payload: { judgingParticipantId: participant.id, reasonId: reason.id }
     });
     const notification = stageNotificationContext(stage);
+    const judgeName = formatStaffDisplayName(user);
     await queueRoleNotifications(manager, stage, "2", {
       type: "JUDGING_PARTICIPANT_DISQUALIFIED",
       title: `Ejemplar ${participant.fairEntry?.trackPosition ?? ""} descalificado - ${notification.titleSuffix}`.trim(),
-      body: `Motivo: ${reason.name}. Categoria: ${notification.detail}.`,
-      payload: { ...notification.payload, judgingParticipantId: participant.id, reasonId: reason.id }
+      body: `${judgeName} descalificó el ejemplar. Motivo: ${reason.name}. Categoría: ${notification.detail}.`,
+      payload: {
+        ...notification.payload,
+        judgingParticipantId: participant.id,
+        reasonId: reason.id,
+        disqualifiedByUserId: user.id,
+        disqualifiedByName: judgeName
+      }
     });
 
     return getFaForStage(manager, user, stage);
@@ -1054,7 +1089,7 @@ export async function getManagement(user: User, stageId: string) {
       }),
       manager.getRepository(JudgingParticipant).find({
         where: { fairCategoryStageId: stage.id },
-        relations: { fairEntry: true, disqualificationReason: true }
+        relations: { fairEntry: true, disqualificationReason: true, disqualifiedByUser: { person: true } }
       }),
       manager.getRepository(FaConsolidatedResult).find({
         where: { fairCategoryStageId: stage.id },
@@ -1100,14 +1135,25 @@ export async function getManagement(user: User, stageId: string) {
           selections
         };
       }),
-      participants: participants.map((participant) => ({
-        id: participant.id,
-        trackPosition: participant.fairEntry.trackPosition,
-        riderName: participant.fairEntry.riderName,
-        registrationNumber: participant.fairEntry.registrationNumber,
-        status: participant.status,
-        disqualificationReason: participant.disqualificationReason?.name ?? null
-      })),
+      participants: participants.map((participant) => {
+        const disqualifiedBy =
+          toDisqualifiedByDto(participant.disqualifiedByUser) ??
+          toDisqualifiedByDto(
+            participant.disqualifiedByJudgeFormId
+              ? forms.find((faForm) => faForm.id === participant.disqualifiedByJudgeFormId)?.judgeUser
+              : null
+          );
+
+        return {
+          id: participant.id,
+          trackPosition: participant.fairEntry.trackPosition,
+          riderName: participant.fairEntry.riderName,
+          registrationNumber: participant.fairEntry.registrationNumber,
+          status: participant.status,
+          disqualificationReason: participant.disqualificationReason?.name ?? null,
+          disqualifiedBy
+        };
+      }),
       consolidated: consolidated.map((result) => ({
         id: result.id,
         trackPosition: result.judgingParticipant.fairEntry.trackPosition,
