@@ -9,6 +9,7 @@ export type FaParticipantCardProps = {
   selected: boolean;
   editable: boolean;
   onToggle: (id: string) => void;
+  onRequestRepeatTrack: (id: string) => void;
   onOpenDisqualify: (id: string) => void;
 };
 
@@ -17,9 +18,18 @@ export function FaParticipantCard({
   selected,
   editable,
   onToggle,
+  onRequestRepeatTrack,
   onOpenDisqualify,
 }: FaParticipantCardProps) {
   const disqualified = participant.status === "DISQUALIFIED";
+  const repeatRequest = participant.repeatTrackRequest;
+  const repeatDisabled = !editable || disqualified || repeatRequest !== null;
+  const repeatTitle =
+    repeatRequest?.status === "EXECUTED"
+      ? `Repetición ejecutada${repeatRequest.requestedBy ? `, solicitada por ${repeatRequest.requestedBy.name}` : ""}`
+      : repeatRequest
+        ? `Repetición solicitada${repeatRequest.requestedBy ? ` por ${repeatRequest.requestedBy.name}` : ""}`
+        : "Solicitar repetir pista";
 
   return (
     <article
@@ -36,17 +46,24 @@ export function FaParticipantCard({
     >
       <div className="flex items-center justify-between gap-4">
         <div className="flex shrink-0 items-center justify-center">
-          <div
+          <button
+            type="button"
+            disabled={repeatDisabled}
+            onClick={() => onRequestRepeatTrack(participant.id)}
             className={cn(
-              "flex size-9 items-center justify-center rounded-full border text-slate-500 transition-colors",
-              disqualified || (!editable && selected)
-                ? "border-slate-100 bg-slate-50 text-slate-300"
-                : "border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-600 cursor-pointer"
+              "flex size-9 items-center justify-center rounded-full border transition-colors",
+              repeatRequest?.status === "EXECUTED"
+                ? "border-emerald-100 bg-emerald-50 text-emerald-600"
+                : repeatRequest
+                  ? "border-amber-100 bg-amber-50 text-amber-600"
+                  : repeatDisabled
+                    ? "border-slate-100 bg-slate-50 text-slate-300 cursor-default"
+                    : "border-amber-100 bg-amber-50 hover:bg-amber-100 text-amber-700 cursor-pointer active:scale-95"
             )}
-            title="Repetir pista (visual)"
+            title={repeatTitle}
           >
             <RotateCcw className="size-4" />
-          </div>
+          </button>
         </div>
 
         <button
@@ -117,6 +134,24 @@ export function FaParticipantCard({
               <p className={participant.disqualificationReason ? "mt-1 font-semibold text-red-800" : "font-semibold text-red-800"}>
                 Descalificado por: {participant.disqualifiedBy.name}
               </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {repeatRequest && !disqualified && (
+        <div className="mt-3 border-t border-slate-100 pt-3">
+          <div
+            className={cn(
+              "rounded-lg px-3 py-2 text-xs font-semibold",
+              repeatRequest.status === "EXECUTED"
+                ? "bg-emerald-50 text-emerald-700"
+                : "bg-amber-50 text-amber-700"
+            )}
+          >
+            {repeatRequest.status === "EXECUTED" ? "Repetición ejecutada" : "Repetición solicitada"}
+            {repeatRequest.requestedBy && (
+              <span className="mt-1 block font-medium opacity-80">Por: {repeatRequest.requestedBy.name}</span>
             )}
           </div>
         </div>

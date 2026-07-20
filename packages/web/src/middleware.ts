@@ -42,7 +42,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Verificamos si existe la cookie de sesión de pegasus
+  // Verificamos si existe la cookie de sesión de Pegaso
   const sessionToken = request.cookies.get("pegasus_session")?.value;
   const sessionRole = readSessionRole(sessionToken);
   const isRootSession = sessionRole === "ROOT";

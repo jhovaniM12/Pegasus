@@ -1,4 +1,4 @@
-import { PegasusLogo } from "@/components/brand/pegasus-logo";
+import { PegasoLogo } from "@/components/brand/pegaso-logo";
 
 type PageLoaderProps = {
   label?: string;
@@ -7,7 +7,7 @@ type PageLoaderProps = {
 };
 
 /**
- * Branded loader for Pegasus. Used while a page fetches its initial data.
+ * Branded loader for Pegaso. Used while a page fetches its initial data.
  */
 export function PageLoader({
   label = "Cargando...",
@@ -43,7 +43,7 @@ export function PageLoader({
           className="relative flex size-14 items-center justify-center rounded-full bg-white p-1.5 ring-[3px] ring-zapote/30 shadow-sm"
           aria-hidden
         >
-          <PegasusLogo size="xs" className="size-full" priority />
+          <PegasoLogo size="xs" className="size-full" priority />
         </div>
       </div>
 

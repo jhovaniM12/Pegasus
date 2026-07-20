@@ -89,6 +89,18 @@ class StagedFlowService extends ApiService {
     );
   }
 
+  async requestFaRepeatTrack(stageId: string, judgingParticipantId: string): Promise<ApiResponse<FaState>> {
+    return this.post<ApiResponse<FaState>>(
+      `/api/staff/fair-categories/${stageId}/fa/participants/${judgingParticipantId}/repeat-track-request`
+    );
+  }
+
+  async executeFaRepeatTrackRequest(stageId: string, requestId: string): Promise<ApiResponse<ManagementState>> {
+    return this.post<ApiResponse<ManagementState>>(
+      `/api/staff/fair-categories/${stageId}/fa/repeat-track-requests/${requestId}/execute`
+    );
+  }
+
   async closeFa(stageId: string): Promise<ApiResponse<FaState>> {
     return this.post<ApiResponse<FaState>>(`/api/staff/fair-categories/${stageId}/fa/close`);
   }

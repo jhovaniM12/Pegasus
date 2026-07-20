@@ -15,19 +15,19 @@ const sizeClasses = {
   "2xl": "h-36 w-36",
 } as const;
 
-type PegasusLogoProps = {
+type PegasoLogoProps = {
   size?: keyof typeof sizeClasses;
   className?: string;
   priority?: boolean;
   href?: string;
 };
 
-export function PegasusLogo({
+export function PegasoLogo({
   size = "md",
   className,
   priority = false,
   href,
-}: PegasusLogoProps) {
+}: PegasoLogoProps) {
   const image = (
     <Image
       src={LOGO_SRC}

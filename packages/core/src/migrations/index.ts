@@ -25,3 +25,4 @@ export { CreateHorsesAndLinkFairEntries1717430400023 } from "./1717430400023-Cre
 export { CreateSyncControlTables1717430400024 } from "./1717430400024-CreateSyncControlTables.js";
 export { RelaxNotificationOutboxIdempotency1717430400025 } from "./1717430400025-RelaxNotificationOutboxIdempotency.js";
 export { SimplifyNotificationOutboxDelivery1717430400026 } from "./1717430400026-SimplifyNotificationOutboxDelivery.js";
+export { CreateFaRepeatTrackRequests1717430400027 } from "./1717430400027-CreateFaRepeatTrackRequests.js";

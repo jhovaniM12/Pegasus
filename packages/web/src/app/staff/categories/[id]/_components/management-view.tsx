@@ -10,6 +10,7 @@ import {
   Eye,
   Gavel,
   MinusCircle,
+  RotateCcw,
   Stethoscope,
   Timer,
   Trophy,
@@ -30,6 +31,7 @@ import { formatFaFormDuration, formatRoundFormTime } from "./round-form-timing";
 import type {
   JudgeFormStatus,
   ManagementJudgeForm,
+  ManagementFaRepeatTrackRequest,
   ManagementState,
   ManagementVetCheck,
   RoundManagementItem,
@@ -182,6 +184,87 @@ function JudgeFormRow({
   );
 }
 
+function RepeatTrackRequestsSection({
+  requests,
+  busy = false,
+  onExecute,
+}: {
+  requests: ManagementFaRepeatTrackRequest[];
+  busy?: boolean;
+  onExecute?: (requestId: string) => void;
+}) {
+  const sorted = [...requests].sort((a, b) => {
+    if (a.status !== b.status) return a.status === "PENDING" ? -1 : 1;
+    return new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime();
+  });
+
+  if (requests.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-amber-200 bg-amber-50/40 shadow-sm">
+      <div className="flex items-center border-b border-amber-200/70 px-4 py-3">
+        <div className="flex items-center gap-2">
+          <RotateCcw className="size-4 text-amber-700" />
+          <span className="text-sm font-semibold text-slate-900">Solicitudes de repetir pista (FA)</span>
+        </div>
+      </div>
+
+      <div className="space-y-2 p-3">
+        {sorted.map((request) => (
+          <div
+            key={request.id}
+            className="flex flex-col gap-3 rounded-lg border border-amber-100 bg-white px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-slate-950">
+                #{request.participant.trackPosition} {request.participant.riderName}
+              </p>
+              <p className="mt-1 text-xs text-slate-600">Juez: {request.judgeName}</p>
+              {request.status === "EXECUTED" && request.executedAt ? (
+                <p className="mt-2 text-xs font-medium text-emerald-700">
+                  Ejecutada: {formatDate(request.executedAt)}
+                  {request.executedBy ? ` por ${request.executedBy.name}` : ""}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="flex shrink-0 flex-col items-start gap-2 sm:items-end">
+              <div className="flex items-center gap-2">
+                <span className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
+                  FA
+                </span>
+                <span
+                  className={cn(
+                    "rounded-md border px-2 py-1 text-xs font-medium",
+                    request.status === "EXECUTED"
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : "border-amber-200 bg-amber-50 text-amber-700"
+                  )}
+                >
+                  {request.status === "EXECUTED" ? "Ejecutada" : "Pendiente"}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500">{formatDate(request.requestedAt)}</p>
+              {request.status === "PENDING" && onExecute && (
+                <Button
+                  size="sm"
+                  className="h-8 bg-emerald-600 text-xs font-semibold text-white hover:bg-emerald-700 disabled:bg-emerald-600/50"
+                  disabled={busy}
+                  onClick={() => onExecute(request.id)}
+                >
+                  Marcar ejecutada
+                </Button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── PreRingSection ───────────────────────────────────────────────────────────
 
 function PreRingSection({
@@ -274,10 +357,12 @@ function FaSection({
   management,
   busy = false,
   onConsolidateFa,
+  onExecuteRepeatTrack,
 }: {
   management: ManagementState;
   busy?: boolean;
   onConsolidateFa?: () => void;
+  onExecuteRepeatTrack?: (requestId: string) => void;
 }) {
   const { judgeForms, participants, consolidated, summary } = management;
   const { closedForms, totalJudges } = summary.judging;
@@ -395,6 +480,12 @@ function FaSection({
       )}
       </div>
 
+      <RepeatTrackRequestsSection
+        requests={management.faRepeatTrackRequests}
+        busy={busy}
+        onExecute={onExecuteRepeatTrack}
+      />
+
     </div>
   );
 }
@@ -407,12 +498,14 @@ export function ManagementView({
   busy = false,
   onConsolidateFa,
   onActivateRound,
+  onExecuteRepeatTrack,
 }: {
   management: ManagementState;
   rounds?: RoundManagementItem[];
   busy?: boolean;
   onConsolidateFa?: () => void;
   onActivateRound?: (config: ActivateRoundConfig) => void;
+  onExecuteRepeatTrack?: (requestId: string) => void;
 }) {
   const f1Round = [...rounds].reverse().find((round) => round.roundType === "F1") ?? null;
   const activateRoundConfig = resolveActivateRoundConfig({
@@ -424,7 +517,12 @@ export function ManagementView({
   return (
     <div className="space-y-5">
       <PreRingSection management={management} />
-      <FaSection management={management} busy={busy} onConsolidateFa={onConsolidateFa} />
+      <FaSection
+        management={management}
+        busy={busy}
+        onConsolidateFa={onConsolidateFa}
+        onExecuteRepeatTrack={onExecuteRepeatTrack}
+      />
       <RoundsSummarySection rounds={rounds} />
       {activateRoundConfig && onActivateRound && (
         <ActivateRoundCard

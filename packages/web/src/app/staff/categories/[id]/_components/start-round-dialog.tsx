@@ -12,24 +12,36 @@ import {
 import type { JudgeFormatKey } from "@/types/staged-flow";
 
 const ROUND_TITLES: Record<"F1" | "F2" | "TIE_BREAK", string> = {
-  F1: "Formato F1",
-  F2: "Formato F2",
+  F1: "prueba individual",
+  F2: "prueba individual",
   TIE_BREAK: "Formato desempate",
 };
 
 const ROUND_ACTIONS: Record<"F1" | "F2" | "TIE_BREAK", string[]> = {
   F1: [
-    "Iniciará tu tarjeta F1 para esta categoría",
+    "Iniciará tu tarjeta de prueba individual para esta categoría",
     "Te permitirá seleccionar los ejemplares que pasan a la final",
   ],
   F2: [
-    "Iniciará tu tarjeta F2 para esta categoría",
+    "Iniciará tu tarjeta de prueba individual para esta categoría",
     "Te permitirá asignar los puestos finales a los finalistas",
   ],
   TIE_BREAK: [
     "Iniciará tu tarjeta de desempate para esta categoría",
     "Te permitirá definir el orden entre los ejemplares empatados",
   ],
+};
+
+const ROUND_CONFIRM_QUESTIONS: Record<"F1" | "F2" | "TIE_BREAK", string> = {
+  F1: "¿Estás seguro de que deseas iniciar el juzgamiento de prueba individual para esta categoría?",
+  F2: "¿Estás seguro de que deseas iniciar el juzgamiento de prueba individual para esta categoría?",
+  TIE_BREAK: "¿Estás seguro de que deseas iniciar el juzgamiento de desempate para esta categoría?",
+};
+
+const ROUND_CONFIRM_LABELS: Record<"F1" | "F2" | "TIE_BREAK", string> = {
+  F1: "Iniciar prueba individual",
+  F2: "Iniciar prueba individual",
+  TIE_BREAK: "Confirmar Inicio",
 };
 
 type StartRoundDialogProps = {
@@ -53,6 +65,8 @@ export function StartRoundDialog({
 }: StartRoundDialogProps) {
   const title = ROUND_TITLES[roundKey];
   const actions = ROUND_ACTIONS[roundKey];
+  const confirmQuestion = ROUND_CONFIRM_QUESTIONS[roundKey];
+  const confirmLabel = ROUND_CONFIRM_LABELS[roundKey];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -66,9 +80,7 @@ export function StartRoundDialog({
           </DialogHeader>
         </div>
 
-        <p className="text-sm leading-relaxed text-slate-700">
-          ¿Estás seguro de que deseas iniciar el juzgamiento {roundKey} para esta categoría?
-        </p>
+        <p className="text-sm leading-relaxed text-slate-700">{confirmQuestion}</p>
 
         <div className="rounded-lg border border-violet-200 bg-violet-50/60 p-4">
           <div className="flex items-center gap-2 text-sm font-semibold text-violet-900">
@@ -102,7 +114,7 @@ export function StartRoundDialog({
             disabled={busy}
             className="bg-violet-600 text-white hover:bg-violet-700"
           >
-            {busy ? "Procesando..." : "Confirmar Inicio"}
+            {busy ? "Procesando..." : confirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

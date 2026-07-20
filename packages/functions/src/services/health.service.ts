@@ -7,7 +7,7 @@ export type HealthStatus = {
 export function getHealthStatus(): HealthStatus {
   return {
     success: true,
-    service: process.env.SERVICE_NAME ?? "pegasus-api",
+    service: process.env.SERVICE_NAME ?? "pegaso-api",
     status: "healthy"
   };
 }

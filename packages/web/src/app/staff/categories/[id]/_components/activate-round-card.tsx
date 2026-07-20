@@ -82,20 +82,20 @@ export function ActivateRoundCard({
   onActivate,
   embedded = false,
 }: ActivateRoundCardProps) {
-  const { roundType, sourceLabel, finalistCount } = config;
+  const { sourceLabel, finalistCount } = config;
 
   const content = (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
       <div className="min-w-0 space-y-2">
         <div className="flex items-center gap-2">
           <Trophy className="size-4 shrink-0 text-slate-900" />
-          <h3 className="text-base font-semibold text-slate-900">Formato {roundType}</h3>
+          <h3 className="text-base font-semibold text-slate-900">Prueba individual</h3>
         </div>
         <p className="text-sm text-slate-600">
-          El Formato {roundType} aún no ha sido activado.
+          La prueba individual aún no ha sido activada.
         </p>
         <p className="text-sm font-medium text-amber-700">
-          Hay {finalistCount} finalistas de {sourceLabel}. Se requiere activar {roundType}.
+          Hay {finalistCount} finalistas de {sourceLabel}. Se requiere iniciar la prueba individual.
         </p>
       </div>
 
@@ -105,7 +105,7 @@ export function ActivateRoundCard({
         onClick={onActivate}
       >
         <Trophy className="size-4" />
-        Activar {roundType}
+        Iniciar prueba individual
       </Button>
     </div>
   );

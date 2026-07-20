@@ -28,7 +28,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { NotificationInbox } from "@/components/notification-inbox";
 import { PushNotificationPrompt } from "@/components/push-notification-prompt";
-import { PegasusLogo } from "@/components/brand/pegasus-logo";
+import { PegasoLogo } from "@/components/brand/pegaso-logo";
 import { useToast } from "@/components/ui/toast";
 import {
   DropdownMenu,
@@ -537,7 +537,7 @@ export default function StaffPage() {
       <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 px-4 py-4 backdrop-blur md:px-6">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
-            <PegasusLogo size="xs" className="shrink-0" priority />
+            <PegasoLogo size="xs" className="shrink-0" priority />
             <div className="min-w-0">
               <h1 className="truncate text-xl font-semibold tracking-normal text-slate-950">
                 Categorías asignadas

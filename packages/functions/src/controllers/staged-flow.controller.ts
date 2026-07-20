@@ -7,6 +7,7 @@ import {
   closeFa,
   closePreRing,
   disqualifyParticipant,
+  executeFaRepeatTrackRequest,
   getFa,
   getManagement,
   listDisqualificationReasons,
@@ -14,6 +15,7 @@ import {
   listStagedCategories,
   listVeterinaryChecks,
   resetStageForTesting,
+  requestFaRepeatTrack,
   startFa,
   startJudging,
   startPreRing,
@@ -79,7 +81,7 @@ async function dispatchNotificationsAfterAction(stageId: string): Promise<void> 
     console.log(
       JSON.stringify({
         level: "ERROR",
-        service: process.env.SERVICE_NAME ?? "pegasus-api",
+        service: process.env.SERVICE_NAME ?? "pegaso-api",
         event: "NOTIFICATION_DISPATCH_FAILED",
         error: error instanceof Error ? error.message : "Error desconocido.",
         ts: new Date().toISOString()
@@ -160,6 +162,20 @@ export async function disqualifyParticipantController(c: Context) {
   const result = await disqualifyParticipant(user, stageId, requiredParam(c, "judgingParticipantId"), body.reasonId);
   await dispatchNotificationsAfterAction(stageId);
   return c.json(success(result));
+}
+
+export async function requestFaRepeatTrackController(c: Context) {
+  const user = await getStaffUser(c);
+  const stageId = requiredParam(c, "id");
+  const result = await requestFaRepeatTrack(user, stageId, requiredParam(c, "judgingParticipantId"));
+  await dispatchNotificationsAfterAction(stageId);
+  return c.json(success(result));
+}
+
+export async function executeFaRepeatTrackRequestController(c: Context) {
+  const user = await getStaffUser(c);
+  const stageId = requiredParam(c, "id");
+  return c.json(success(await executeFaRepeatTrackRequest(user, stageId, requiredParam(c, "requestId"))));
 }
 
 export async function closeFaController(c: Context) {

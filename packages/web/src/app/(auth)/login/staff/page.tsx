@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { PegasusLogo } from "@/components/brand/pegasus-logo";
+import { PegasoLogo } from "@/components/brand/pegaso-logo";
 
 function getAccessErrorMessage(data: unknown): string {
   if (
@@ -102,7 +102,7 @@ export default function AccessPage() {
       ) : (
         <div className="relative z-10 w-full max-w-sm rounded-lg border border-white/25 bg-white/92 p-6 shadow-2xl backdrop-blur-md">
           <div className="mb-8 flex flex-col items-center gap-3 text-center">
-            <PegasusLogo size="2xl" priority />
+            <PegasoLogo size="2xl" priority />
             <p className="text-xs text-slate-500">Acceso de staff</p>
           </div>
 

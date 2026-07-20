@@ -6,7 +6,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { PegasusLogo } from "@/components/brand/pegasus-logo";
+import { PegasoLogo } from "@/components/brand/pegaso-logo";
 
 function getLoginErrorMessage(data: unknown): string {
   if (
@@ -63,7 +63,7 @@ export default function LoginPage() {
       <div className="flex min-h-screen w-full items-center justify-center px-6 py-10 sm:px-10 lg:px-16">
         <div className="w-full max-w-[420px]">
           <div className="mb-10">
-            <PegasusLogo size="lg" priority />
+            <PegasoLogo size="lg" priority />
             <p className="mt-4 text-sm text-slate-500">Panel administrativo</p>
           </div>
 

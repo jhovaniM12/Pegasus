@@ -16,7 +16,7 @@ function logPushFailure(notificationIds: string[], errorMessage: string): void {
   console.log(
     JSON.stringify({
       level: "ERROR",
-      service: process.env.SERVICE_NAME ?? "pegasus-api",
+      service: process.env.SERVICE_NAME ?? "pegaso-api",
       event: "PUSH_NOTIFICATION_FAILED",
       notificationIds,
       error: errorMessage,

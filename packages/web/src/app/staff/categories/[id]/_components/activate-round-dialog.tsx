@@ -21,10 +21,10 @@ type ActivateRoundDialogProps = {
 
 function activationMessage(roundType: ActivateRoundConfig["roundType"]): string {
   if (roundType === "F1") {
-    return "¿Está seguro de activar el Formato F1? Todos los jueces podrán comenzar a realizar sus selecciones con recordatorios.";
+    return "¿Está seguro de iniciar la prueba individual? Todos los jueces podrán comenzar a realizar sus selecciones con recordatorios.";
   }
 
-  return "¿Está seguro de activar el Formato F2? Todos los jueces podrán comenzar a asignar los puestos finales de la categoría.";
+  return "¿Está seguro de iniciar la prueba individual? Todos los jueces podrán comenzar a asignar los puestos finales de la categoría.";
 }
 
 export function ActivateRoundDialog({
@@ -49,7 +49,7 @@ export function ActivateRoundDialog({
           </div>
           <DialogHeader className="gap-0 text-left">
             <DialogTitle className="text-lg font-semibold text-slate-950">
-              Activar Formato {config.roundType}
+              Iniciar prueba individual
             </DialogTitle>
           </DialogHeader>
         </div>

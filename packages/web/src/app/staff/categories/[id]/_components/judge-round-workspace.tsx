@@ -7,6 +7,7 @@ import { useToast } from "@/components/ui/toast";
 import { stagedFlowService } from "@/services/staged-flow.service";
 import type { RoundParticipant, RoundState, RoundType } from "@/types/staged-flow";
 import { F2PositionBoard } from "./f2-position-board";
+import { F2PositionSummary } from "./f2-position-summary";
 import { F1SelectionBoard } from "./f1-selection-board";
 import { FaDisqualifyDialog } from "./fa-disqualify-dialog";
 
@@ -155,6 +156,21 @@ export function JudgeRoundWorkspace({
     }
     return Array.from({ length: Math.min(MAX_F2_POSITIONS, eligibleParticipants.length) }, (_, index) => index + 1);
   }, [eligibleParticipants.length, round.positionRange]);
+
+  const positionSummaryItems = useMemo(() => {
+    const trackByPosition = new Map(
+      eligibleParticipants
+        .filter((participant) => participant.position !== null)
+        .map((participant) => [participant.position as number, participant.trackPosition])
+    );
+    const desertedSet = new Set(localDesertedPositions);
+
+    return allowedPositions.map((position) => ({
+      position,
+      trackPosition: trackByPosition.get(position) ?? null,
+      deserted: desertedSet.has(position),
+    }));
+  }, [allowedPositions, eligibleParticipants, localDesertedPositions]);
 
   const confirmDisqualify = async (participantId: string, reasonId: string) => {
     if (!editable) return;
@@ -457,7 +473,14 @@ export function JudgeRoundWorkspace({
       )}
 
       {formStatus === "STARTED" && (
-        <div className="mt-6 border-t border-slate-200 pt-4">
+        <div className="mt-6 space-y-3 border-t border-slate-200 pt-4">
+          {isPositionBoardRound && (
+            <F2PositionSummary
+              items={positionSummaryItems}
+              assignedCount={assignedByParticipant.length}
+              totalPositions={allowedPositions.length}
+            />
+          )}
           <Button
             className="h-11 w-full bg-blue-600 text-base font-semibold text-white hover:bg-blue-700 disabled:bg-blue-600/50"
             disabled={busy || !canClose}

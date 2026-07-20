@@ -37,6 +37,7 @@ export type JudgeFormat = {
 };
 export type JudgingParticipantStatus = "ELIGIBLE" | "DISQUALIFIED";
 export type JudgeEntryDecision = "SELECTED" | "DISCARDED" | "DISQUALIFIED";
+export type FaRepeatTrackRequestStatus = "PENDING" | "EXECUTED";
 
 export type ApiResponse<T> = {
   success: boolean;
@@ -86,6 +87,13 @@ export type FaParticipant = {
   status: JudgingParticipantStatus;
   disqualificationReason: DisqualificationReason | null;
   disqualifiedBy: { id: string; name: string } | null;
+  repeatTrackRequest: {
+    id: string;
+    status: FaRepeatTrackRequestStatus;
+    requestedAt: string;
+    executedAt: string | null;
+    requestedBy: { id: string; name: string } | null;
+  } | null;
   decision: {
     id: string;
     decision: JudgeEntryDecision;
@@ -146,11 +154,28 @@ export type ManagementParticipant = {
   disqualifiedBy: { id: string; name: string } | null;
 };
 
+export type ManagementFaRepeatTrackRequest = {
+  id: string;
+  status: FaRepeatTrackRequestStatus;
+  requestedAt: string;
+  executedAt: string | null;
+  judgeUserId: string;
+  judgeName: string;
+  executedBy: { id: string; name: string } | null;
+  participant: {
+    id: string;
+    trackPosition: number;
+    riderName: string;
+    registrationNumber: string;
+  };
+};
+
 export type ManagementState = {
   summary: StagedCategory & { preRingClosedAt: string | null; judgingStartedAt: string | null };
   veterinaryChecks: ManagementVetCheck[];
   judgeForms: ManagementJudgeForm[];
   participants: ManagementParticipant[];
+  faRepeatTrackRequests: ManagementFaRepeatTrackRequest[];
   consolidated: Array<{ id: string; trackPosition: number; votesCount: number; finalPosition: number | null }>;
 };
 

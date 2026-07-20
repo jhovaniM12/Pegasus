@@ -2,7 +2,7 @@
 
 import { FileText, Plus, RotateCcw, X } from "lucide-react";
 
-import { findAwardDistinctiveForPosition } from "@/lib/award-distinctive-cinta";
+import { getPositionActiveStyle } from "@/lib/award-distinctive-cinta";
 import { ReminderIcon } from "@/components/reminder-icon";
 import { cn } from "@/lib/utils";
 import type { AwardDistinctive } from "@/types/award-distinctives";
@@ -49,38 +49,6 @@ function PrivateNoteBadge({ className }: { className?: string }) {
       1
     </span>
   );
-}
-
-function readableTextForHex(hex: string): string {
-  const clean = hex.replace("#", "");
-  if (clean.length !== 6) return "text-slate-900";
-  const r = parseInt(clean.slice(0, 2), 16);
-  const g = parseInt(clean.slice(2, 4), 16);
-  const b = parseInt(clean.slice(4, 6), 16);
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return luminance > 0.62 ? "text-slate-900" : "text-white";
-}
-
-const POSITION_FALLBACK_CLASSES: Record<number, string> = {
-  1: "bg-yellow-400 text-yellow-900",
-  2: "bg-red-500 text-white",
-  3: "bg-orange-400 text-white",
-  4: "bg-emerald-500 text-white",
-  5: "bg-blue-500 text-white",
-};
-
-function getPositionActiveStyle(
-  position: number,
-  distinctives: AwardDistinctive[]
-): { className: string; style?: React.CSSProperties } {
-  const distinctive = findAwardDistinctiveForPosition(distinctives, position);
-  if (distinctive?.colorHex) {
-    return {
-      className: readableTextForHex(distinctive.colorHex),
-      style: { backgroundColor: distinctive.colorHex },
-    };
-  }
-  return { className: POSITION_FALLBACK_CLASSES[position] ?? "bg-slate-400 text-white" };
 }
 
 export function RoundEntryCard(props: RoundEntryCardProps) {

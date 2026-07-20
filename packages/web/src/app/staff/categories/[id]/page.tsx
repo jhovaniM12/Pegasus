@@ -17,7 +17,9 @@ import { ContentReveal, PageLoader } from "@/components/loaders";
 import { SummaryHeader } from "./_components/summary-header";
 import { VetCheckCard } from "./_components/vet-check-card";
 import { FaParticipantCard } from "./_components/fa-participant-card";
+import { FaActionsLegend } from "./_components/fa-actions-legend";
 import { FaDisqualifyDialog } from "./_components/fa-disqualify-dialog";
+import { FaRepeatTrackDialog } from "./_components/fa-repeat-track-dialog";
 import { FaClosedState } from "./_components/fa-closed-state";
 import { FaConsolidatedBanner } from "./_components/fa-consolidated-banner";
 import { ManagementView } from "./_components/management-view";
@@ -166,6 +168,8 @@ export default function StaffCategoryPage() {
   const [busy, setBusy] = useState(false);
   const [disqualifyTarget, setDisqualifyTarget] = useState<FaParticipant | null>(null);
   const [disqualifyBusy, setDisqualifyBusy] = useState(false);
+  const [repeatTrackTarget, setRepeatTrackTarget] = useState<FaParticipant | null>(null);
+  const [repeatTrackBusy, setRepeatTrackBusy] = useState(false);
   // Ref síncrona: fuente de verdad para calcular el siguiente toggle sin depender del ciclo de React.
   const localSelectionRef = useRef<string[]>([]);
   const isSyncingFaSelectionRef = useRef(false);
@@ -562,6 +566,70 @@ export default function StaffCategoryPage() {
     [fa, stageId, summary?.status, toast]
   );
 
+  const openFaRepeatTrack = useCallback(
+    (participantId: string) => {
+      if (!fa || summary?.status !== "JUDGING_STARTED" || fa.form.status !== "STARTED") return;
+      const participant = fa.participants.find((item) => item.id === participantId) ?? null;
+      if (!participant || participant.status === "DISQUALIFIED" || participant.repeatTrackRequest) return;
+      setRepeatTrackTarget(participant);
+    },
+    [fa, summary?.status]
+  );
+
+  const confirmFaRepeatTrack = useCallback(
+    async (participantId: string) => {
+      if (!fa || summary?.status !== "JUDGING_STARTED" || fa.form.status !== "STARTED") return;
+
+      setRepeatTrackBusy(true);
+      try {
+        const response = await stagedFlowService.requestFaRepeatTrack(stageId, participantId);
+        if (response.data) {
+          setFa(response.data);
+          setSummary(response.data.stage);
+          const confirmedSelectedIds = extractSelectedParticipantIds(response.data);
+          latestConfirmedFaSelectionRef.current = confirmedSelectedIds;
+          localSelectionRef.current = confirmedSelectedIds;
+          setFaSelectedIdsLocal(confirmedSelectedIds);
+          setRepeatTrackTarget(null);
+          toast({ title: "Solicitud enviada", variant: "success" });
+        }
+      } catch (error) {
+        toast({
+          title: "No se pudo enviar la solicitud",
+          description: error instanceof Error ? error.message : "Intenta nuevamente.",
+          variant: "error",
+        });
+        throw error;
+      } finally {
+        setRepeatTrackBusy(false);
+      }
+    },
+    [fa, stageId, summary?.status, toast]
+  );
+
+  const executeFaRepeatTrack = useCallback(
+    async (requestId: string) => {
+      setBusy(true);
+      try {
+        const response = await stagedFlowService.executeFaRepeatTrackRequest(stageId, requestId);
+        if (response.data) {
+          setManagement(response.data);
+          setSummary(response.data.summary);
+        }
+        toast({ title: "Solicitud marcada como ejecutada", variant: "success" });
+      } catch (error) {
+        toast({
+          title: "No se pudo marcar ejecutada",
+          description: error instanceof Error ? error.message : "Intenta nuevamente.",
+          variant: "error",
+        });
+      } finally {
+        setBusy(false);
+      }
+    },
+    [stageId, toast]
+  );
+
   const handleOpenTieBreak = (testTypes: TieBreakTestType[]) => {
     runAction(
       "Abrir desempate",
@@ -683,6 +751,7 @@ export default function StaffCategoryPage() {
                 busy={busy}
                 onConsolidateFa={() => setConsolidateFaOpen(true)}
                 onActivateRound={(config) => setActivateRoundTarget(config)}
+                onExecuteRepeatTrack={executeFaRepeatTrack}
               />
             )}
 
@@ -789,17 +858,21 @@ export default function StaffCategoryPage() {
             )}
 
             {fa.form.status !== "PENDING" && (
-              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {fa.participants.map((participant) => (
-                  <FaParticipantCard
-                    key={participant.id}
-                    participant={participant}
-                    selected={selectedIds.has(participant.id)}
-                    editable={summary.status === "JUDGING_STARTED" && fa.form.status === "STARTED"}
-                    onToggle={toggleFaSelection}
-                    onOpenDisqualify={openFaDisqualify}
-                  />
-                ))}
+              <div className="mt-4 space-y-3">
+                <FaActionsLegend />
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {fa.participants.map((participant) => (
+                    <FaParticipantCard
+                      key={participant.id}
+                      participant={participant}
+                      selected={selectedIds.has(participant.id)}
+                      editable={summary.status === "JUDGING_STARTED" && fa.form.status === "STARTED"}
+                      onToggle={toggleFaSelection}
+                      onRequestRepeatTrack={openFaRepeatTrack}
+                      onOpenDisqualify={openFaDisqualify}
+                    />
+                  ))}
+                </div>
               </div>
             )}
           </section>
@@ -900,6 +973,16 @@ export default function StaffCategoryPage() {
         onConfirm={confirmFaDisqualify}
       />
 
+      <FaRepeatTrackDialog
+        open={repeatTrackTarget !== null}
+        participant={repeatTrackTarget}
+        busy={repeatTrackBusy}
+        onOpenChange={(open) => {
+          if (!open && !repeatTrackBusy) setRepeatTrackTarget(null);
+        }}
+        onConfirm={confirmFaRepeatTrack}
+      />
+
       <ActivateRoundDialog
         open={activateRoundTarget !== null}
         config={activateRoundTarget}
@@ -913,9 +996,7 @@ export default function StaffCategoryPage() {
             await stagedFlowService.openNextRound(stageId);
             await load();
             toast({
-              title: activateRoundTarget
-                ? `Formato ${activateRoundTarget.roundType} activado`
-                : "Ronda activada",
+              title: "Prueba individual iniciada",
               variant: "success",
             });
             setActivateRoundTarget(null);

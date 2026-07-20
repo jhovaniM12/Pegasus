@@ -4,7 +4,7 @@ import { Bell, Calendar, DatabaseZap, Home, List, Settings, Shield, Users } from
 
 import { NavMain } from "@/components/layout/nav-main";
 import { NavUser } from "@/components/layout/nav-user";
-import { PegasusLogo } from "@/components/brand/pegasus-logo";
+import { PegasoLogo } from "@/components/brand/pegaso-logo";
 import {
   Sidebar,
   SidebarContent,
@@ -67,7 +67,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     <Sidebar collapsible="icon" className="border-r border-sidebar-border" {...props}>
       <SidebarHeader className="px-2 py-3">
         <div className="flex items-center gap-3 px-2 py-1 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
-          <PegasusLogo size="sm" className="shrink-0 rounded-md bg-white/95 p-0.5" />
+          <PegasoLogo size="sm" className="shrink-0 rounded-md bg-white/95 p-0.5" />
           <div className="min-w-0 group-data-[collapsible=icon]:hidden">
             <p className="text-sm font-semibold leading-none text-sidebar-foreground">
               Pegaso

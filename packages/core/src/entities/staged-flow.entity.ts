@@ -26,6 +26,8 @@ export type JudgingParticipantStatus = "ELIGIBLE" | "DISQUALIFIED";
 
 export type JudgeEntryDecision = "SELECTED" | "DISCARDED" | "DISQUALIFIED";
 
+export type FaRepeatTrackRequestStatus = "PENDING" | "EXECUTED";
+
 @Unique("UQ_fair_category_stages_fair_category", ["fairId", "categoryId"])
 @Entity({ name: "fair_category_stages" })
 export class FairCategoryStage extends PegasusBaseEntity {
@@ -269,6 +271,57 @@ export class FaConsolidatedResult extends PegasusBaseEntity {
 
   @Column({ name: "final_position", type: "integer", nullable: true })
   finalPosition!: number | null;
+}
+
+@Unique("UQ_fa_repeat_track_requests_stage_participant", [
+  "fairCategoryStageId",
+  "judgingParticipantId"
+])
+@Entity({ name: "fa_repeat_track_requests" })
+export class FaRepeatTrackRequest extends PegasusBaseEntity {
+  @Column({ name: "fair_category_stage_id", type: "uuid" })
+  fairCategoryStageId!: string;
+
+  @ManyToOne(() => FairCategoryStage, { nullable: false, onDelete: "CASCADE" })
+  @JoinColumn({ name: "fair_category_stage_id" })
+  fairCategoryStage!: FairCategoryStage;
+
+  @Column({ name: "fa_judge_form_id", type: "uuid" })
+  faJudgeFormId!: string;
+
+  @ManyToOne(() => FaJudgeForm, { nullable: false, onDelete: "CASCADE" })
+  @JoinColumn({ name: "fa_judge_form_id" })
+  faJudgeForm!: FaJudgeForm;
+
+  @Column({ name: "judging_participant_id", type: "uuid" })
+  judgingParticipantId!: string;
+
+  @ManyToOne(() => JudgingParticipant, { nullable: false, onDelete: "CASCADE" })
+  @JoinColumn({ name: "judging_participant_id" })
+  judgingParticipant!: JudgingParticipant;
+
+  @Column({ name: "requested_by_user_id", type: "uuid" })
+  requestedByUserId!: string;
+
+  @ManyToOne(() => User, { nullable: false })
+  @JoinColumn({ name: "requested_by_user_id" })
+  requestedByUser!: User;
+
+  @Column({ name: "status", type: "varchar" })
+  status!: FaRepeatTrackRequestStatus;
+
+  @Column({ name: "requested_at", type: "timestamp" })
+  requestedAt!: Date;
+
+  @Column({ name: "executed_at", type: "timestamp", nullable: true })
+  executedAt!: Date | null;
+
+  @Column({ name: "executed_by_user_id", type: "uuid", nullable: true })
+  executedByUserId!: string | null;
+
+  @ManyToOne(() => User, { nullable: true })
+  @JoinColumn({ name: "executed_by_user_id" })
+  executedByUser!: User | null;
 }
 
 @Entity({ name: "workflow_events" })

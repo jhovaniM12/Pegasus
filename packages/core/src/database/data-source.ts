@@ -15,6 +15,7 @@ import {
   FaConsolidatedResult,
   FaJudgeEntryDecision,
   FaJudgeForm,
+  FaRepeatTrackRequest,
   FairCategoryStage,
   Gait,
   Grade,
@@ -59,6 +60,7 @@ import {
   CreateSyncControlTables1717430400024,
   RelaxNotificationOutboxIdempotency1717430400025,
   SimplifyNotificationOutboxDelivery1717430400026,
+  CreateFaRepeatTrackRequests1717430400027,
   CreateFairEntriesTable1717430400004,
   CreateFairResultsTable1717430400008,
   CreateFairStaffTable1717430400007,
@@ -109,6 +111,7 @@ export const AppDataSource = new DataSource({
     FaConsolidatedResult,
     FaJudgeEntryDecision,
     FaJudgeForm,
+    FaRepeatTrackRequest,
     FairCategoryStage,
     Gait,
     Grade,
@@ -162,7 +165,8 @@ export const AppDataSource = new DataSource({
     CreateHorsesAndLinkFairEntries1717430400023,
     CreateSyncControlTables1717430400024,
     RelaxNotificationOutboxIdempotency1717430400025,
-    SimplifyNotificationOutboxDelivery1717430400026
+    SimplifyNotificationOutboxDelivery1717430400026,
+    CreateFaRepeatTrackRequests1717430400027
   ]
 });
 

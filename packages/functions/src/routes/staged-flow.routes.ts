@@ -10,6 +10,7 @@ import {
   consolidateFaController,
   consolidateRoundController,
   disqualifyParticipantController,
+  executeFaRepeatTrackRequestController,
   getFaController,
   getManagementController,
   getRoundController,
@@ -25,6 +26,7 @@ import {
   openNextRoundController,
   openTieBreakController,
   resetStageForTestingController,
+  requestFaRepeatTrackController,
   startFaController,
   startJudgingController,
   startPreRingController,
@@ -67,6 +69,14 @@ stagedFlowRoutes.get(
 stagedFlowRoutes.post(
   "/staff/fair-categories/:id/fa/participants/:judgingParticipantId/disqualify",
   disqualifyParticipantController
+);
+stagedFlowRoutes.post(
+  "/staff/fair-categories/:id/fa/participants/:judgingParticipantId/repeat-track-request",
+  requestFaRepeatTrackController
+);
+stagedFlowRoutes.post(
+  "/staff/fair-categories/:id/fa/repeat-track-requests/:requestId/execute",
+  executeFaRepeatTrackRequestController
 );
 stagedFlowRoutes.post("/staff/fair-categories/:id/fa/close", closeFaController);
 stagedFlowRoutes.get("/staff/fair-categories/:id/management", getManagementController);

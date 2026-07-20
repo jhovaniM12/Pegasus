@@ -1,7 +1,7 @@
 /**
- * Minimal Pegasus brand mark for loaders and empty states.
+ * Minimal Pegaso brand mark for loaders and empty states.
  */
-export function PegasusMark({ className = "size-7 text-zapote" }: { className?: string }) {
+export function PegasoMark({ className = "size-7 text-zapote" }: { className?: string }) {
   return (
     <svg
       viewBox="0 0 32 32"

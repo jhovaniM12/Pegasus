@@ -5,7 +5,7 @@ import { loadLocalEnv } from "../shared/load-env.js";
 
 loadLocalEnv();
 
-const ROOT_EMAIL = process.env.ROOT_EMAIL ?? "root@pegasus.com";
+const ROOT_EMAIL = process.env.ROOT_EMAIL ?? "root@pegaso.com";
 const ROOT_PASSWORD = process.env.ROOT_PASSWORD;
 
 async function main(): Promise<void> {

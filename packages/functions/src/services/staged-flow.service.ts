@@ -3,6 +3,7 @@ import {
   FaConsolidatedResult,
   FaJudgeEntryDecision,
   FaJudgeForm,
+  FaRepeatTrackRequest,
   FairCategoryStage,
   FairEntry,
   FairStaff,
@@ -737,7 +738,7 @@ export async function getFa(user: User, stageId: string) {
 
 async function getFaForStage(manager: EntityManager, user: User, stage: FairCategoryStage) {
   const form = await getJudgeFormOrCreate(manager, stage, user);
-  const [participants, decisions, reasons, consolidatedRows, faForms, stageDisqualifyDecisions] =
+  const [participants, decisions, reasons, consolidatedRows, faForms, stageDisqualifyDecisions, repeatTrackRequests] =
     await Promise.all([
       manager.getRepository(JudgingParticipant).find({
         where: { fairCategoryStageId: stage.id },
@@ -767,9 +768,16 @@ async function getFaForStage(manager: EntityManager, user: User, stage: FairCate
           faJudgeForm: { fairCategoryStageId: stage.id }
         },
         relations: { faJudgeForm: { judgeUser: { person: true } } }
+      }),
+      manager.getRepository(FaRepeatTrackRequest).find({
+        where: { fairCategoryStageId: stage.id },
+        relations: { requestedByUser: { person: true } }
       })
     ]);
   const decisionsByParticipantId = new Map(decisions.map((decision) => [decision.judgingParticipantId, decision]));
+  const repeatRequestByParticipantId = new Map(
+    repeatTrackRequests.map((request) => [request.judgingParticipantId, request])
+  );
   const judgeByFaFormId = new Map(faForms.map((faForm) => [faForm.id, faForm.judgeUser]));
   const judgeByDisqualifyDecision = new Map(
     stageDisqualifyDecisions.map((decision) => [decision.judgingParticipantId, decision.faJudgeForm.judgeUser])
@@ -793,6 +801,7 @@ async function getFaForStage(manager: EntityManager, user: User, stage: FairCate
     })),
     participants: participants.map((participant) => {
       const decision = decisionsByParticipantId.get(participant.id);
+      const repeatTrackRequest = repeatRequestByParticipantId.get(participant.id) ?? null;
       const disqualifiedBy =
         toDisqualifiedByDto(participant.disqualifiedByUser) ??
         toDisqualifiedByDto(
@@ -818,6 +827,15 @@ async function getFaForStage(manager: EntityManager, user: User, stage: FairCate
             }
           : null,
         disqualifiedBy,
+        repeatTrackRequest: repeatTrackRequest
+          ? {
+              id: repeatTrackRequest.id,
+              status: repeatTrackRequest.status,
+              requestedAt: repeatTrackRequest.requestedAt.toISOString(),
+              executedAt: repeatTrackRequest.executedAt?.toISOString() ?? null,
+              requestedBy: toDisqualifiedByDto(repeatTrackRequest.requestedByUser)
+            }
+          : null,
         decision: decision
           ? {
               id: decision.id,
@@ -841,6 +859,120 @@ async function getFaForStage(manager: EntityManager, user: User, stage: FairCate
       description: reason.description
     }))
   };
+}
+
+export async function requestFaRepeatTrack(user: User, stageId: string, judgingParticipantId: string) {
+  assertUserRole(user, ["JUDGE"]);
+  const dataSource = await getDataSource();
+
+  return dataSource.transaction(async (manager) => {
+    const stage = await getStageOrThrow(manager, stageId);
+    await assertStageAccess(manager, user, stage, ["2"]);
+    if (stage.status !== "JUDGING_STARTED") {
+      throw new BadRequestError("Solo se puede solicitar repetir pista durante el juzgamiento activo.");
+    }
+
+    const form = await getJudgeFormOrCreate(manager, stage, user);
+    if (form.status !== "STARTED") {
+      throw new BadRequestError("Solo se puede solicitar repetir pista con FA iniciado.");
+    }
+
+    const participant = await manager.getRepository(JudgingParticipant).findOne({
+      where: { id: judgingParticipantId, fairCategoryStageId: stage.id },
+      relations: { fairEntry: true }
+    });
+
+    if (!participant) {
+      throw new NotFoundError("No se encontro el participante de juzgamiento.");
+    }
+
+    if (participant.status !== "ELIGIBLE") {
+      throw new BadRequestError("No se puede solicitar repetir pista para un ejemplar descalificado.");
+    }
+
+    const existing = await manager.getRepository(FaRepeatTrackRequest).findOne({
+      where: { fairCategoryStageId: stage.id, judgingParticipantId: participant.id }
+    });
+
+    if (existing) {
+      throw new BadRequestError("Ya existe una solicitud de repetir pista para este ejemplar en el FA.");
+    }
+
+    const now = new Date();
+    const request = await manager.getRepository(FaRepeatTrackRequest).save(
+      manager.getRepository(FaRepeatTrackRequest).create({
+        fairCategoryStageId: stage.id,
+        faJudgeFormId: form.id,
+        judgingParticipantId: participant.id,
+        requestedByUserId: user.id,
+        status: "PENDING",
+        requestedAt: now,
+        executedAt: null,
+        executedByUserId: null
+      })
+    );
+
+    await recordEvent(manager, {
+      stageId: stage.id,
+      userId: user.id,
+      eventType: "FA_REPEAT_TRACK_REQUESTED",
+      payload: { requestId: request.id, judgingParticipantId: participant.id, faJudgeFormId: form.id }
+    });
+
+    const notification = stageNotificationContext(stage);
+    const judgeName = formatStaffDisplayName(user);
+    await queueRoleNotifications(manager, stage, "3", {
+      type: "FA_REPEAT_TRACK_REQUESTED",
+      title: `Solicitud repetir pista - ${notification.titleSuffix}`,
+      body: `${judgeName} solicito repetir pista para el ejemplar #${participant.fairEntry.trackPosition}. Categoria: ${notification.detail}.`,
+      payload: {
+        ...notification.payload,
+        requestId: request.id,
+        judgingParticipantId: participant.id,
+        trackPosition: participant.fairEntry.trackPosition,
+        requestedByUserId: user.id,
+        requestedByName: judgeName
+      }
+    });
+
+    return getFaForStage(manager, user, stage);
+  });
+}
+
+export async function executeFaRepeatTrackRequest(user: User, stageId: string, requestId: string) {
+  assertUserRole(user, ["TECHNICAL_DIRECTOR"]);
+  const dataSource = await getDataSource();
+
+  return dataSource.transaction(async (manager) => {
+    const stage = await getStageOrThrow(manager, stageId);
+    await assertStageAccess(manager, user, stage, ["3"]);
+    const request = await manager.getRepository(FaRepeatTrackRequest).findOne({
+      where: { id: requestId, fairCategoryStageId: stage.id },
+      relations: { judgingParticipant: { fairEntry: true } }
+    });
+
+    if (!request) {
+      throw new NotFoundError("No se encontro la solicitud de repetir pista.");
+    }
+
+    if (request.status !== "PENDING") {
+      throw new BadRequestError("La solicitud de repetir pista ya fue ejecutada.");
+    }
+
+    request.status = "EXECUTED";
+    request.executedAt = new Date();
+    request.executedByUserId = user.id;
+    await manager.getRepository(FaRepeatTrackRequest).save(request);
+
+    await recordEvent(manager, {
+      stageId: stage.id,
+      userId: user.id,
+      eventType: "FA_REPEAT_TRACK_EXECUTED",
+      payload: { requestId: request.id, judgingParticipantId: request.judgingParticipantId }
+    });
+
+    return getManagementForStage(manager, stage);
+  });
 }
 
 export async function updateFaDecisions(
@@ -1077,7 +1209,12 @@ export async function getManagement(user: User, stageId: string) {
   return dataSource.transaction(async (manager) => {
     const stage = await getStageOrThrow(manager, stageId);
     await assertStageAccess(manager, user, stage);
-    const [summary, checks, forms, participants, consolidated, decisions] = await Promise.all([
+    return getManagementForStage(manager, stage);
+  });
+}
+
+async function getManagementForStage(manager: EntityManager, stage: FairCategoryStage) {
+  const [summary, checks, forms, participants, consolidated, decisions, repeatTrackRequests] = await Promise.all([
       buildStageSummary(manager, stage),
       manager.getRepository(VeterinaryCheck).find({
         where: { fairCategoryStageId: stage.id },
@@ -1099,10 +1236,19 @@ export async function getManagement(user: User, stageId: string) {
       manager.getRepository(FaJudgeEntryDecision).find({
         where: { faJudgeForm: { fairCategoryStageId: stage.id } },
         relations: { judgingParticipant: { fairEntry: true } }
+      }),
+      manager.getRepository(FaRepeatTrackRequest).find({
+        where: { fairCategoryStageId: stage.id },
+        relations: {
+          faJudgeForm: { judgeUser: { person: true } },
+          judgingParticipant: { fairEntry: true },
+          executedByUser: { person: true }
+        },
+        order: { createdAt: "DESC" }
       })
-    ]);
+  ]);
 
-    return {
+  return {
       summary: {
         ...summary,
         preRingClosedAt: stage.preRingClosedAt?.toISOString() ?? null,
@@ -1154,14 +1300,28 @@ export async function getManagement(user: User, stageId: string) {
           disqualifiedBy
         };
       }),
+      faRepeatTrackRequests: repeatTrackRequests.map((request) => ({
+        id: request.id,
+        status: request.status,
+        requestedAt: request.requestedAt.toISOString(),
+        executedAt: request.executedAt?.toISOString() ?? null,
+        judgeUserId: request.faJudgeForm.judgeUserId,
+        judgeName: formatStaffDisplayName(request.faJudgeForm.judgeUser),
+        executedBy: toDisqualifiedByDto(request.executedByUser),
+        participant: {
+          id: request.judgingParticipantId,
+          trackPosition: request.judgingParticipant.fairEntry.trackPosition,
+          riderName: request.judgingParticipant.fairEntry.riderName,
+          registrationNumber: request.judgingParticipant.fairEntry.registrationNumber
+        }
+      })),
       consolidated: consolidated.map((result) => ({
         id: result.id,
         trackPosition: result.judgingParticipant.fairEntry.trackPosition,
         votesCount: result.votesCount,
         finalPosition: result.finalPosition
       }))
-    };
-  });
+  };
 }
 
 export async function consolidateFa(user: User, stageId: string): Promise<StagedCategoryDto> {
@@ -1268,6 +1428,7 @@ export async function resetStageForTesting(user: User, stageId: string): Promise
 
     await manager.getRepository(NotificationOutbox).delete({ fairCategoryStageId: stage.id });
     await manager.getRepository(WorkflowEvent).delete({ fairCategoryStageId: stage.id });
+    await manager.getRepository(FaRepeatTrackRequest).delete({ fairCategoryStageId: stage.id });
     // Las rondas (F1/F2/desempate) cascadean a formularios, entradas, resultados y pruebas.
     await manager.getRepository(JudgingRound).delete({ fairCategoryStageId: stage.id });
     await manager.getRepository(FaConsolidatedResult).delete({ fairCategoryStageId: stage.id });

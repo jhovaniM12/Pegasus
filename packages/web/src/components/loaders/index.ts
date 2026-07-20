@@ -1,5 +1,5 @@
 export { PageLoader } from "./page-loader";
-export { PegasusMark } from "./pegasus-mark";
+export { PegasoMark } from "./pegaso-mark";
 export { ContentReveal } from "./content-reveal";
 export { CategoryCardSkeleton } from "./category-card-skeleton";
 export { StaffFiltersSkeleton } from "./staff-filters-skeleton";

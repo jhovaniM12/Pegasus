@@ -32,7 +32,7 @@ async function startDevServer(): Promise<void> {
       if (attempt > 0) {
         console.warn(`Puerto ${basePort} ocupado. Usando http://localhost:${port}`);
       } else {
-        console.log(`Pegasus API escuchando en http://localhost:${port}`);
+        console.log(`Pegaso API escuchando en http://localhost:${port}`);
       }
 
       return;
