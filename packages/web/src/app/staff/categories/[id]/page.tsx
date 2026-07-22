@@ -636,7 +636,10 @@ export default function StaffCategoryPage() {
     runAction(
       "Abrir desempate",
       "Se abrirá una ronda de desempate solo para los ejemplares empatados. Los jueces volverán a emitir su tarjeta.",
-      () => stagedFlowService.openTieBreak(stageId, testTypes)
+      () => stagedFlowService.openTieBreak(stageId, testTypes),
+      "default",
+      undefined,
+      "/categories"
     );
   };
 
@@ -1000,12 +1003,12 @@ export default function StaffCategoryPage() {
           setBusy(true);
           try {
             await stagedFlowService.openNextRound(stageId);
-            await load();
             toast({
               title: "Prueba individual iniciada",
               variant: "success",
             });
             setActivateRoundTarget(null);
+            router.replace("/categories");
           } catch (error) {
             toast({
               title: "Error",
