@@ -66,7 +66,8 @@ type JudgeRoundWorkspaceProps = {
     description: string,
     action: () => Promise<unknown>,
     variant?: "default" | "destructive",
-    confirmText?: string
+    confirmText?: string,
+    redirectTo?: string
   ) => void;
 };
 
@@ -490,7 +491,8 @@ export function JudgeRoundWorkspace({
                 "Una vez cerrado, no podrás modificar las posiciones asignadas. ¿Estás seguro de que deseas cerrar el formato?",
                 () => stagedFlowService.closeRoundForm(stageId),
                 "default",
-                "Cerrar prueba"
+                "Cerrar prueba",
+                "/categories"
               )
             }
           >

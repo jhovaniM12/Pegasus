@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { usePushNotificationsOptional } from "@/components/push-notification-provider";
-import type { PushGateStatus } from "@/hooks/use-push-notification-gate";
+import type { PushGateErrorCode, PushGateStatus } from "@/hooks/use-push-notification-gate";
 
 function promptLabel(status: PushGateStatus): string {
   switch (status) {
@@ -22,6 +22,21 @@ function promptLabel(status: PushGateStatus): string {
   }
 }
 
+function promptErrorLabel(errorCode: PushGateErrorCode | null): string {
+  switch (errorCode) {
+    case "permission_denied":
+      return "Permiso bloqueado en el navegador.";
+    case "service_worker":
+      return "No se pudo preparar el servicio de notificaciones.";
+    case "token":
+      return "No se pudo validar la sesion push.";
+    case "beams_state":
+      return "Registro push inconsistente; reintenta.";
+    default:
+      return "No fue posible activar push.";
+  }
+}
+
 export function PushNotificationPrompt({ className }: { className?: string }) {
   const push = usePushNotificationsOptional();
 
@@ -29,7 +44,7 @@ export function PushNotificationPrompt({ className }: { className?: string }) {
     return null;
   }
 
-  const { status, activate } = push;
+  const { status, errorCode, activate } = push;
 
   if (status === "enabled") {
     return <p className="text-xs text-emerald-700">Notificaciones activas.</p>;
@@ -40,7 +55,11 @@ export function PushNotificationPrompt({ className }: { className?: string }) {
   }
 
   if (status === "blocked") {
-    return <p className="text-xs text-slate-500">Notificaciones bloqueadas en el navegador.</p>;
+    return (
+      <p className="text-xs text-amber-700">
+        Activa las notificaciones desde el navegador para continuar.
+      </p>
+    );
   }
 
   const isBusy = status === "checking" || status === "activating";
@@ -56,7 +75,7 @@ export function PushNotificationPrompt({ className }: { className?: string }) {
       >
         {promptLabel(status)}
       </Button>
-      {status === "error" && <p className="text-xs text-red-600">No fue posible activar push.</p>}
+      {status === "error" && <p className="text-xs text-red-600">{promptErrorLabel(errorCode)}</p>}
     </div>
   );
 }

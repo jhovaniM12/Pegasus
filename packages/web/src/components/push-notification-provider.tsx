@@ -3,11 +3,13 @@
 import { createContext, useContext } from "react";
 import {
   usePushNotificationGate,
+  type PushGateErrorCode,
   type PushGateStatus,
 } from "@/hooks/use-push-notification-gate";
 
 type PushNotificationContextValue = {
   status: PushGateStatus;
+  errorCode: PushGateErrorCode | null;
   isGated: boolean;
   activate: () => Promise<void>;
   recheck: () => Promise<void>;

@@ -59,7 +59,7 @@ import {
   markAllInboxNotificationsRead,
   markInboxNotificationRead
 } from "../services/push.service.js";
-import { sendStageNotifications } from "../services/notification-send.service.js";
+import { sendStageNotifications, sendStageRefreshSignal } from "../services/notification-send.service.js";
 
 async function getStaffUser(c: Context) {
   const session = getSessionFromCookie(c);
@@ -169,13 +169,16 @@ export async function requestFaRepeatTrackController(c: Context) {
   const stageId = requiredParam(c, "id");
   const result = await requestFaRepeatTrack(user, stageId, requiredParam(c, "judgingParticipantId"));
   await dispatchNotificationsAfterAction(stageId);
+  await sendStageRefreshSignal(stageId, "2");
   return c.json(success(result));
 }
 
 export async function executeFaRepeatTrackRequestController(c: Context) {
   const user = await getStaffUser(c);
   const stageId = requiredParam(c, "id");
-  return c.json(success(await executeFaRepeatTrackRequest(user, stageId, requiredParam(c, "requestId"))));
+  const result = await executeFaRepeatTrackRequest(user, stageId, requiredParam(c, "requestId"));
+  await sendStageRefreshSignal(stageId, "2");
+  return c.json(success(result));
 }
 
 export async function closeFaController(c: Context) {

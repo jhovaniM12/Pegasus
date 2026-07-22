@@ -1,7 +1,8 @@
-import { getDataSource, NotificationOutbox } from "@pegasus/core";
+import { FairCategoryStage, getDataSource, NotificationOutbox } from "@pegasus/core";
 import { IsNull } from "typeorm";
 import { getBeamsClient } from "../lib/beams-client.js";
 import { withTimeout } from "../lib/with-timeout.js";
+import { getUsersByFairRole, type StaffRoleExternalId } from "./judging/shared.js";
 
 const BEAMS_TIMEOUT_MS = 15_000;
 
@@ -127,4 +128,47 @@ export async function sendStageNotifications(fairCategoryStageId: string): Promi
   }
 
   await Promise.all(Array.from(groups.values(), publishGroup));
+}
+
+/**
+ * Envía una señal push sin notificación visible para refrescar pantallas abiertas.
+ * Se usa cuando el destinatario operativo debe ver cambios en vivo, pero no debe
+ * recibir una notificación de inbox/sistema para esa acción.
+ */
+export async function sendStageRefreshSignal(fairCategoryStageId: string, roleExternalId: StaffRoleExternalId): Promise<void> {
+  const dataSource = await getDataSource();
+  const userIds = await dataSource.transaction(async (manager) => {
+    const stage = await manager.getRepository(FairCategoryStage).findOne({
+      where: { id: fairCategoryStageId }
+    });
+
+    if (!stage) {
+      return [];
+    }
+
+    const users = await getUsersByFairRole(manager, stage.fairId, roleExternalId);
+    return users.map((user) => user.id);
+  });
+
+  if (userIds.length === 0) {
+    return;
+  }
+
+  try {
+    await withTimeout(
+      getBeamsClient().publishToUsers(userIds, {
+        web: {
+          time_to_live: 60,
+          data: {
+            type: "STAFF_REFRESH",
+            fairCategoryStageId
+          }
+        }
+      }),
+      BEAMS_TIMEOUT_MS,
+      `Pusher Beams refresh timeout tras ${BEAMS_TIMEOUT_MS}ms`
+    );
+  } catch (error) {
+    logPushFailure([`refresh:${fairCategoryStageId}:${roleExternalId}`], error instanceof Error ? error.message : "Error desconocido.");
+  }
 }

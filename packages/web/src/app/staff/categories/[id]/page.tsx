@@ -196,6 +196,7 @@ export default function StaffCategoryPage() {
     confirmText?: string;
     variant?: "default" | "destructive";
     action: () => Promise<unknown>;
+    redirectTo?: string;
   } | null>(null);
   const [closePreRingOpen, setClosePreRingOpen] = useState(false);
   const [startFaOpen, setStartFaOpen] = useState(false);
@@ -422,9 +423,10 @@ export default function StaffCategoryPage() {
     description: string,
     action: () => Promise<unknown>,
     variant: "default" | "destructive" = "default",
-    confirmText?: string
+    confirmText?: string,
+    redirectTo?: string
   ) => {
-    setConfirmDialog({ open: true, title, description, action, variant, confirmText });
+    setConfirmDialog({ open: true, title, description, action, variant, confirmText, redirectTo });
   };
 
   // ─── FA handlers ─────────────────────────────────────────────────────────
@@ -946,8 +948,12 @@ export default function StaffCategoryPage() {
             setBusy(true);
             try {
               await confirmDialog.action();
-              await load();
               toast({ title: "Acción completada", variant: "success" });
+              if (confirmDialog.redirectTo) {
+                router.replace(confirmDialog.redirectTo);
+                return;
+              }
+              await load();
             } catch (error) {
               toast({
                 title: "Error",
@@ -1060,9 +1066,9 @@ export default function StaffCategoryPage() {
               setFa(response.data);
               setSummary(response.data.stage);
             }
-            await load();
             toast({ title: "Formato FA cerrado", variant: "success" });
             setCloseFaOpen(false);
+            router.replace("/categories");
           } catch (error) {
             toast({
               title: "Error",
