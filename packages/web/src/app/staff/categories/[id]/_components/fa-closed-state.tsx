@@ -16,6 +16,7 @@ type FaClosedStateProps = {
   closedAt: string | null;
   selectedCount: number;
   stageStatus: StageStatus;
+  syncUnavailable?: boolean;
   /** Cuando ya se muestra el banner de finalistas consolidados arriba. */
   hideConsolidatedNotice?: boolean;
 };
@@ -29,6 +30,7 @@ export function FaClosedState({
   closedAt,
   selectedCount,
   stageStatus,
+  syncUnavailable = false,
   hideConsolidatedNotice = false,
 }: FaClosedStateProps) {
   const consolidated =
@@ -67,10 +69,16 @@ export function FaClosedState({
               <p className="max-w-md text-sm text-slate-500">
                 El formato FA ha sido cerrado. Por favor, espera a que se active la siguiente fase.
               </p>
-              <span className="inline-flex items-center gap-1.5 text-xs italic text-slate-400">
-                <Loader2 className="size-3.5 animate-spin" />
-                Sincronizando en tiempo real...
-              </span>
+              {syncUnavailable ? (
+                <span className="inline-flex text-xs font-medium text-red-600">
+                  Sesión expirada. Vuelve a ingresar para actualizar la categoría.
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 text-xs italic text-slate-400">
+                  <Loader2 className="size-3.5 animate-spin" />
+                  Sincronizando en tiempo real...
+                </span>
+              )}
             </>
           )}
         </div>

@@ -1,4 +1,4 @@
-import { ApiService } from "@/services/api.service";
+import { ApiError, ApiService } from "@/services/api.service";
 import type {
   ApiResponse,
   FaState,
@@ -23,7 +23,11 @@ class StagedFlowService extends ApiService {
   async getCategory(stageId: string): Promise<ApiResponse<StagedCategory>> {
     try {
       return await this.get<ApiResponse<StagedCategory>>(`/api/staff/staged-categories/${stageId}`);
-    } catch {
+    } catch (error) {
+      if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+        throw error;
+      }
+
       const list = await this.listCategories();
       const category = list.data?.find((item) => item.stageId === stageId) ?? null;
       if (!category) {

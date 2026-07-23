@@ -14,6 +14,7 @@ import { PushNotificationGate } from "@/components/push-notification-gate";
 import { PushNotificationProvider } from "@/components/push-notification-provider";
 import { useVeterinaryChecks } from "@/hooks/use-veterinary-checks";
 import { ContentReveal, PageLoader } from "@/components/loaders";
+import { ApiError, isUnauthorizedError } from "@/services/api.service";
 import { SummaryHeader } from "./_components/summary-header";
 import { VetCheckCard } from "./_components/vet-check-card";
 import { FaParticipantCard } from "./_components/fa-participant-card";
@@ -80,6 +81,12 @@ function resolveJudgeView(viewParam: string | null): "FA" | "F1" | "F2" | "TIE_B
 
 async function fetchCurrentUser(): Promise<CurrentUser | null> {
   const response = await fetch("/api/auth/me");
+  if (response.status === 401) {
+    throw new ApiError("Sesión expirada. Vuelve a ingresar.", {
+      status: 401,
+      code: "UNAUTHORIZED",
+    });
+  }
   if (!response.ok) return null;
   const payload = (await response.json()) as { data?: CurrentUser };
   return payload.data ?? null;
@@ -166,17 +173,39 @@ export default function StaffCategoryPage() {
   const [roundsManagement, setRoundsManagement] = useState<RoundsManagement | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [sessionExpired, setSessionExpired] = useState(false);
   const [disqualifyTarget, setDisqualifyTarget] = useState<FaParticipant | null>(null);
   const [disqualifyBusy, setDisqualifyBusy] = useState(false);
   const [repeatTrackTarget, setRepeatTrackTarget] = useState<FaParticipant | null>(null);
   const [repeatTrackBusy, setRepeatTrackBusy] = useState(false);
   // Ref síncrona: fuente de verdad para calcular el siguiente toggle sin depender del ciclo de React.
   const localSelectionRef = useRef<string[]>([]);
+  const sessionExpiredRef = useRef(false);
   const isSyncingFaSelectionRef = useRef(false);
   const pendingFaSelectionRef = useRef<string[] | null>(null);
   const latestConfirmedFaSelectionRef = useRef<string[]>([]);
   const latestFaRequestIdRef = useRef(0);
   const { toast } = useToast();
+
+  const staffLoginPath = useCallback(() => {
+    const next =
+      typeof window === "undefined"
+        ? `/staff/categories/${stageId}`
+        : `${window.location.pathname}${window.location.search}`;
+    return `/login/staff?next=${encodeURIComponent(next)}`;
+  }, [stageId]);
+
+  const markSessionExpired = useCallback(() => {
+    if (!sessionExpiredRef.current) {
+      toast({
+        title: "Sesión expirada",
+        description: "Vuelve a ingresar para seguir recibiendo datos actualizados.",
+        variant: "error",
+      });
+    }
+    sessionExpiredRef.current = true;
+    setSessionExpired(true);
+  }, [toast]);
 
   const { checks, setChecks, updatingVetByEntryId, handleVetCheckUpdate } = useVeterinaryChecks({
     stageId,
@@ -222,10 +251,12 @@ export default function StaffCategoryPage() {
         ]);
 
         if (!user) {
-          if (!silent) router.push("/login/staff");
+          if (!silent) router.push(staffLoginPath());
           return;
         }
 
+        sessionExpiredRef.current = false;
+        setSessionExpired(false);
         setCurrentUser(user);
         const faData = faResponse.data ?? null;
         const summaryData = faData?.stage ?? null;
@@ -256,10 +287,12 @@ export default function StaffCategoryPage() {
         ]);
 
         if (!user) {
-          if (!silent) router.push("/login/staff");
+          if (!silent) router.push(staffLoginPath());
           return;
         }
 
+        sessionExpiredRef.current = false;
+        setSessionExpired(false);
         setCurrentUser(user);
         const roundData = roundResponse.data ?? null;
         const summaryData = roundData?.stage ?? null;
@@ -285,10 +318,12 @@ export default function StaffCategoryPage() {
 
       const user = await fetchCurrentUser();
       if (!user) {
-        if (!silent) router.push("/login/staff");
+        if (!silent) router.push(staffLoginPath());
         return;
       }
 
+      sessionExpiredRef.current = false;
+      setSessionExpired(false);
       setCurrentUser(user);
 
       if (user.role === "TECHNICAL_DIRECTOR") {
@@ -386,6 +421,14 @@ export default function StaffCategoryPage() {
         setRoundsManagement(workspace.roundsManagement);
       }
     } catch (error) {
+      if (isUnauthorizedError(error)) {
+        markSessionExpired();
+        if (!silent) {
+          router.push(staffLoginPath());
+        }
+        return;
+      }
+
       if (!silent) {
         toast({
           title: "Error al cargar la categoría",
@@ -399,7 +442,18 @@ export default function StaffCategoryPage() {
         setLoading(false);
       }
     }
-  }, [router, setChecks, stageId, toast, viewParam]);
+  }, [markSessionExpired, router, setChecks, staffLoginPath, stageId, toast, viewParam]);
+
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      markSessionExpired();
+    };
+
+    window.addEventListener("pegasus:unauthorized", handleUnauthorized);
+    return () => {
+      window.removeEventListener("pegasus:unauthorized", handleUnauthorized);
+    };
+  }, [markSessionExpired]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch remoto al montar o cambiar contexto
@@ -683,6 +737,25 @@ export default function StaffCategoryPage() {
           <NotificationInbox />
         </div>
 
+        {sessionExpired && (
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-semibold">Sesión expirada</p>
+                <p>Los datos de esta pantalla pueden estar desactualizados. Vuelve a ingresar para continuar.</p>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                className="shrink-0 bg-red-600 text-white hover:bg-red-700"
+                onClick={() => router.push(staffLoginPath())}
+              >
+                Ingresar
+              </Button>
+            </div>
+          </div>
+        )}
+
         {currentUser?.role === "TECHNICAL_DIRECTOR" && (
           <SummaryHeader summary={summary} />
         )}
@@ -857,6 +930,7 @@ export default function StaffCategoryPage() {
                   closedAt={fa.form.closedAt}
                   selectedCount={fa.form.selectedCount}
                   stageStatus={summary.status}
+                  syncUnavailable={sessionExpired}
                   hideConsolidatedNotice={(fa.consolidated ?? []).length > 0}
                 />
               </div>
@@ -930,6 +1004,7 @@ export default function StaffCategoryPage() {
             round={round}
             busy={busy}
             onLocalUpdate={setRound}
+            syncUnavailable={sessionExpired}
             runAction={runAction}
           />
         )}

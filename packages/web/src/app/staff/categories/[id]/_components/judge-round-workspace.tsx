@@ -61,6 +61,7 @@ type JudgeRoundWorkspaceProps = {
   round: RoundState;
   busy: boolean;
   onLocalUpdate: (round: RoundState) => void;
+  syncUnavailable?: boolean;
   runAction: (
     title: string,
     description: string,
@@ -101,6 +102,7 @@ export function JudgeRoundWorkspace({
   round,
   busy,
   onLocalUpdate,
+  syncUnavailable = false,
   runAction,
 }: JudgeRoundWorkspaceProps) {
   const { toast } = useToast();
@@ -425,10 +427,16 @@ export function JudgeRoundWorkspace({
             <p className="text-xs text-emerald-700">
               Espera a que el Director Técnico consolide la ronda.
             </p>
-            <span className="mt-1 inline-flex items-center gap-1.5 text-xs italic text-emerald-700/80">
-              <Loader2 className="size-3.5 animate-spin" />
-              Sincronizando en tiempo real...
-            </span>
+            {syncUnavailable ? (
+              <span className="mt-1 inline-flex text-xs font-medium text-red-600">
+                Sesión expirada. Vuelve a ingresar para actualizar la ronda.
+              </span>
+            ) : (
+              <span className="mt-1 inline-flex items-center gap-1.5 text-xs italic text-emerald-700/80">
+                <Loader2 className="size-3.5 animate-spin" />
+                Sincronizando en tiempo real...
+              </span>
+            )}
           </div>
         </div>
       )}
