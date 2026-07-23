@@ -79,6 +79,21 @@ function resolveJudgeView(viewParam: string | null): "FA" | "F1" | "F2" | "TIE_B
   return isRoundView(viewParam) ? viewParam : null;
 }
 
+// Fases en las que una vista fijada por query param (?view=FA|F1|F2|TIE_BREAK) sigue
+// siendo válida. Si el estado real de la etapa avanzó más allá de esta lista (p. ej. el
+// director técnico abrió F1 mientras un juez seguía en "?view=FA"), la vista quedó
+// obsoleta y el juez debe ser redirigido a la fase vigente en vez de quedar "en el limbo".
+const JUDGE_VIEW_VALID_STATUSES: Record<"FA" | "F1" | "F2" | "TIE_BREAK", StagedCategory["status"][]> = {
+  FA: ["JUDGING_STARTED", "FA_CONSOLIDATED"],
+  F1: ["FA_CONSOLIDATED", "F1_IN_PROGRESS", "F1_CONSOLIDATED"],
+  F2: ["F1_CONSOLIDATED", "F2_IN_PROGRESS"],
+  TIE_BREAK: ["F2_IN_PROGRESS", "TIE_BREAK_IN_PROGRESS"],
+};
+
+function isJudgeViewStale(view: "FA" | "F1" | "F2" | "TIE_BREAK", status: StagedCategory["status"]): boolean {
+  return !JUDGE_VIEW_VALID_STATUSES[view].includes(status);
+}
+
 async function fetchCurrentUser(): Promise<CurrentUser | null> {
   const response = await fetch("/api/auth/me");
   if (response.status === 401) {
@@ -273,6 +288,14 @@ export default function StaffCategoryPage() {
           return;
         }
 
+        if (isJudgeViewStale("FA", summaryData.status)) {
+          // El director técnico avanzó la etapa (F1, F2, desempate, cierre) mientras el
+          // juez seguía anclado en "?view=FA". Se limpia el parámetro para que la carga
+          // sin vista fijada resuelva y muestre la fase vigente automáticamente.
+          router.replace(`/staff/categories/${stageId}`);
+          return;
+        }
+
         setSummary(summaryData);
         setFa(faData);
         setRound(null);
@@ -306,6 +329,14 @@ export default function StaffCategoryPage() {
             });
             router.push("/staff");
           }
+          return;
+        }
+
+        if (isJudgeViewStale(judgeView, summaryData.status)) {
+          // Misma idea que para "?view=FA": la ronda fijada en la URL (F1/F2/desempate)
+          // ya quedó atrás respecto al estado real de la etapa. Se limpia el parámetro
+          // para que la carga sin vista fijada muestre la fase vigente.
+          router.replace(`/staff/categories/${stageId}`);
           return;
         }
 
