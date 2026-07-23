@@ -12,8 +12,18 @@ import {
   type User
 } from "@pegasus/core";
 import type { EntityManager } from "typeorm";
-import { BadRequestError, NotFoundError } from "../../lib/errors.js";
+import {
+  BadRequestError,
+  FormClosedError,
+  NotFoundError
+} from "../../lib/errors.js";
+import type { MutationSyncMeta } from "../../lib/http.js";
+import {
+  assertExpectedRevision,
+  executeIdempotentMutation
+} from "../offline-idempotency.service.js";
 import { assertStageAccess, assertUserRole, getStageOrThrow } from "./shared.js";
+import { assertRoundMutationIdentity, resolveRoundTieBlockIdentity } from "./round-identity.js";
 
 async function getActiveRoundOrThrow(manager: EntityManager, stageId: string): Promise<JudgingRound> {
   const round = await manager.getRepository(JudgingRound).findOne({
@@ -72,9 +82,13 @@ async function getJudgeFormForRound(
 async function getEditableEntryOrThrow(
   manager: EntityManager,
   form: JudgingRoundForm,
-  participantId: string
+  participantId: string,
+  options: { offline?: boolean } = {}
 ): Promise<JudgingRoundEntry> {
   if (form.status !== "STARTED") {
+    if (options.offline) {
+      throw new FormClosedError(form.id);
+    }
     throw new BadRequestError("Solo puedes editar anotaciones en un formulario iniciado.");
   }
 
@@ -196,13 +210,48 @@ export async function loadReminderHistory(
   });
 }
 
+type RemindersPayload = {
+  reminders: Array<{ reminderId: string; effect: RoundEntryReminderEffect }>;
+  roundId?: string;
+  tieBlockIdentity?: string;
+};
+
+type RemindersOfflineEnvelope = {
+  operationId: string;
+  baseRevision: number;
+  clientUpdatedAt: string;
+  payload: RemindersPayload & {
+    roundId: string;
+    tieBlockIdentity: string;
+  };
+};
+
+type NotePayload = {
+  note?: string | null;
+  roundId?: string;
+  tieBlockIdentity?: string;
+};
+
+type NoteOfflineEnvelope = {
+  operationId: string;
+  baseRevision: number;
+  clientUpdatedAt: string;
+  payload: NotePayload & {
+    roundId: string;
+    tieBlockIdentity: string;
+  };
+};
+
 export async function updateEntryReminders(
   user: User,
   stageId: string,
   participantId: string,
-  reminders: Array<{ reminderId: string; effect: RoundEntryReminderEffect }>
-): Promise<void> {
+  input: RemindersPayload | RemindersOfflineEnvelope
+): Promise<{ sync?: MutationSyncMeta }> {
   assertUserRole(user, ["JUDGE"]);
+  const isOfflineEnvelope = "operationId" in input && "payload" in input;
+  const payload = isOfflineEnvelope ? input.payload : input;
+  const reminders = payload.reminders;
 
   const uniqueReminderIds = new Set(reminders.map((r) => r.reminderId));
   if (uniqueReminderIds.size !== reminders.length) {
@@ -217,53 +266,121 @@ export async function updateEntryReminders(
     const round = await getActiveRoundOrThrow(manager, stage.id);
 
     const form = await getJudgeFormForRound(manager, round.id, user.id);
-    const entry = await getEditableEntryOrThrow(manager, form, participantId);
-
-    const activeReminders = await manager.getRepository(JudgingReminder).find({
-      where: { isActive: true }
+    const formEntries = await manager.getRepository(JudgingRoundEntry).find({
+      where: { roundFormId: form.id },
+      select: { judgingParticipantId: true }
     });
-    const activeById = new Map(activeReminders.map((r) => [r.id, r]));
+    const participantIds = formEntries.map((entry) => entry.judgingParticipantId);
 
-    for (const item of reminders) {
-      const reminder = activeById.get(item.reminderId);
-      if (!reminder) {
-        throw new BadRequestError("Uno o más recordatorios no están activos o no existen.");
-      }
+    if (isOfflineEnvelope) {
+      assertRoundMutationIdentity({
+        stageId: stage.id,
+        round,
+        expectedRoundId: input.payload.roundId,
+        expectedTieBlockIdentity: input.payload.tieBlockIdentity,
+        participantIds
+      });
     }
 
-    const snapshot = await loadParticipantSnapshot(manager, participantId);
-    const reminderRepo = manager.getRepository(JudgingRoundEntryReminder);
-    const historyRepo = manager.getRepository(JudgingRoundEntryReminderHistory);
+    const entry = await getEditableEntryOrThrow(manager, form, participantId, {
+      offline: isOfflineEnvelope
+    });
 
-    await reminderRepo.delete({ roundFormEntryId: entry.id });
-
-    if (reminders.length > 0) {
-      const toSave = reminders.map((item) => {
-        const reminder = activeById.get(item.reminderId)!;
-        return reminderRepo.create({
-          roundFormEntryId: entry.id,
-          judgingReminderId: item.reminderId,
-          effect: item.effect
+    const applyUpdate = async () => {
+      if (isOfflineEnvelope) {
+        assertExpectedRevision(input.baseRevision, form.revision, {
+          aggregateId: entry.id,
+          currentState: {
+            formId: form.id,
+            entryId: entry.id,
+            revision: form.revision,
+            roundId: round.id,
+            tieBlockIdentity: resolveRoundTieBlockIdentity(round, participantIds)
+          },
+          resolution: "CAN_REAPPLY_LOCAL_DRAFT"
         });
-      });
-      await reminderRepo.save(toSave);
+      }
 
-      await historyRepo.save(
-        reminders.map((item) => {
-          const reminder = activeById.get(item.reminderId)!;
-          return historyRepo.create({
-            roundFormId: form.id,
+      const activeReminders = await manager.getRepository(JudgingReminder).find({
+        where: { isActive: true }
+      });
+      const activeById = new Map(activeReminders.map((r) => [r.id, r]));
+
+      for (const item of reminders) {
+        const reminder = activeById.get(item.reminderId);
+        if (!reminder) {
+          throw new BadRequestError("Uno o más recordatorios no están activos o no existen.");
+        }
+      }
+
+      const snapshot = await loadParticipantSnapshot(manager, participantId);
+      const reminderRepo = manager.getRepository(JudgingRoundEntryReminder);
+      const historyRepo = manager.getRepository(JudgingRoundEntryReminderHistory);
+
+      await reminderRepo.delete({ roundFormEntryId: entry.id });
+
+      if (reminders.length > 0) {
+        const toSave = reminders.map((item) =>
+          reminderRepo.create({
             roundFormEntryId: entry.id,
             judgingReminderId: item.reminderId,
-            effect: item.effect,
-            trackPositionSnapshot: snapshot.trackPosition,
-            riderNameSnapshot: snapshot.riderName,
-            reminderNameSnapshot: reminder.name,
-            reminderIconSnapshot: reminder.icon
-          });
-        })
-      );
+            effect: item.effect
+          })
+        );
+        await reminderRepo.save(toSave);
+
+        await historyRepo.save(
+          reminders.map((item) => {
+            const reminder = activeById.get(item.reminderId)!;
+            return historyRepo.create({
+              roundFormId: form.id,
+              roundFormEntryId: entry.id,
+              judgingReminderId: item.reminderId,
+              effect: item.effect,
+              trackPositionSnapshot: snapshot.trackPosition,
+              riderNameSnapshot: snapshot.riderName,
+              reminderNameSnapshot: reminder.name,
+              reminderIconSnapshot: reminder.icon
+            });
+          })
+        );
+      }
+
+      await manager.getRepository(JudgingRoundForm).increment({ id: form.id }, "revision", 1);
+      form.revision += 1;
+
+      return {
+        responsePayload: { ok: true as const },
+        appliedRevision: form.revision
+      };
+    };
+
+    if (!isOfflineEnvelope) {
+      await applyUpdate();
+      return {};
     }
+
+    const result = await executeIdempotentMutation(manager, {
+      operationId: input.operationId,
+      userId: user.id,
+      stageId: stage.id,
+      aggregateType: "ROUND_REMINDERS",
+      aggregateId: entry.id,
+      operationType: "UPDATE_ROUND_REMINDERS",
+      baseRevision: input.baseRevision,
+      requestPayload: payload,
+      apply: applyUpdate
+    });
+
+    return {
+      sync: {
+        operationId: input.operationId,
+        applied: !result.duplicate,
+        duplicate: result.duplicate,
+        revision: result.appliedRevision ?? form.revision,
+        serverUpdatedAt: new Date().toISOString()
+      }
+    };
   });
 }
 
@@ -271,9 +388,12 @@ export async function updateEntryPrivateNote(
   user: User,
   stageId: string,
   participantId: string,
-  note: string | null
-): Promise<void> {
+  input: NotePayload | NoteOfflineEnvelope
+): Promise<{ sync?: MutationSyncMeta }> {
   assertUserRole(user, ["JUDGE"]);
+  const isOfflineEnvelope = "operationId" in input && "payload" in input;
+  const payload = isOfflineEnvelope ? input.payload : input;
+  const note = payload.note ?? null;
 
   const dataSource = await getDataSource();
 
@@ -283,10 +403,79 @@ export async function updateEntryPrivateNote(
     const round = await getActiveRoundOrThrow(manager, stage.id);
 
     const form = await getJudgeFormForRound(manager, round.id, user.id);
-    const entry = await getEditableEntryOrThrow(manager, form, participantId);
+    const formEntries = await manager.getRepository(JudgingRoundEntry).find({
+      where: { roundFormId: form.id },
+      select: { judgingParticipantId: true }
+    });
+    const participantIds = formEntries.map((entry) => entry.judgingParticipantId);
 
-    entry.privateNote = note?.trim() ? note.trim() : null;
-    await manager.getRepository(JudgingRoundEntry).save(entry);
+    if (isOfflineEnvelope) {
+      assertRoundMutationIdentity({
+        stageId: stage.id,
+        round,
+        expectedRoundId: input.payload.roundId,
+        expectedTieBlockIdentity: input.payload.tieBlockIdentity,
+        participantIds
+      });
+    }
+
+    const entry = await getEditableEntryOrThrow(manager, form, participantId, {
+      offline: isOfflineEnvelope
+    });
+
+    const applyUpdate = async () => {
+      if (isOfflineEnvelope) {
+        assertExpectedRevision(input.baseRevision, form.revision, {
+          aggregateId: entry.id,
+          currentState: {
+            formId: form.id,
+            entryId: entry.id,
+            revision: form.revision,
+            privateNote: entry.privateNote,
+            roundId: round.id,
+            tieBlockIdentity: resolveRoundTieBlockIdentity(round, participantIds)
+          },
+          resolution: "CAN_REAPPLY_LOCAL_DRAFT"
+        });
+      }
+
+      entry.privateNote = note?.trim() ? note.trim() : null;
+      await manager.getRepository(JudgingRoundEntry).save(entry);
+      await manager.getRepository(JudgingRoundForm).increment({ id: form.id }, "revision", 1);
+      form.revision += 1;
+
+      return {
+        responsePayload: { ok: true as const },
+        appliedRevision: form.revision
+      };
+    };
+
+    if (!isOfflineEnvelope) {
+      await applyUpdate();
+      return {};
+    }
+
+    const result = await executeIdempotentMutation(manager, {
+      operationId: input.operationId,
+      userId: user.id,
+      stageId: stage.id,
+      aggregateType: "ROUND_NOTE",
+      aggregateId: entry.id,
+      operationType: "UPDATE_ROUND_NOTE",
+      baseRevision: input.baseRevision,
+      requestPayload: payload,
+      apply: applyUpdate
+    });
+
+    return {
+      sync: {
+        operationId: input.operationId,
+        applied: !result.duplicate,
+        duplicate: result.duplicate,
+        revision: result.appliedRevision ?? form.revision,
+        serverUpdatedAt: new Date().toISOString()
+      }
+    };
   });
 }
 

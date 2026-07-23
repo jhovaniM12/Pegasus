@@ -1,4 +1,5 @@
 import { ApiService } from "@/services/api.service";
+import type { OfflineMutationEnvelope } from "@/offline/mutation-types";
 import type {
   ApiResponse,
   FaState,
@@ -39,7 +40,9 @@ class StagedFlowService extends ApiService {
   async updateVeterinaryCheck(
     stageId: string,
     fairEntryId: string,
-    body: { status: VeterinaryCheckStatus; notes?: string | null }
+    body:
+      | { status: VeterinaryCheckStatus; notes?: string | null }
+      | OfflineMutationEnvelope<{ status: VeterinaryCheckStatus; notes?: string | null }>
   ): Promise<ApiResponse<VeterinaryCheck[]>> {
     return this.patch<ApiResponse<VeterinaryCheck[]>>(
       `/api/staff/fair-categories/${stageId}/veterinary-checks/${fairEntryId}`,
@@ -63,10 +66,16 @@ class StagedFlowService extends ApiService {
     return this.post<ApiResponse<FaState>>(`/api/staff/fair-categories/${stageId}/fa/start`);
   }
 
-  async updateFaDecisions(stageId: string, selectedParticipantIds: string[]): Promise<ApiResponse<FaState>> {
-    return this.put<ApiResponse<FaState>>(`/api/staff/fair-categories/${stageId}/fa/decisions`, {
-      selectedParticipantIds,
-    });
+  async updateFaDecisions(
+    stageId: string,
+    selectedParticipantIdsOrEnvelope:
+      | string[]
+      | OfflineMutationEnvelope<{ selectedParticipantIds: string[] }>
+  ): Promise<ApiResponse<FaState>> {
+    const body = Array.isArray(selectedParticipantIdsOrEnvelope)
+      ? { selectedParticipantIds: selectedParticipantIdsOrEnvelope }
+      : selectedParticipantIdsOrEnvelope;
+    return this.put<ApiResponse<FaState>>(`/api/staff/fair-categories/${stageId}/fa/decisions`, body);
   }
 
   async disqualifyParticipant(
@@ -126,11 +135,19 @@ class StagedFlowService extends ApiService {
 
   async updateRoundForm(
     stageId: string,
-    body: {
-      selectedParticipantIds?: string[];
-      positions?: Array<{ participantId: string; position: number }>;
-      desertedPositions?: number[];
-    }
+    body:
+      | {
+          selectedParticipantIds?: string[];
+          positions?: Array<{ participantId: string; position: number }>;
+          desertedPositions?: number[];
+        }
+      | OfflineMutationEnvelope<{
+          roundId: string;
+          tieBlockIdentity: string;
+          selectedParticipantIds?: string[];
+          positions?: Array<{ participantId: string; position: number }>;
+          desertedPositions?: number[];
+        }>
   ): Promise<ApiResponse<RoundState>> {
     return this.put<ApiResponse<RoundState>>(`/api/staff/fair-categories/${stageId}/rounds/form/entries`, body);
   }
@@ -138,22 +155,42 @@ class StagedFlowService extends ApiService {
   async updateRoundEntryReminders(
     stageId: string,
     participantId: string,
-    reminders: Array<{ reminderId: string; effect: "SUMA" | "RESTA" }>
+    remindersOrEnvelope:
+      | Array<{ reminderId: string; effect: "SUMA" | "RESTA" }>
+      | OfflineMutationEnvelope<{
+          reminders: Array<{ reminderId: string; effect: "SUMA" | "RESTA" }>;
+          roundId: string;
+          tieBlockIdentity: string;
+        }>
   ): Promise<ApiResponse<RoundState>> {
+    const body = Array.isArray(remindersOrEnvelope)
+      ? { reminders: remindersOrEnvelope }
+      : remindersOrEnvelope;
     return this.put<ApiResponse<RoundState>>(
       `/api/staff/fair-categories/${stageId}/rounds/form/entries/${participantId}/reminders`,
-      { reminders }
+      body
     );
   }
 
   async updateRoundEntryNote(
     stageId: string,
     participantId: string,
-    note: string | null
+    noteOrEnvelope:
+      | string
+      | null
+      | OfflineMutationEnvelope<{
+          note: string | null;
+          roundId: string;
+          tieBlockIdentity: string;
+        }>
   ): Promise<ApiResponse<RoundState>> {
+    const body =
+      noteOrEnvelope !== null && typeof noteOrEnvelope === "object" && "operationId" in noteOrEnvelope
+        ? noteOrEnvelope
+        : { note: noteOrEnvelope as string | null };
     return this.put<ApiResponse<RoundState>>(
       `/api/staff/fair-categories/${stageId}/rounds/form/entries/${participantId}/note`,
-      { note }
+      body
     );
   }
 
@@ -174,8 +211,18 @@ class StagedFlowService extends ApiService {
     );
   }
 
-  async closeRoundForm(stageId: string): Promise<ApiResponse<RoundState>> {
-    return this.post<ApiResponse<RoundState>>(`/api/staff/fair-categories/${stageId}/rounds/form/close`);
+  async closeRoundForm(
+    stageId: string,
+    body: {
+      roundId: string;
+      tieBlockIdentity: string;
+      expectedRevision: number;
+      selectedParticipantIds?: string[];
+      positions?: Array<{ participantId: string; position: number }>;
+      desertedPositions?: number[];
+    }
+  ): Promise<ApiResponse<RoundState>> {
+    return this.post<ApiResponse<RoundState>>(`/api/staff/fair-categories/${stageId}/rounds/form/close`, body);
   }
 
   async consolidateRound(stageId: string): Promise<ApiResponse<StagedCategory>> {

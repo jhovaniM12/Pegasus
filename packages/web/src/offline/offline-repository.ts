@@ -17,6 +17,7 @@ const ACTIVE_MUTATION_STATUSES: OfflineMutationStatus[] = [
   "CONFLICT",
   "FAILED",
 ];
+export const SYNCING_STALE_AFTER_MS = 2 * 60 * 1000;
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -77,6 +78,7 @@ export async function queueOfflineMutation<TPayload>(
         nextRetryAt: null,
         lastErrorCode: null,
         lastErrorMessage: null,
+        lastErrorDetails: null,
       };
       await database.offlineMutations.put(updated);
       return updated;
@@ -93,6 +95,7 @@ export async function queueOfflineMutation<TPayload>(
       lastAttemptAt: null,
       lastErrorCode: null,
       lastErrorMessage: null,
+      lastErrorDetails: null,
     };
     await database.offlineMutations.add(mutation);
     return mutation;
@@ -120,6 +123,129 @@ export async function hasBlockingMutations(userId: string, aggregateId: string):
   return mutations.some(
     (mutation) => mutation.userId === userId && ACTIVE_MUTATION_STATUSES.includes(mutation.status)
   );
+}
+
+export async function hasBlockingMutationsForStage(userId: string, stageId: string): Promise<boolean> {
+  const mutations = await getOfflineDatabase().offlineMutations.where("stageId").equals(stageId).toArray();
+  return mutations.some(
+    (mutation) => mutation.userId === userId && ACTIVE_MUTATION_STATUSES.includes(mutation.status)
+  );
+}
+
+export async function countBlockingMutationsForStage(userId: string, stageId: string): Promise<number> {
+  const mutations = await getOfflineDatabase().offlineMutations.where("stageId").equals(stageId).toArray();
+  return mutations.filter(
+    (mutation) => mutation.userId === userId && ACTIVE_MUTATION_STATUSES.includes(mutation.status)
+  ).length;
+}
+
+export async function listPendingMutationsForStage(
+  userId: string,
+  stageId: string
+): Promise<OfflineMutation[]> {
+  const mutations = await getOfflineDatabase().offlineMutations.where("stageId").equals(stageId).toArray();
+  return mutations
+    .filter((mutation) => mutation.userId === userId && mutation.status === "PENDING")
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+}
+
+export async function listMutationsForStage(
+  userId: string,
+  stageId: string,
+  statuses: OfflineMutationStatus[] = ACTIVE_MUTATION_STATUSES
+): Promise<OfflineMutation[]> {
+  const allowedStatuses = new Set(statuses);
+  const mutations = await getOfflineDatabase().offlineMutations.where("stageId").equals(stageId).toArray();
+  return mutations
+    .filter((mutation) => mutation.userId === userId && allowedStatuses.has(mutation.status))
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+}
+
+export async function recoverStaleSyncingMutations(
+  userId?: string,
+  stageId?: string,
+  now = Date.now()
+): Promise<number> {
+  const database = getOfflineDatabase();
+  const candidates = await database.offlineMutations.where("status").equals("SYNCING").toArray();
+  const staleBefore = now - SYNCING_STALE_AFTER_MS;
+  let recovered = 0;
+
+  await database.transaction("rw", database.offlineMutations, async () => {
+    for (const mutation of candidates) {
+      if (userId && mutation.userId !== userId) continue;
+      if (stageId && mutation.stageId !== stageId) continue;
+      const lastAttempt = mutation.lastAttemptAt ? Date.parse(mutation.lastAttemptAt) : 0;
+      if (lastAttempt > staleBefore) continue;
+      await database.offlineMutations.put({
+        ...mutation,
+        status: "PENDING",
+        nextRetryAt: null,
+        lastErrorCode: "SYNC_INTERRUPTED",
+        lastErrorMessage: "La sincronización fue interrumpida y será reintentada.",
+        lastErrorDetails: null,
+      });
+      recovered += 1;
+    }
+  });
+
+  return recovered;
+}
+
+export async function retryOfflineMutation(
+  operationId: string,
+  options: { reapplyLocal?: boolean } = {}
+): Promise<OfflineMutation | null> {
+  const database = getOfflineDatabase();
+  const mutation = await database.offlineMutations.get(operationId);
+  if (!mutation || !["CONFLICT", "FAILED"].includes(mutation.status)) return mutation ?? null;
+
+  const currentRevision =
+    options.reapplyLocal &&
+    mutation.lastErrorDetails &&
+    typeof mutation.lastErrorDetails === "object" &&
+    typeof (mutation.lastErrorDetails as { currentRevision?: unknown }).currentRevision === "number"
+      ? (mutation.lastErrorDetails as { currentRevision: number }).currentRevision
+      : mutation.baseRevision;
+
+  const updated: OfflineMutation = {
+    ...mutation,
+    status: "PENDING",
+    baseRevision: currentRevision,
+    nextRetryAt: null,
+    lastErrorCode: null,
+    lastErrorMessage: null,
+    lastErrorDetails: null,
+  };
+  await database.offlineMutations.put(updated);
+  return updated;
+}
+
+export async function discardOfflineMutation(operationId: string): Promise<boolean> {
+  const database = getOfflineDatabase();
+  const mutation = await database.offlineMutations.get(operationId);
+  if (!mutation || mutation.status === "SYNCING") return false;
+  await database.offlineMutations.delete(operationId);
+  return true;
+}
+
+export async function markMutationStatus(
+  operationId: string,
+  patch: Partial<
+    Pick<
+      OfflineMutation,
+      "status" | "attempts" | "nextRetryAt" | "lastAttemptAt" | "lastErrorCode" | "lastErrorMessage" | "baseRevision"
+      | "lastErrorDetails"
+    >
+  >
+): Promise<OfflineMutation | null> {
+  const database = getOfflineDatabase();
+  const existing = await database.offlineMutations.get(operationId);
+  if (!existing) return null;
+
+  const updated: OfflineMutation = { ...existing, ...patch };
+  await database.offlineMutations.put(updated);
+  return updated;
 }
 
 export async function confirmOfflineMutation<TPayload>(
@@ -152,12 +278,8 @@ export async function clearOfflineDataForUser(userId: string): Promise<void> {
     database.offlineMutations,
     database.offlineConfirmations,
     async () => {
-      const pendingCount = await database.offlineMutations.where("userId").equals(userId).count();
-      if (pendingCount > 0) {
-        throw new Error("No se pueden limpiar datos offline mientras existan cambios pendientes.");
-      }
-
       await database.offlineContexts.where("userId").equals(userId).delete();
+      await database.offlineMutations.where("userId").equals(userId).delete();
       await database.offlineConfirmations.where("userId").equals(userId).delete();
     }
   );

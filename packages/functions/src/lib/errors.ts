@@ -86,6 +86,25 @@ export class StageAdvancedError extends ConflictError {
   }
 }
 
+export class RoundReplacedError extends ConflictError {
+  constructor(details: {
+    stageId: string;
+    expectedRoundId: string;
+    currentRoundId: string | null;
+    expectedTieBlockIdentity?: string;
+    currentTieBlockIdentity?: string | null;
+  }) {
+    super(
+      "La ronda o el bloque de desempate ya no coinciden con el borrador offline.",
+      "ROUND_REPLACED",
+      {
+        ...details,
+        resolution: "RELOAD_REQUIRED" as const,
+      }
+    );
+  }
+}
+
 export class OfflinePayloadInvalidError extends AppError {
   constructor(message: string, details?: unknown) {
     super(message, 422, "OFFLINE_PAYLOAD_INVALID", details);

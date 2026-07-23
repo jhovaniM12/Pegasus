@@ -47,6 +47,7 @@ export type OfflineMutation<TPayload = unknown> = {
   lastAttemptAt: string | null;
   lastErrorCode: string | null;
   lastErrorMessage: string | null;
+  lastErrorDetails: unknown;
 };
 
 export type OfflineConfirmation<TPayload = unknown> = {

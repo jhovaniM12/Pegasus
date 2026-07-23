@@ -1,20 +1,24 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Gavel, Lock, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmActionDialog } from "@/components/confirm-action-dialog";
 import { NotificationInbox } from "@/components/notification-inbox";
+import { OfflineMutationCenter } from "@/components/offline-mutation-center";
 import { stagedFlowService } from "@/services/staged-flow.service";
 import { useToast } from "@/components/ui/toast";
 import { useStaffRealtimeRefresh } from "@/hooks/use-staff-realtime-refresh";
 import { PushNotificationGate } from "@/components/push-notification-gate";
 import { PushNotificationProvider } from "@/components/push-notification-provider";
+import { useFaSelection } from "@/hooks/use-fa-selection";
 import { useVeterinaryChecks } from "@/hooks/use-veterinary-checks";
 import { ContentReveal, PageLoader } from "@/components/loaders";
 import { ApiError, isUnauthorizedError } from "@/services/api.service";
+import { getTrustedOfflineDevice, hasBlockingMutationsForStage } from "@/offline/offline-repository";
+import { readRoundStageSnapshot } from "@/offline/round-cache";
 import { SummaryHeader } from "./_components/summary-header";
 import { VetCheckCard } from "./_components/vet-check-card";
 import { FaParticipantCard } from "./_components/fa-participant-card";
@@ -67,12 +71,6 @@ type CurrentUser = {
   roleLabel: string;
   personName: string | null;
 };
-
-function extractSelectedParticipantIds(state: FaState): string[] {
-  return state.participants
-    .filter((participant) => participant.decision?.decision === "SELECTED")
-    .map((participant) => participant.id);
-}
 
 function resolveJudgeView(viewParam: string | null): "FA" | "F1" | "F2" | "TIE_BREAK" | null {
   if (viewParam === "FA") return "FA";
@@ -182,7 +180,6 @@ export default function StaffCategoryPage() {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [summary, setSummary] = useState<StagedCategory | null>(null);
   const [fa, setFa] = useState<FaState | null>(null);
-  const [faSelectedIdsLocal, setFaSelectedIdsLocal] = useState<string[]>([]);
   const [management, setManagement] = useState<ManagementState | null>(null);
   const [round, setRound] = useState<RoundState | null>(null);
   const [roundsManagement, setRoundsManagement] = useState<RoundsManagement | null>(null);
@@ -193,14 +190,7 @@ export default function StaffCategoryPage() {
   const [disqualifyBusy, setDisqualifyBusy] = useState(false);
   const [repeatTrackTarget, setRepeatTrackTarget] = useState<FaParticipant | null>(null);
   const [repeatTrackBusy, setRepeatTrackBusy] = useState(false);
-  // Ref síncrona: fuente de verdad para calcular el siguiente toggle sin depender del ciclo de React.
-  const localSelectionRef = useRef<string[]>([]);
   const sessionExpiredRef = useRef(false);
-  const isSyncingFaSelectionRef = useRef(false);
-  const pendingFaSelectionRef = useRef<string[] | null>(null);
-  const latestConfirmedFaSelectionRef = useRef<string[]>([]);
-  const latestFaRequestIdRef = useRef(0);
-  const isClosingFaRef = useRef(false);
   const { toast } = useToast();
 
   const staffLoginPath = useCallback(() => {
@@ -223,13 +213,75 @@ export default function StaffCategoryPage() {
     setSessionExpired(true);
   }, [toast]);
 
-  const { checks, setChecks, updatingVetByEntryId, handleVetCheckUpdate } = useVeterinaryChecks({
+  const {
+    checks,
+    setChecks,
+    updatingVetByEntryId,
+    handleVetCheckUpdate,
+    pendingCount: vetPendingCount,
+    hasBlockingPending: vetHasBlockingPending,
+    isSyncing: vetIsSyncing,
+    syncNow: syncVeterinaryNow,
+    loadFromOfflineCache,
+  } = useVeterinaryChecks({
     stageId,
-    onUpdateError: () => {
+    userId: currentUser?.id ?? null,
+    summary,
+    onUpdateError: (message) => {
       toast({
         title: "Error al guardar",
-        description: "El cambio no fue registrado. Intenta nuevamente.",
+        description: message ?? "El cambio no fue registrado. Intenta nuevamente.",
         variant: "error",
+      });
+    },
+    onSyncNotice: (message) => {
+      toast({
+        title: "Sincronización",
+        description: message,
+        variant: "success",
+      });
+    },
+  });
+
+  const handleFaChange = useCallback(
+    (nextFa: FaState) => {
+      setFa(nextFa);
+      setSummary(nextFa.stage);
+    },
+    []
+  );
+
+  const {
+    selectedIds,
+    selectedCount: faSelectedCount,
+    localSelectionRef,
+    pendingCount: faPendingCount,
+    hasBlockingPending: faHasBlockingPending,
+    isSyncing: faIsSyncing,
+    toggleSelection: toggleFaSelection,
+    syncNow: syncFaNow,
+    loadFromOfflineCache: loadFaFromOfflineCache,
+    rememberServerFa,
+    beginClose: beginCloseFa,
+    endClose: endCloseFa,
+  } = useFaSelection({
+    stageId,
+    userId: currentUser?.id ?? null,
+    fa,
+    summaryStatus: summary?.status,
+    onFaChange: handleFaChange,
+    onUpdateError: (message) => {
+      toast({
+        title: "No se pudo guardar la selección",
+        description: message ?? "Se mantuvo el borrador local. Intenta nuevamente.",
+        variant: "error",
+      });
+    },
+    onSyncNotice: (message) => {
+      toast({
+        title: "Sincronización",
+        description: message,
+        variant: "success",
       });
     },
   });
@@ -261,11 +313,7 @@ export default function StaffCategoryPage() {
       const judgeView = resolveJudgeView(viewParam);
 
       if (judgeView === "FA") {
-        const [user, faResponse] = await Promise.all([
-          fetchCurrentUser(),
-          stagedFlowService.getFa(stageId),
-        ]);
-
+        const user = await fetchCurrentUser();
         if (!user) {
           if (!silent) router.push(staffLoginPath());
           return;
@@ -274,42 +322,65 @@ export default function StaffCategoryPage() {
         sessionExpiredRef.current = false;
         setSessionExpired(false);
         setCurrentUser(user);
-        const faData = faResponse.data ?? null;
-        const summaryData = faData?.stage ?? null;
 
-        if (!summaryData) {
-          if (!silent) {
-            toast({
-              title: "Categoría no disponible",
-              description: "No tienes acceso a esta categoría o no existe.",
-              variant: "error",
-            });
-            router.push("/staff");
+        try {
+          const faResponse = await stagedFlowService.getFa(stageId);
+          const faData = faResponse.data ?? null;
+          const summaryData = faData?.stage ?? null;
+
+          if (!summaryData) {
+            if (!silent) {
+              toast({
+                title: "Categoría no disponible",
+                description: "No tienes acceso a esta categoría o no existe.",
+                variant: "error",
+              });
+              router.push("/staff");
+            }
+            return;
           }
-          return;
-        }
 
-        if (isJudgeViewStale("FA", summaryData.status)) {
-          // El director técnico avanzó la etapa (F1, F2, desempate, cierre) mientras el
-          // juez seguía anclado en "?view=FA". Se limpia el parámetro para que la carga
-          // sin vista fijada resuelva y muestre la fase vigente automáticamente.
-          router.replace(`/staff/categories/${stageId}`);
-          return;
-        }
+          if (isJudgeViewStale("FA", summaryData.status)) {
+            // El director técnico avanzó la etapa (F1, F2, desempate, cierre) mientras el
+            // juez seguía anclado en "?view=FA". Se limpia el parámetro para que la carga
+            // sin vista fijada resuelva y muestre la fase vigente automáticamente.
+            router.replace(`/staff/categories/${stageId}`);
+            return;
+          }
 
-        setSummary(summaryData);
-        setFa(faData);
-        setRound(null);
-        setRoundsManagement(null);
-        return;
+          setSummary(summaryData);
+          setFa(faData);
+          if (faData) {
+            void rememberServerFa(faData);
+          }
+          setRound(null);
+          setRoundsManagement(null);
+          return;
+        } catch (error) {
+          if (isUnauthorizedError(error)) throw error;
+
+          const offlineSnapshot = await loadFaFromOfflineCache(user.id);
+          if (offlineSnapshot) {
+            setSummary(offlineSnapshot.fa.stage);
+            setFa(offlineSnapshot.fa);
+            setRound(null);
+            setRoundsManagement(null);
+            if (!silent) {
+              toast({
+                title: "Modo offline",
+                description: "Mostrando el FA preparado en este dispositivo.",
+                variant: "notification",
+              });
+            }
+            return;
+          }
+
+          throw error;
+        }
       }
 
       if (judgeView != null) {
-        const [user, roundResponse] = await Promise.all([
-          fetchCurrentUser(),
-          stagedFlowService.getRoundByType(stageId, judgeView),
-        ]);
-
+        const user = await fetchCurrentUser();
         if (!user) {
           if (!silent) router.push(staffLoginPath());
           return;
@@ -318,34 +389,64 @@ export default function StaffCategoryPage() {
         sessionExpiredRef.current = false;
         setSessionExpired(false);
         setCurrentUser(user);
-        const roundData = roundResponse.data ?? null;
-        const summaryData = roundData?.stage ?? null;
 
-        if (!summaryData) {
-          if (!silent) {
-            toast({
-              title: "Categoría no disponible",
-              description: "No tienes acceso a esta categoría o no existe.",
-              variant: "error",
-            });
-            router.push("/staff");
+        try {
+          const roundResponse = await stagedFlowService.getRoundByType(stageId, judgeView);
+          const roundData = roundResponse.data ?? null;
+          const summaryData = roundData?.stage ?? null;
+
+          if (!summaryData) {
+            if (!silent) {
+              toast({
+                title: "Categoría no disponible",
+                description: "No tienes acceso a esta categoría o no existe.",
+                variant: "error",
+              });
+              router.push("/staff");
+            }
+            return;
           }
-          return;
-        }
 
-        if (isJudgeViewStale(judgeView, summaryData.status)) {
-          // Misma idea que para "?view=FA": la ronda fijada en la URL (F1/F2/desempate)
-          // ya quedó atrás respecto al estado real de la etapa. Se limpia el parámetro
-          // para que la carga sin vista fijada muestre la fase vigente.
-          router.replace(`/staff/categories/${stageId}`);
-          return;
-        }
+          if (isJudgeViewStale(judgeView, summaryData.status)) {
+            // Misma idea que para "?view=FA": la ronda fijada en la URL (F1/F2/desempate)
+            // ya quedó atrás respecto al estado real de la etapa. Se limpia el parámetro
+            // para que la carga sin vista fijada muestre la fase vigente.
+            router.replace(`/staff/categories/${stageId}`);
+            return;
+          }
 
-        setSummary(summaryData);
-        setFa(null);
-        setRound(roundData);
-        setRoundsManagement(null);
-        return;
+          setSummary(summaryData);
+          setFa(null);
+          setRound(roundData);
+          setRoundsManagement(null);
+          return;
+        } catch (error) {
+          if (isUnauthorizedError(error)) throw error;
+
+          const trusted = await getTrustedOfflineDevice();
+          if (trusted?.userId === user.id) {
+            const offlineSnapshot = await readRoundStageSnapshot(user.id, stageId);
+            if (
+              offlineSnapshot?.round &&
+              offlineSnapshot.round.round.roundType === judgeView
+            ) {
+              setSummary(offlineSnapshot.round.stage);
+              setFa(null);
+              setRound(offlineSnapshot.round);
+              setRoundsManagement(null);
+              if (!silent) {
+                toast({
+                  title: "Modo offline",
+                  description: "Mostrando la tarjeta de ronda preparada en este dispositivo.",
+                  variant: "notification",
+                });
+              }
+              return;
+            }
+          }
+
+          throw error;
+        }
       }
 
       const user = await fetchCurrentUser();
@@ -404,29 +505,51 @@ export default function StaffCategoryPage() {
       }
 
       if (user.role === "VETERINARIAN") {
-        const [categoryResponse, checksResponse] = await Promise.all([
-          stagedFlowService.getCategory(stageId),
-          stagedFlowService.listVeterinaryChecks(stageId),
-        ]);
-        const current = categoryResponse.data ?? null;
-        if (!current) {
-          if (!silent) {
-            toast({
-              title: "Categoría no disponible",
-              description: "No tienes acceso a esta categoría o no existe.",
-              variant: "error",
-            });
-            router.push("/staff");
+        try {
+          const [categoryResponse, checksResponse] = await Promise.all([
+            stagedFlowService.getCategory(stageId),
+            stagedFlowService.listVeterinaryChecks(stageId),
+          ]);
+          const current = categoryResponse.data ?? null;
+          if (!current) {
+            if (!silent) {
+              toast({
+                title: "Categoría no disponible",
+                description: "No tienes acceso a esta categoría o no existe.",
+                variant: "error",
+              });
+              router.push("/staff");
+            }
+            return;
           }
-          return;
-        }
 
-        setSummary(current);
-        setChecks(checksResponse.data ?? []);
-        setFa(null);
-        setRound(null);
-        setRoundsManagement(null);
-        return;
+          setSummary(current);
+          await setChecks(checksResponse.data ?? [], current);
+          setFa(null);
+          setRound(null);
+          setRoundsManagement(null);
+          return;
+        } catch (error) {
+          if (isUnauthorizedError(error)) throw error;
+
+          const offlineSnapshot = await loadFromOfflineCache();
+          if (offlineSnapshot) {
+            setSummary(offlineSnapshot.summary);
+            setFa(null);
+            setRound(null);
+            setRoundsManagement(null);
+            if (!silent) {
+              toast({
+                title: "Modo offline",
+                description: "Mostrando la pre-pista preparada en este dispositivo.",
+                variant: "notification",
+              });
+            }
+            return;
+          }
+
+          throw error;
+        }
       }
 
       const categoryResponse = await stagedFlowService.getCategory(stageId);
@@ -446,11 +569,36 @@ export default function StaffCategoryPage() {
       setSummary(current);
 
       if (user.role === "JUDGE") {
-        const workspace = await loadJudgeWorkspace(stageId, current, viewParam);
-        setSummary(workspace.summary);
-        setFa(workspace.fa);
-        setRound(workspace.round);
-        setRoundsManagement(workspace.roundsManagement);
+        try {
+          const workspace = await loadJudgeWorkspace(stageId, current, viewParam);
+          setSummary(workspace.summary);
+          setFa(workspace.fa);
+          if (workspace.fa) {
+            void rememberServerFa(workspace.fa);
+          }
+          setRound(workspace.round);
+          setRoundsManagement(workspace.roundsManagement);
+        } catch (error) {
+          if (isUnauthorizedError(error)) throw error;
+
+          const offlineSnapshot = await loadFaFromOfflineCache(user.id);
+          if (offlineSnapshot) {
+            setSummary(offlineSnapshot.fa.stage);
+            setFa(offlineSnapshot.fa);
+            setRound(null);
+            setRoundsManagement(null);
+            if (!silent) {
+              toast({
+                title: "Modo offline",
+                description: "Mostrando el FA preparado en este dispositivo.",
+                variant: "notification",
+              });
+            }
+            return;
+          }
+
+          throw error;
+        }
       }
     } catch (error) {
       if (isUnauthorizedError(error)) {
@@ -474,7 +622,18 @@ export default function StaffCategoryPage() {
         setLoading(false);
       }
     }
-  }, [markSessionExpired, router, setChecks, staffLoginPath, stageId, toast, viewParam]);
+  }, [
+    loadFaFromOfflineCache,
+    loadFromOfflineCache,
+    markSessionExpired,
+    rememberServerFa,
+    router,
+    setChecks,
+    staffLoginPath,
+    stageId,
+    toast,
+    viewParam,
+  ]);
 
   useEffect(() => {
     const handleUnauthorized = () => {
@@ -517,110 +676,6 @@ export default function StaffCategoryPage() {
 
   // ─── FA handlers ─────────────────────────────────────────────────────────
 
-  const selectedIds = useMemo(() => new Set(faSelectedIdsLocal), [faSelectedIdsLocal]);
-  const faSelectedCount = useMemo(() => {
-    if (!fa) return 0;
-    return fa.form.status === "STARTED" ? selectedIds.size : fa.form.selectedCount;
-  }, [fa, selectedIds]);
-
-  useEffect(() => {
-    if (!fa) {
-      localSelectionRef.current = [];
-      latestConfirmedFaSelectionRef.current = [];
-      pendingFaSelectionRef.current = null;
-      isSyncingFaSelectionRef.current = false;
-      isClosingFaRef.current = false;
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset al salir de vista FA
-      setFaSelectedIdsLocal([]);
-      return;
-    }
-
-    const confirmedSelectedIds = extractSelectedParticipantIds(fa);
-    latestConfirmedFaSelectionRef.current = confirmedSelectedIds;
-
-    if (!isSyncingFaSelectionRef.current) {
-      localSelectionRef.current = confirmedSelectedIds;
-      setFaSelectedIdsLocal(confirmedSelectedIds);
-    }
-  }, [fa]);
-
-  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- cola optimista con refs estables
-  const flushFaSelection = useCallback(async () => {
-    if (isSyncingFaSelectionRef.current) return;
-
-    const queuedSelection = pendingFaSelectionRef.current;
-    if (!queuedSelection) return;
-
-    pendingFaSelectionRef.current = null;
-    isSyncingFaSelectionRef.current = true;
-    const requestId = ++latestFaRequestIdRef.current;
-
-    try {
-      const response = await stagedFlowService.updateFaDecisions(stageId, queuedSelection);
-      if (requestId !== latestFaRequestIdRef.current) {
-        return;
-      }
-
-      if (response.data) {
-        const confirmedSelectedIds = extractSelectedParticipantIds(response.data);
-        latestConfirmedFaSelectionRef.current = confirmedSelectedIds;
-        // Solo sincroniza visualmente si no hay otra operación en cola.
-        if (!pendingFaSelectionRef.current) {
-          localSelectionRef.current = confirmedSelectedIds;
-          setFaSelectedIdsLocal(confirmedSelectedIds);
-        }
-        setFa(response.data);
-      }
-    } catch {
-      if (requestId === latestFaRequestIdRef.current) {
-        localSelectionRef.current = latestConfirmedFaSelectionRef.current;
-        setFaSelectedIdsLocal(latestConfirmedFaSelectionRef.current);
-        toast({
-          title: "No se pudo guardar la selección",
-          description: "Se restauró la última selección confirmada. Intenta nuevamente.",
-          variant: "error"
-        });
-      }
-    } finally {
-      isSyncingFaSelectionRef.current = false;
-      if (pendingFaSelectionRef.current && !isClosingFaRef.current) {
-        void flushFaSelection();
-      }
-    }
-  }, [stageId, toast]);
-
-  const toggleFaSelection = useCallback(
-    (participantId: string) => {
-      if (
-        !fa ||
-        isClosingFaRef.current ||
-        summary?.status !== "JUDGING_STARTED" ||
-        fa.form.status !== "STARTED"
-      ) {
-        return;
-      }
-
-      // Leer siempre desde la ref síncrona para evitar estado stale en taps rápidos.
-      const current = localSelectionRef.current;
-      const isSelected = current.includes(participantId);
-      const next = isSelected
-        ? current.filter((id) => id !== participantId)
-        : [...current, participantId];
-
-      if (next.length > 10) return;
-
-      // Actualizar ref y estado visual de forma atómica y síncrona.
-      localSelectionRef.current = next;
-      setFaSelectedIdsLocal(next);
-
-      // Cola de sincronización: si hay un request en vuelo, solo actualizamos el
-      // payload pendiente; flushFaSelection lo enviará al terminar.
-      pendingFaSelectionRef.current = next;
-      void flushFaSelection();
-    },
-    [fa, flushFaSelection, summary?.status]
-  );
-
   const openFaDisqualify = useCallback(
     (participantId: string) => {
       if (!fa || summary?.status !== "JUDGING_STARTED" || fa.form.status !== "STARTED") return;
@@ -641,10 +696,7 @@ export default function StaffCategoryPage() {
         if (response.data) {
           setFa(response.data);
           setSummary(response.data.stage);
-          const confirmedSelectedIds = extractSelectedParticipantIds(response.data);
-          latestConfirmedFaSelectionRef.current = confirmedSelectedIds;
-          localSelectionRef.current = confirmedSelectedIds;
-          setFaSelectedIdsLocal(confirmedSelectedIds);
+          void rememberServerFa(response.data);
           setDisqualifyTarget(null);
           toast({ title: "Ejemplar descalificado", variant: "success" });
         }
@@ -659,7 +711,7 @@ export default function StaffCategoryPage() {
         setDisqualifyBusy(false);
       }
     },
-    [fa, stageId, summary?.status, toast]
+    [fa, rememberServerFa, stageId, summary?.status, toast]
   );
 
   const openFaRepeatTrack = useCallback(
@@ -682,10 +734,7 @@ export default function StaffCategoryPage() {
         if (response.data) {
           setFa(response.data);
           setSummary(response.data.stage);
-          const confirmedSelectedIds = extractSelectedParticipantIds(response.data);
-          latestConfirmedFaSelectionRef.current = confirmedSelectedIds;
-          localSelectionRef.current = confirmedSelectedIds;
-          setFaSelectedIdsLocal(confirmedSelectedIds);
+          void rememberServerFa(response.data);
           setRepeatTrackTarget(null);
           toast({ title: "Solicitud enviada", variant: "success" });
         }
@@ -700,7 +749,7 @@ export default function StaffCategoryPage() {
         setRepeatTrackBusy(false);
       }
     },
-    [fa, stageId, summary?.status, toast]
+    [fa, rememberServerFa, stageId, summary?.status, toast]
   );
 
   const executeFaRepeatTrack = useCallback(
@@ -791,6 +840,16 @@ export default function StaffCategoryPage() {
               </Button>
             </div>
           </div>
+        )}
+
+        {currentUser && (
+          <OfflineMutationCenter
+            userId={currentUser.id}
+            stageId={stageId}
+            onSync={async () => {
+              await Promise.all([syncVeterinaryNow(), syncFaNow()]);
+            }}
+          />
         )}
 
         {currentUser?.role === "TECHNICAL_DIRECTOR" && (
@@ -886,12 +945,31 @@ export default function StaffCategoryPage() {
         {/* ── VETERINARIO ──────────────────────────────────────────────── */}
         {currentUser?.role === "VETERINARIAN" && (
           <section className="mt-4 rounded-lg border border-slate-200 bg-white p-5">
-            <div>
-              <h2 className="text-base font-semibold text-slate-950">Checkeo veterinario</h2>
-              {checks.length > 0 && (
-                <p className="mt-0.5 text-sm text-slate-500">
-                  {checks.filter((c) => c.status !== "PENDING").length}/{checks.length} revisados
-                </p>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="text-base font-semibold text-slate-950">Checkeo veterinario</h2>
+                {checks.length > 0 && (
+                  <p className="mt-0.5 text-sm text-slate-500">
+                    {checks.filter((c) => c.status !== "PENDING").length}/{checks.length} revisados
+                  </p>
+                )}
+                {vetPendingCount > 0 && (
+                  <p className="mt-1 text-xs font-medium text-amber-700">
+                    {vetIsSyncing
+                      ? `Sincronizando ${vetPendingCount} cambio(s)…`
+                      : `${vetPendingCount} cambio(s) guardados en este dispositivo`}
+                  </p>
+                )}
+              </div>
+              {vetPendingCount > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={vetIsSyncing || busy}
+                  onClick={() => void syncVeterinaryNow()}
+                >
+                  Sincronizar ahora
+                </Button>
               )}
             </div>
             <div className="mt-4 grid gap-3">
@@ -910,6 +988,8 @@ export default function StaffCategoryPage() {
               className="mt-5 h-14 w-full gap-2 rounded-xl px-6 text-base font-semibold bg-blue-600 hover:bg-blue-700 text-white disabled:bg-blue-600/50"
               disabled={
                 busy ||
+                vetIsSyncing ||
+                vetHasBlockingPending ||
                 summary.status !== "PRE_RING_STARTED" ||
                 checks.some((c) => c.status === "PENDING")
               }
@@ -918,6 +998,12 @@ export default function StaffCategoryPage() {
               <Lock className="size-5" />
               Cerrar pre-pista
             </Button>
+            {vetHasBlockingPending && (
+              <p className="mt-2 text-center text-xs text-amber-700">
+                Tienes cambios guardados únicamente en este dispositivo. Debes sincronizarlos antes de
+                cerrar la pre-pista.
+              </p>
+            )}
           </section>
         )}
 
@@ -928,32 +1014,59 @@ export default function StaffCategoryPage() {
               <div>
                 <h2 className="text-base font-semibold text-slate-950">Formato FA</h2>
                 <p className="text-sm text-slate-500">{faSelectedCount} / 10 seleccionados</p>
+                {faPendingCount > 0 && (
+                  <p className="mt-1 text-xs font-medium text-amber-700">
+                    {faIsSyncing
+                      ? `Sincronizando ${faPendingCount} cambio(s)…`
+                      : `${faPendingCount} cambio(s) guardados en este dispositivo`}
+                  </p>
+                )}
               </div>
-              {fa.form.status !== "CLOSED" && (
-                <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
+                {faPendingCount > 0 && (
                   <Button
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white disabled:bg-emerald-600/50"
-                    disabled={busy || summary.status !== "JUDGING_STARTED" || fa.form.status !== "PENDING"}
-                    onClick={() => setStartFaOpen(true)}
+                    type="button"
+                    variant="outline"
+                    disabled={faIsSyncing || busy}
+                    onClick={() => void syncFaNow()}
                   >
-                    <Play className="size-4" />
-                    Iniciar FA
+                    Sincronizar ahora
                   </Button>
-                  <Button
-                    className="bg-blue-600 hover:bg-blue-700 text-white disabled:bg-blue-600/50"
-                    disabled={
-                      busy ||
-                      summary.status !== "JUDGING_STARTED" ||
-                      fa.form.status !== "STARTED"
-                    }
-                    onClick={() => setCloseFaOpen(true)}
-                  >
-                    <Lock className="size-4" />
-                    Cerrar FA
-                  </Button>
-                </div>
-              )}
+                )}
+                {fa.form.status !== "CLOSED" && (
+                  <>
+                    <Button
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white disabled:bg-emerald-600/50"
+                      disabled={busy || summary.status !== "JUDGING_STARTED" || fa.form.status !== "PENDING"}
+                      onClick={() => setStartFaOpen(true)}
+                    >
+                      <Play className="size-4" />
+                      Iniciar FA
+                    </Button>
+                    <Button
+                      className="bg-blue-600 hover:bg-blue-700 text-white disabled:bg-blue-600/50"
+                      disabled={
+                        busy ||
+                        faIsSyncing ||
+                        faHasBlockingPending ||
+                        summary.status !== "JUDGING_STARTED" ||
+                        fa.form.status !== "STARTED"
+                      }
+                      onClick={() => setCloseFaOpen(true)}
+                    >
+                      <Lock className="size-4" />
+                      Cerrar FA
+                    </Button>
+                  </>
+                )}
+              </div>
             </div>
+            {faHasBlockingPending && fa.form.status === "STARTED" && (
+              <p className="mt-2 text-xs text-amber-700">
+                Tienes cambios guardados únicamente en este dispositivo. Debes sincronizarlos antes de
+                cerrar el FA.
+              </p>
+            )}
 
             {(fa.consolidated ?? []).length > 0 && (
               <div className="mt-4">
@@ -1042,6 +1155,7 @@ export default function StaffCategoryPage() {
         {currentUser?.role === "JUDGE" && round && (
           <JudgeRoundWorkspace
             stageId={stageId}
+            userId={currentUser?.id ?? null}
             round={round}
             busy={busy}
             onLocalUpdate={setRound}
@@ -1176,20 +1290,35 @@ export default function StaffCategoryPage() {
               ).length
             : 0,
         }}
-        busy={busy}
+        busy={busy || faIsSyncing}
         onConfirm={async () => {
           const selectedParticipantIds = [...localSelectionRef.current];
-          // El snapshot enviado al cierre es la fuente definitiva. Los autosaves
-          // anteriores pueden terminar después sin revertir ni mostrar un error.
-          isClosingFaRef.current = true;
-          pendingFaSelectionRef.current = null;
-          latestFaRequestIdRef.current += 1;
+          // El snapshot enviado al cierre es la fuente definitiva.
+          beginCloseFa();
           setBusy(true);
           try {
+            const syncResult = await syncFaNow();
+            const stillBlocking =
+              syncResult.conflicts > 0 ||
+              syncResult.failed > 0 ||
+              (currentUser
+                ? await hasBlockingMutationsForStage(currentUser.id, stageId)
+                : false);
+            if (stillBlocking) {
+              toast({
+                title: "Sincronización pendiente",
+                description:
+                  "No fue posible sincronizar la selección FA. Revisa la conexión e intenta nuevamente antes de cerrar.",
+                variant: "error",
+              });
+              return;
+            }
+
             const response = await stagedFlowService.closeFa(stageId, selectedParticipantIds);
             if (response.data) {
               setFa(response.data);
               setSummary(response.data.stage);
+              void rememberServerFa(response.data);
             }
             toast({ title: "Formato FA cerrado", variant: "success" });
             setCloseFaOpen(false);
@@ -1200,7 +1329,7 @@ export default function StaffCategoryPage() {
               variant: "error",
             });
           } finally {
-            isClosingFaRef.current = false;
+            endCloseFa();
             setBusy(false);
           }
         }}
@@ -1237,8 +1366,32 @@ export default function StaffCategoryPage() {
         totalProcessed={checks.length}
         busy={busy}
         onConfirm={async () => {
+          if (vetHasBlockingPending) {
+            toast({
+              title: "Sincronización pendiente",
+              description:
+                "Tienes cambios guardados únicamente en este dispositivo. Debes sincronizarlos antes de cerrar la pre-pista.",
+              variant: "error",
+            });
+            return;
+          }
           setBusy(true);
           try {
+            const syncResult = await syncVeterinaryNow();
+            const stillBlocking =
+              syncResult.conflicts > 0 ||
+              syncResult.failed > 0 ||
+              (currentUser
+                ? await hasBlockingMutationsForStage(currentUser.id, stageId)
+                : false);
+            if (stillBlocking) {
+              toast({
+                title: "No se pudo sincronizar",
+                description: "Resuelve los cambios pendientes antes de cerrar la pre-pista.",
+                variant: "error",
+              });
+              return;
+            }
             await stagedFlowService.closePreRing(stageId);
             await load();
             toast({ title: "Pre-pista cerrada", variant: "success" });

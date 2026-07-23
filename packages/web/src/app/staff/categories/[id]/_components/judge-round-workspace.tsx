@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, Loader2, Lock, Play, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
+import { useRoundForm } from "@/hooks/use-round-form";
+import { hasBlockingMutationsForStage } from "@/offline/offline-repository";
 import { stagedFlowService } from "@/services/staged-flow.service";
 import type { RoundParticipant, RoundState, RoundType } from "@/types/staged-flow";
 import { F2PositionBoard } from "./f2-position-board";
@@ -58,6 +60,7 @@ function computeAutoDeserted(
 
 type JudgeRoundWorkspaceProps = {
   stageId: string;
+  userId: string | null;
   round: RoundState;
   busy: boolean;
   onLocalUpdate: (round: RoundState) => void;
@@ -70,12 +73,6 @@ type JudgeRoundWorkspaceProps = {
     confirmText?: string,
     redirectTo?: string
   ) => void;
-};
-
-type RoundFormPayload = {
-  selectedParticipantIds?: string[];
-  positions?: Array<{ participantId: string; position: number }>;
-  desertedPositions?: number[];
 };
 
 function syncParticipantsWithSelection(participants: RoundParticipant[], selectedIds: string[]): RoundParticipant[] {
@@ -99,6 +96,7 @@ function syncParticipantsWithPositions(
 
 export function JudgeRoundWorkspace({
   stageId,
+  userId,
   round,
   busy,
   onLocalUpdate,
@@ -116,10 +114,34 @@ export function JudgeRoundWorkspace({
   const [disqualifyBusy, setDisqualifyBusy] = useState(false);
   const localParticipantsRef = useRef(round.participants);
   const localDesertedPositionsRef = useRef(round.form?.desertedPositions ?? []);
-  const pendingRoundPayloadRef = useRef<RoundFormPayload | null>(null);
-  const isSyncingRoundRef = useRef(false);
   const latestConfirmedRoundRef = useRef(round);
-  const latestRoundRequestIdRef = useRef(0);
+  const hasLocalPendingRef = useRef(false);
+
+  const {
+    pendingCount,
+    hasBlockingPending,
+    isSyncing,
+    syncNow,
+    queueFormSnapshot,
+    queueNote,
+    queueReminders,
+    rememberServerRound,
+    beginClose,
+    endClose,
+    buildCloseBody,
+  } = useRoundForm({
+    stageId,
+    userId,
+    round,
+    onRoundChange: onLocalUpdate,
+    onSyncNotice: (message) => {
+      toast({ title: "Sincronización", description: message, variant: "success" });
+    },
+  });
+
+  useEffect(() => {
+    hasLocalPendingRef.current = hasBlockingPending;
+  }, [hasBlockingPending]);
 
   const eligibleParticipants = useMemo(
     () => localParticipants.filter((participant) => participant.status === "ELIGIBLE"),
@@ -188,6 +210,7 @@ export function JudgeRoundWorkspace({
         setLocalDesertedPositions(response.data.form?.desertedPositions ?? []);
         setDisqualifyTarget(null);
         onLocalUpdate(response.data);
+        void rememberServerRound(response.data);
         toast({ title: "Ejemplar descalificado", variant: "success" });
       }
     } catch (error) {
@@ -205,8 +228,7 @@ export function JudgeRoundWorkspace({
   useEffect(() => {
     latestConfirmedRoundRef.current = round;
 
-    // No permitas que una respuesta tardía pise una intención optimista más reciente.
-    if (!isSyncingRoundRef.current && !pendingRoundPayloadRef.current) {
+    if (!hasLocalPendingRef.current) {
       localParticipantsRef.current = round.participants;
       localDesertedPositionsRef.current = round.form?.desertedPositions ?? [];
       setLocalParticipants(round.participants);
@@ -214,52 +236,9 @@ export function JudgeRoundWorkspace({
     }
   }, [round]);
 
-  async function flushRoundPayload() {
-    if (isSyncingRoundRef.current) return;
-
-    const queuedPayload = pendingRoundPayloadRef.current;
-    if (!queuedPayload) return;
-
-    pendingRoundPayloadRef.current = null;
-    isSyncingRoundRef.current = true;
-    const requestId = ++latestRoundRequestIdRef.current;
-
-    try {
-      const response = await stagedFlowService.updateRoundForm(stageId, queuedPayload);
-      if (requestId !== latestRoundRequestIdRef.current) {
-        return;
-      }
-
-      if (response.data) {
-        latestConfirmedRoundRef.current = response.data;
-        if (!pendingRoundPayloadRef.current) {
-          localParticipantsRef.current = response.data.participants;
-          localDesertedPositionsRef.current = response.data.form?.desertedPositions ?? [];
-          setLocalParticipants(response.data.participants);
-          setLocalDesertedPositions(response.data.form?.desertedPositions ?? []);
-        }
-        onLocalUpdate(response.data);
-      }
-    } catch {
-      if (requestId === latestRoundRequestIdRef.current) {
-        const confirmedRound = latestConfirmedRoundRef.current;
-        localParticipantsRef.current = confirmedRound.participants;
-        localDesertedPositionsRef.current = confirmedRound.form?.desertedPositions ?? [];
-        setLocalParticipants(confirmedRound.participants);
-        setLocalDesertedPositions(confirmedRound.form?.desertedPositions ?? []);
-        toast({
-          title: "No se pudo guardar la tarjeta",
-          description: "Se restauró la última selección confirmada. Intenta nuevamente.",
-          variant: "error",
-        });
-      }
-    } finally {
-      isSyncingRoundRef.current = false;
-      if (pendingRoundPayloadRef.current) {
-        void flushRoundPayload();
-      }
-    }
-  }
+  useEffect(() => {
+    void rememberServerRound(round);
+  }, [rememberServerRound, round.round.id, round.form?.id]);
 
   const toggleSelect = (participantId: string) => {
     if (!editable) return;
@@ -279,8 +258,7 @@ export function JudgeRoundWorkspace({
     const nextParticipants = syncParticipantsWithSelection(localParticipantsRef.current, next);
     localParticipantsRef.current = nextParticipants;
     setLocalParticipants(nextParticipants);
-    pendingRoundPayloadRef.current = { selectedParticipantIds: next };
-    void flushRoundPayload();
+    void queueFormSnapshot({ selectedParticipantIds: next });
   };
 
   const persistRankingState = (
@@ -292,11 +270,10 @@ export function JudgeRoundWorkspace({
     localDesertedPositionsRef.current = nextDesertedPositions;
     setLocalParticipants(nextParticipants);
     setLocalDesertedPositions(nextDesertedPositions);
-    pendingRoundPayloadRef.current = {
+    void queueFormSnapshot({
       positions: nextPositions,
       desertedPositions: nextDesertedPositions,
-    };
-    void flushRoundPayload();
+    });
   };
 
   const getCurrentAssignments = () =>
@@ -334,7 +311,43 @@ export function JudgeRoundWorkspace({
 
   const canClose =
     (isSelectionRound || isPositionBoardRound) &&
-    (roundType !== "TIE_BREAK" || allTiedParticipantsRanked);
+    (roundType !== "TIE_BREAK" || allTiedParticipantsRanked) &&
+    !hasBlockingPending &&
+    !isSyncing;
+
+  const closeRound = async () => {
+    const closeBody = buildCloseBody();
+    if (!closeBody) {
+      throw new Error("No hay formulario de ronda para cerrar.");
+    }
+
+    beginClose();
+    try {
+      const syncResult = await syncNow();
+      const stillBlocking =
+        syncResult.conflicts > 0 ||
+        syncResult.failed > 0 ||
+        (userId ? await hasBlockingMutationsForStage(userId, stageId) : false);
+      if (stillBlocking) {
+        throw new Error(
+          "No fue posible sincronizar la tarjeta. Revisa la conexión e intenta nuevamente antes de cerrar."
+        );
+      }
+
+      const refreshedBody = buildCloseBody();
+      if (!refreshedBody) {
+        throw new Error("No hay formulario de ronda para cerrar.");
+      }
+
+      const response = await stagedFlowService.closeRoundForm(stageId, refreshedBody);
+      if (response.data) {
+        onLocalUpdate(response.data);
+        void rememberServerRound(response.data);
+      }
+    } finally {
+      endClose();
+    }
+  };
 
   // Estados de la ronda ajenos a la edición del juez.
   if (round.round.status !== "OPEN") {
@@ -396,21 +409,40 @@ export function JudgeRoundWorkspace({
         <div>
           <h2 className="text-base font-semibold text-slate-950">{ROUND_TITLES[roundType]}</h2>
           <p className="text-sm text-slate-500">{progressLabel}</p>
+          {pendingCount > 0 && (
+            <p className="mt-1 text-xs font-medium text-amber-700">
+              {isSyncing
+                ? `Sincronizando ${pendingCount} cambio(s)…`
+                : `${pendingCount} cambio(s) guardados en este dispositivo`}
+            </p>
+          )}
         </div>
-        {formStatus === "PENDING" && (
-          <Button
-            className="bg-emerald-600 text-white hover:bg-emerald-700"
-            disabled={busy}
-            onClick={() =>
-              runAction("Iniciar tarjeta", ROUND_HINTS[roundType], () =>
-                stagedFlowService.startRoundForm(stageId)
-              )
-            }
-          >
-            <Play className="size-4" />
-            Iniciar tarjeta
-          </Button>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {pendingCount > 0 && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isSyncing || busy}
+              onClick={() => void syncNow()}
+            >
+              Sincronizar ahora
+            </Button>
+          )}
+          {formStatus === "PENDING" && (
+            <Button
+              className="bg-emerald-600 text-white hover:bg-emerald-700"
+              disabled={busy}
+              onClick={() =>
+                runAction("Iniciar tarjeta", ROUND_HINTS[roundType], () =>
+                  stagedFlowService.startRoundForm(stageId)
+                )
+              }
+            >
+              <Play className="size-4" />
+              Iniciar tarjeta
+            </Button>
+          )}
+        </div>
       </div>
 
       {formStatus === "STARTED" && !isPositionBoardRound && (
@@ -458,6 +490,8 @@ export function JudgeRoundWorkspace({
                 onLocalUpdate(updated);
               }}
               onOpenDisqualify={setDisqualifyTarget}
+              onSaveNote={queueNote}
+              onSaveReminders={queueReminders}
             />
           ) : isPositionBoardRound ? (
             <F2PositionBoard
@@ -476,6 +510,8 @@ export function JudgeRoundWorkspace({
                 onLocalUpdate(updated);
               }}
               onOpenDisqualify={setDisqualifyTarget}
+              onSaveNote={queueNote}
+              onSaveReminders={queueReminders}
             />
           ) : null}
         </div>
@@ -499,7 +535,7 @@ export function JudgeRoundWorkspace({
                   ? "Cerrar desempate"
                   : `Cerrar prueba individual ${roundType === "F1" ? "P1" : "P2"}`,
                 "Una vez cerrado, no podrás modificar las posiciones asignadas. ¿Estás seguro de que deseas cerrar?",
-                () => stagedFlowService.closeRoundForm(stageId),
+                () => closeRound(),
                 "default",
                 "Cerrar prueba"
               )
@@ -510,6 +546,12 @@ export function JudgeRoundWorkspace({
               ? "Cerrar desempate"
               : `Cerrar prueba individual ${roundType === "F1" ? "P1" : "P2"}`}
           </Button>
+          {hasBlockingPending && (
+            <p className="mt-2 text-center text-xs text-amber-700">
+              Tienes cambios guardados únicamente en este dispositivo. Debes sincronizarlos antes de
+              cerrar la tarjeta.
+            </p>
+          )}
           {roundType === "TIE_BREAK" && !allTiedParticipantsRanked && (
             <p className="mt-2 text-center text-xs text-amber-700">
               Asigna un puesto a cada ejemplar empatado antes de cerrar ({assignedByParticipant.length}/

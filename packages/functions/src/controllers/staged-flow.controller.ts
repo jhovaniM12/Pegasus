@@ -44,6 +44,7 @@ import {
 import { getActiveStaffUser } from "../services/auth.service.js";
 import {
   closeFaSchema,
+  closeRoundFormSchema,
   disqualifyParticipantSchema,
   desertCompetitionSchema,
   openTieBreakSchema,
@@ -117,7 +118,13 @@ export async function listVeterinaryChecksController(c: Context) {
 export async function updateVeterinaryCheckController(c: Context) {
   const user = await getStaffUser(c);
   const body = updateVeterinaryCheckSchema.parse(await c.req.json());
-  return c.json(success(await updateVeterinaryCheck(user, requiredParam(c, "id"), requiredParam(c, "fairEntryId"), body)));
+  const result = await updateVeterinaryCheck(
+    user,
+    requiredParam(c, "id"),
+    requiredParam(c, "fairEntryId"),
+    body
+  );
+  return c.json(success(result.checks, undefined, result.sync));
 }
 
 export async function closePreRingController(c: Context) {
@@ -149,7 +156,8 @@ export async function startFaController(c: Context) {
 export async function updateFaDecisionsController(c: Context) {
   const user = await getStaffUser(c);
   const body = updateFaDecisionsSchema.parse(await c.req.json());
-  return c.json(success(await updateFaDecisions(user, requiredParam(c, "id"), body)));
+  const result = await updateFaDecisions(user, requiredParam(c, "id"), body);
+  return c.json(success(result.fa, undefined, result.sync));
 }
 
 export async function listDisqualificationReasonsController(c: Context) {
@@ -238,7 +246,8 @@ export async function startRoundFormController(c: Context) {
 export async function updateRoundFormController(c: Context) {
   const user = await getStaffUser(c);
   const body = updateRoundFormSchema.parse(await c.req.json());
-  return c.json(success(await updateRoundForm(user, requiredParam(c, "id"), body)));
+  const result = await updateRoundForm(user, requiredParam(c, "id"), body);
+  return c.json(success(result.round, undefined, result.sync));
 }
 
 export async function updateRoundEntryRemindersController(c: Context) {
@@ -246,8 +255,8 @@ export async function updateRoundEntryRemindersController(c: Context) {
   const stageId = requiredParam(c, "id");
   const participantId = requiredParam(c, "participantId");
   const body = updateRoundEntryRemindersSchema.parse(await c.req.json());
-  await updateEntryReminders(user, stageId, participantId, body.reminders);
-  return c.json(success(await getRound(user, stageId)));
+  const result = await updateEntryReminders(user, stageId, participantId, body);
+  return c.json(success(await getRound(user, stageId), undefined, result.sync));
 }
 
 export async function updateRoundEntryNoteController(c: Context) {
@@ -255,8 +264,8 @@ export async function updateRoundEntryNoteController(c: Context) {
   const stageId = requiredParam(c, "id");
   const participantId = requiredParam(c, "participantId");
   const body = updateRoundEntryNoteSchema.parse(await c.req.json());
-  await updateEntryPrivateNote(user, stageId, participantId, body.note ?? null);
-  return c.json(success(await getRound(user, stageId)));
+  const result = await updateEntryPrivateNote(user, stageId, participantId, body);
+  return c.json(success(await getRound(user, stageId), undefined, result.sync));
 }
 
 export async function disqualifyRoundParticipantController(c: Context) {
@@ -283,7 +292,8 @@ export async function getRoundEntryReminderHistoryController(c: Context) {
 export async function closeRoundFormController(c: Context) {
   const user = await getStaffUser(c);
   const stageId = requiredParam(c, "id");
-  const result = await closeRoundForm(user, stageId);
+  const body = closeRoundFormSchema.parse(await c.req.json());
+  const result = await closeRoundForm(user, stageId, body);
   dispatchNotificationsAfterAction(stageId);
   return c.json(success(result));
 }

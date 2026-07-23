@@ -24,7 +24,12 @@ import {
   WorkflowEvent
 } from "@pegasus/core";
 import type { DataSource, EntityManager } from "typeorm";
-import { BadRequestError, ForbiddenError, NotFoundError } from "../lib/errors.js";
+import { BadRequestError, ForbiddenError, FormClosedError, NotFoundError, StageAdvancedError } from "../lib/errors.js";
+import {
+  assertExpectedRevision,
+  executeIdempotentMutation
+} from "./offline-idempotency.service.js";
+import type { MutationSyncMeta } from "../lib/http.js";
 import {
   ROLE_LABELS,
   assertStageAccess,
@@ -508,35 +513,95 @@ export async function updateVeterinaryCheck(
   user: User,
   stageId: string,
   fairEntryId: string,
-  input: { status: VeterinaryCheckStatus; notes?: string | null }
-) {
+  input:
+    | { status: VeterinaryCheckStatus; notes?: string | null }
+    | {
+        operationId: string;
+        baseRevision: number;
+        clientUpdatedAt: string;
+        payload: { status: VeterinaryCheckStatus; notes?: string | null };
+      }
+): Promise<{ checks: Awaited<ReturnType<typeof listVeterinaryChecksForStage>>; sync?: MutationSyncMeta }> {
   assertUserRole(user, ["VETERINARIAN"]);
   const dataSource = await getDataSource();
+  const isOfflineEnvelope = "operationId" in input && "payload" in input;
+  const payload = isOfflineEnvelope ? input.payload : input;
 
   return dataSource.transaction(async (manager) => {
     const stage = await getStageOrThrow(manager, stageId);
     await assertStageAccess(manager, user, stage, ["Z"]);
 
     if (stage.status !== "PRE_RING_STARTED") {
+      if (isOfflineEnvelope) {
+        throw new StageAdvancedError(stage.id);
+      }
       throw new BadRequestError("El checkeo veterinario solo se puede editar con pre-pista iniciada.");
     }
 
     await ensureVeterinaryChecks(manager, stage);
     const check = await manager.getRepository(VeterinaryCheck).findOne({
-      where: { fairCategoryStageId: stage.id, fairEntryId }
+      where: { fairCategoryStageId: stage.id, fairEntryId },
+      lock: { mode: "pessimistic_write" }
     });
 
     if (!check) {
       throw new NotFoundError("No se encontro el participante para checkeo veterinario.");
     }
 
-    check.status = input.status;
-    check.notes = input.notes ?? null;
-    check.veterinarianUserId = user.id;
-    check.checkedAt = input.status === "PENDING" ? null : new Date();
-    await manager.getRepository(VeterinaryCheck).save(check);
+    const applyUpdate = async () => {
+      if (isOfflineEnvelope) {
+        assertExpectedRevision(input.baseRevision, check.revision, {
+          aggregateId: check.id,
+          currentState: {
+            id: check.id,
+            fairEntryId: check.fairEntryId,
+            status: check.status,
+            notes: check.notes,
+            revision: check.revision
+          },
+          resolution: "CAN_REAPPLY_LOCAL_DRAFT"
+        });
+      }
 
-    return listVeterinaryChecksForStage(manager, stage);
+      check.status = payload.status;
+      check.notes = payload.notes ?? null;
+      check.veterinarianUserId = user.id;
+      check.checkedAt = payload.status === "PENDING" ? null : new Date();
+      const saved = await manager.getRepository(VeterinaryCheck).save(check);
+      const checks = await listVeterinaryChecksForStage(manager, stage);
+      return {
+        responsePayload: checks,
+        appliedRevision: saved.revision
+      };
+    };
+
+    if (!isOfflineEnvelope) {
+      const applied = await applyUpdate();
+      return { checks: applied.responsePayload };
+    }
+
+    const result = await executeIdempotentMutation(manager, {
+      operationId: input.operationId,
+      userId: user.id,
+      stageId: stage.id,
+      aggregateType: "VET_CHECK",
+      aggregateId: check.id,
+      operationType: "UPDATE_VET_CHECK",
+      baseRevision: input.baseRevision,
+      requestPayload: payload,
+      apply: applyUpdate
+    });
+
+    return {
+      checks: result.responsePayload,
+      sync: {
+        operationId: input.operationId,
+        applied: !result.duplicate,
+        duplicate: result.duplicate,
+        revision: result.appliedRevision ?? check.revision,
+        serverUpdatedAt: new Date().toISOString()
+      }
+    };
   });
 }
 
@@ -1060,33 +1125,93 @@ export async function executeFaRepeatTrackRequest(user: User, stageId: string, r
 export async function updateFaDecisions(
   user: User,
   stageId: string,
-  input: { selectedParticipantIds: string[] }
-) {
+  input:
+    | { selectedParticipantIds: string[] }
+    | {
+        operationId: string;
+        baseRevision: number;
+        clientUpdatedAt: string;
+        payload: { selectedParticipantIds: string[] };
+      }
+): Promise<{ fa: Awaited<ReturnType<typeof getFaForStage>>; sync?: MutationSyncMeta }> {
   assertUserRole(user, ["JUDGE"]);
   const dataSource = await getDataSource();
+  const isOfflineEnvelope = "operationId" in input && "payload" in input;
+  const payload = isOfflineEnvelope ? input.payload : input;
 
   return dataSource.transaction(async (manager) => {
     const stage = await getStageOrThrow(manager, stageId);
     await assertStageAccess(manager, user, stage, ["2"]);
     if (stage.status !== "JUDGING_STARTED") {
+      if (isOfflineEnvelope) {
+        throw new StageAdvancedError(stage.id);
+      }
       throw new BadRequestError("El FA no se puede editar porque el juzgamiento ya no esta activo.");
     }
     const form = await getJudgeFormForUpdate(manager, stage, user);
 
     if (form.status !== "STARTED") {
+      if (isOfflineEnvelope) {
+        throw new FormClosedError(form.id);
+      }
       throw new BadRequestError("Solo se puede editar un FA iniciado.");
     }
 
-    const selectedParticipantIds = await validateFaSelection(
-      manager,
-      stage,
-      input.selectedParticipantIds
-    );
-    await replaceFaSelections(manager, form, selectedParticipantIds);
-    await manager.getRepository(FaJudgeForm).increment({ id: form.id }, "revision", 1);
-    form.revision += 1;
+    const applyUpdate = async () => {
+      if (isOfflineEnvelope) {
+        assertExpectedRevision(input.baseRevision, form.revision, {
+          aggregateId: form.id,
+          currentState: {
+            id: form.id,
+            status: form.status,
+            revision: form.revision
+          },
+          resolution: "CAN_REAPPLY_LOCAL_DRAFT"
+        });
+      }
 
-    return getFaForStage(manager, user, stage);
+      const selectedParticipantIds = await validateFaSelection(
+        manager,
+        stage,
+        payload.selectedParticipantIds
+      );
+      await replaceFaSelections(manager, form, selectedParticipantIds);
+      await manager.getRepository(FaJudgeForm).increment({ id: form.id }, "revision", 1);
+      form.revision += 1;
+      const fa = await getFaForStage(manager, user, stage);
+      return {
+        responsePayload: fa,
+        appliedRevision: form.revision
+      };
+    };
+
+    if (!isOfflineEnvelope) {
+      const applied = await applyUpdate();
+      return { fa: applied.responsePayload };
+    }
+
+    const result = await executeIdempotentMutation(manager, {
+      operationId: input.operationId,
+      userId: user.id,
+      stageId: stage.id,
+      aggregateType: "FA_FORM",
+      aggregateId: form.id,
+      operationType: "UPDATE_FA_SELECTION",
+      baseRevision: input.baseRevision,
+      requestPayload: payload,
+      apply: applyUpdate
+    });
+
+    return {
+      fa: result.responsePayload,
+      sync: {
+        operationId: input.operationId,
+        applied: !result.duplicate,
+        duplicate: result.duplicate,
+        revision: result.appliedRevision ?? form.revision,
+        serverUpdatedAt: new Date().toISOString()
+      }
+    };
   });
 }
 

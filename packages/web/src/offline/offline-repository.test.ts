@@ -6,8 +6,12 @@ import {
   clearOfflineDataForUser,
   getOfflineContext,
   getTrustedOfflineDevice,
+  hasBlockingMutationsForStage,
   listMutationsForUser,
   queueOfflineMutation,
+  recoverStaleSyncingMutations,
+  retryOfflineMutation,
+  discardOfflineMutation,
   revokeOfflineDeviceTrust,
   trustOfflineDevice,
 } from "./offline-repository";
@@ -96,12 +100,63 @@ describe("offline repository", () => {
     });
   });
 
-  it("impide limpiar los datos de un usuario con mutaciones pendientes", async () => {
+  it("permite limpiar datos offline explícitamente sin dejar al usuario bloqueado", async () => {
     await queueOfflineMutation(faMutationInput([]));
 
-    await expect(clearOfflineDataForUser(USER_ID)).rejects.toThrow(
-      "No se pueden limpiar datos offline mientras existan cambios pendientes."
-    );
+    await expect(clearOfflineDataForUser(USER_ID)).resolves.toBeUndefined();
+    await expect(listMutationsForUser(USER_ID)).resolves.toHaveLength(0);
+  });
+
+  it("recupera una operación SYNCING antigua conservando operationId", async () => {
+    const mutation = await queueOfflineMutation(faMutationInput(["participant-1"]));
+    const interruptedAt = new Date(Date.now() - 10 * 60_000).toISOString();
+    await getOfflineDatabase().offlineMutations.update(mutation.operationId, {
+      status: "SYNCING",
+      lastAttemptAt: interruptedAt,
+      lastErrorDetails: null,
+    });
+
+    await expect(recoverStaleSyncingMutations(USER_ID, STAGE_ID)).resolves.toBe(1);
+    const recovered = await getOfflineDatabase().offlineMutations.get(mutation.operationId);
+    expect(recovered?.operationId).toBe(mutation.operationId);
+    expect(recovered?.status).toBe("PENDING");
+  });
+
+  it("no recupera una operación SYNCING reciente", async () => {
+    const mutation = await queueOfflineMutation(faMutationInput(["participant-1"]));
+    await getOfflineDatabase().offlineMutations.update(mutation.operationId, {
+      status: "SYNCING",
+      lastAttemptAt: new Date().toISOString(),
+      lastErrorDetails: null,
+    });
+
+    await expect(recoverStaleSyncingMutations(USER_ID, STAGE_ID)).resolves.toBe(0);
+    await expect(getOfflineDatabase().offlineMutations.get(mutation.operationId)).resolves.toMatchObject({
+      operationId: mutation.operationId,
+      status: "SYNCING",
+    });
+  });
+
+  it("permite reintentar o descartar explícitamente un conflicto", async () => {
+    const mutation = await queueOfflineMutation(faMutationInput(["participant-1"]));
+    await getOfflineDatabase().offlineMutations.update(mutation.operationId, {
+      status: "CONFLICT",
+      lastErrorCode: "REVISION_CONFLICT",
+      lastErrorMessage: "conflicto",
+      lastErrorDetails: { currentRevision: 9, currentState: { selected: [] } },
+    });
+
+    const retried = await retryOfflineMutation(mutation.operationId, { reapplyLocal: true });
+    expect(retried).toMatchObject({
+      operationId: mutation.operationId,
+      status: "PENDING",
+      baseRevision: 9,
+    });
+
+    await getOfflineDatabase().offlineMutations.update(mutation.operationId, { status: "CONFLICT" });
+    await expect(discardOfflineMutation(mutation.operationId)).resolves.toBe(true);
+    await expect(getOfflineDatabase().offlineMutations.get(mutation.operationId)).resolves.toBeUndefined();
+    await expect(hasBlockingMutationsForStage(USER_ID, STAGE_ID)).resolves.toBe(false);
   });
 
   it("vincula el acceso offline a un usuario y permite revocarlo", async () => {

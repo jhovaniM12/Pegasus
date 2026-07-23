@@ -44,6 +44,13 @@ export type FaRepeatTrackRequestStatus = "PENDING" | "EXECUTED";
 export type ApiResponse<T> = {
   success: boolean;
   data?: T;
+  sync?: {
+    operationId: string;
+    applied: boolean;
+    duplicate: boolean;
+    revision: number;
+    serverUpdatedAt: string;
+  };
 };
 
 export type StagedCategory = {
@@ -239,6 +246,8 @@ export type RoundState = {
     tieBreakReason: TieBreakReason | null;
     tieBreakStartPosition: number | null;
     tieBreakEndPosition: number | null;
+    /** `STANDARD` para F1/F2; clave tipada del bloque para desempate. */
+    tieBlockIdentity: string;
   };
   form: {
     id: string;

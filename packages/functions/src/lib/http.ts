@@ -5,10 +5,19 @@ export type PaginationMeta = {
   totalPages: number;
 };
 
+export type MutationSyncMeta = {
+  operationId: string;
+  applied: boolean;
+  duplicate: boolean;
+  revision: number;
+  serverUpdatedAt: string;
+};
+
 export type SuccessResponse<T> = {
   success: true;
   data: T;
   meta?: PaginationMeta;
+  sync?: MutationSyncMeta;
 };
 
 export type ErrorResponse = {
@@ -20,8 +29,17 @@ export type ErrorResponse = {
   };
 };
 
-export function success<T>(data: T, meta?: PaginationMeta): SuccessResponse<T> {
-  return meta ? { success: true, data, meta } : { success: true, data };
+export function success<T>(
+  data: T,
+  meta?: PaginationMeta,
+  sync?: MutationSyncMeta
+): SuccessResponse<T> {
+  return {
+    success: true,
+    data,
+    ...(meta ? { meta } : {}),
+    ...(sync ? { sync } : {})
+  };
 }
 
 export function error(code: string, message: string, details?: unknown): ErrorResponse {

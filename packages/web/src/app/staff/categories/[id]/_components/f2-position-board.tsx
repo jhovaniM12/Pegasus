@@ -19,6 +19,11 @@ type F2PositionBoardProps = {
   allowedPositions: number[];
   onLocalUpdate: (round: RoundState) => void;
   onOpenDisqualify: (participant: RoundParticipant) => void;
+  onSaveNote?: (participantId: string, note: string | null) => Promise<void>;
+  onSaveReminders?: (
+    participantId: string,
+    reminders: Array<{ reminderId: string; effect: "SUMA" | "RESTA" }>
+  ) => Promise<void>;
 };
 
 export function F2PositionBoard({
@@ -30,6 +35,8 @@ export function F2PositionBoard({
   allowedPositions,
   onLocalUpdate,
   onOpenDisqualify,
+  onSaveNote,
+  onSaveReminders,
 }: F2PositionBoardProps) {
   const { toast } = useToast();
   const { distinctives: awardDistinctives } = useAwardDistinctives();
@@ -51,6 +58,10 @@ export function F2PositionBoard({
   ) => {
     setAnnotationBusy(true);
     try {
+      if (onSaveReminders) {
+        await onSaveReminders(participantId, reminders);
+        return;
+      }
       const response = await stagedFlowService.updateRoundEntryReminders(stageId, participantId, reminders);
       if (response.data) {
         onLocalUpdate(response.data);
@@ -65,6 +76,10 @@ export function F2PositionBoard({
   const saveNote = async (participantId: string, note: string | null) => {
     setAnnotationBusy(true);
     try {
+      if (onSaveNote) {
+        await onSaveNote(participantId, note);
+        return;
+      }
       const response = await stagedFlowService.updateRoundEntryNote(stageId, participantId, note);
       if (response.data) {
         onLocalUpdate(response.data);
