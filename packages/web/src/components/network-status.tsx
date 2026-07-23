@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { RefreshCw, TriangleAlert, Wifi, WifiOff } from "lucide-react";
+import { usePathname } from "next/navigation";
 
 import {
   DropdownMenu,
@@ -284,12 +285,21 @@ export function SyncIndicator({ className = "", stageId, onAfterSync }: SyncIndi
 function OfflineBanner() {
   const { connectivityState } = useNetworkStatus();
   const { metrics } = useOfflineSyncSummary();
+  const pathname = usePathname();
+  const isLoginScreen = pathname === "/login" || pathname?.startsWith("/login/");
+  const hasSyncErrors = metrics.conflictCount > 0 || metrics.failedCount > 0;
 
-  if (connectivityState === "ONLINE" && metrics.conflictCount === 0 && metrics.failedCount === 0) {
+  // La cola se conserva al cerrar sesión, pero pertenece al usuario staff anterior.
+  // No exponer su estado en las pantallas públicas de acceso.
+  if (isLoginScreen && hasSyncErrors) {
     return null;
   }
 
-  if (connectivityState === "ONLINE" && (metrics.conflictCount > 0 || metrics.failedCount > 0)) {
+  if (connectivityState === "ONLINE" && !hasSyncErrors) {
+    return null;
+  }
+
+  if (connectivityState === "ONLINE" && hasSyncErrors) {
     return (
       <div className="fixed inset-x-0 bottom-0 z-50 border-t border-amber-200 bg-amber-50 px-4 py-3 text-amber-900">
         <div className="mx-auto flex max-w-7xl items-center justify-center gap-2 text-sm font-medium">

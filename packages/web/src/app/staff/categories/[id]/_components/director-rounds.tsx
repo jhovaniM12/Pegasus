@@ -244,13 +244,13 @@ export function DirectorRounds({
             className="w-full bg-amber-500 text-white hover:bg-amber-600 disabled:bg-amber-500/50"
             disabled={busy || !allFormsClosed(f2)}
             onClick={() =>
-              runAction("Consolidar F2", "Se calculará el resultado oficial y se detectarán empates.", () =>
+              runAction("Consolidar prueba", "Se calculará el resultado oficial y se detectarán empates.", () =>
                 stagedFlowService.consolidateRound(stageId)
               )
             }
           >
             <CheckCheck className="size-4" />
-            Consolidar F2
+            Consolidar prueba
           </Button>
         </DirectorActiveRoundCard>
       );
