@@ -61,6 +61,7 @@ import {
   RelaxNotificationOutboxIdempotency1717430400025,
   SimplifyNotificationOutboxDelivery1717430400026,
   CreateFaRepeatTrackRequests1717430400027,
+  AddTieBreakIdentity1717430400028,
   CreateFairEntriesTable1717430400004,
   CreateFairResultsTable1717430400008,
   CreateFairStaffTable1717430400007,
@@ -166,7 +167,8 @@ export const AppDataSource = new DataSource({
     CreateSyncControlTables1717430400024,
     RelaxNotificationOutboxIdempotency1717430400025,
     SimplifyNotificationOutboxDelivery1717430400026,
-    CreateFaRepeatTrackRequests1717430400027
+    CreateFaRepeatTrackRequests1717430400027,
+    AddTieBreakIdentity1717430400028
   ]
 });
 

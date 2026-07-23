@@ -687,6 +687,84 @@ async function getJudgeFormOrCreate(
   return manager.getRepository(FaJudgeForm).save(form);
 }
 
+async function getJudgeFormForUpdate(
+  manager: EntityManager,
+  stage: FairCategoryStage,
+  user: User
+): Promise<FaJudgeForm> {
+  const form = await getJudgeFormOrCreate(manager, stage, user);
+  const lockedForm = await manager.getRepository(FaJudgeForm).findOne({
+    where: { id: form.id },
+    lock: { mode: "pessimistic_write" }
+  });
+
+  if (!lockedForm) {
+    throw new NotFoundError("No se encontró el formulario FA del juez.");
+  }
+
+  return lockedForm;
+}
+
+async function validateFaSelection(
+  manager: EntityManager,
+  stage: FairCategoryStage,
+  selectedParticipantIds: string[]
+): Promise<string[]> {
+  if (selectedParticipantIds.length > 10) {
+    throw new BadRequestError("Solo se pueden seleccionar máximo 10 participantes.");
+  }
+
+  const uniqueIds = Array.from(new Set(selectedParticipantIds));
+  if (uniqueIds.length !== selectedParticipantIds.length) {
+    throw new BadRequestError("La selección contiene participantes repetidos.");
+  }
+
+  if (uniqueIds.length === 0) {
+    return uniqueIds;
+  }
+
+  const participants = await manager.getRepository(JudgingParticipant).findByIds(uniqueIds);
+  if (participants.length !== uniqueIds.length) {
+    throw new BadRequestError("La selección contiene participantes inválidos.");
+  }
+
+  if (
+    participants.some(
+      (participant) =>
+        participant.fairCategoryStageId !== stage.id || participant.status !== "ELIGIBLE"
+    )
+  ) {
+    throw new BadRequestError("Solo se pueden seleccionar participantes elegibles de esta categoría.");
+  }
+
+  return uniqueIds;
+}
+
+async function replaceFaSelections(
+  manager: EntityManager,
+  form: FaJudgeForm,
+  selectedParticipantIds: string[]
+): Promise<void> {
+  await manager.getRepository(FaJudgeEntryDecision).delete({
+    faJudgeFormId: form.id,
+    decision: "SELECTED"
+  });
+
+  if (selectedParticipantIds.length === 0) return;
+
+  await manager.getRepository(FaJudgeEntryDecision).save(
+    selectedParticipantIds.map((participantId, index) =>
+      manager.getRepository(FaJudgeEntryDecision).create({
+        faJudgeFormId: form.id,
+        judgingParticipantId: participantId,
+        decision: "SELECTED",
+        selectionOrder: index + 1,
+        disqualificationReasonId: null
+      })
+    )
+  );
+}
+
 export async function startFa(user: User, stageId: string) {
   assertUserRole(user, ["JUDGE"]);
   const dataSource = await getDataSource();
@@ -989,48 +1067,18 @@ export async function updateFaDecisions(
     if (stage.status !== "JUDGING_STARTED") {
       throw new BadRequestError("El FA no se puede editar porque el juzgamiento ya no esta activo.");
     }
-    const form = await getJudgeFormOrCreate(manager, stage, user);
+    const form = await getJudgeFormForUpdate(manager, stage, user);
 
     if (form.status !== "STARTED") {
       throw new BadRequestError("Solo se puede editar un FA iniciado.");
     }
 
-    if (input.selectedParticipantIds.length > 10) {
-      throw new BadRequestError("Solo se pueden seleccionar maximo 10 participantes.");
-    }
-
-    const uniqueIds = Array.from(new Set(input.selectedParticipantIds));
-
-    if (uniqueIds.length !== input.selectedParticipantIds.length) {
-      throw new BadRequestError("La seleccion contiene participantes repetidos.");
-    }
-
-    const participants = await manager.getRepository(JudgingParticipant).findByIds(uniqueIds);
-
-    if (participants.length !== uniqueIds.length) {
-      throw new BadRequestError("La seleccion contiene participantes invalidos.");
-    }
-
-    if (participants.some((participant) => participant.fairCategoryStageId !== stage.id || participant.status !== "ELIGIBLE")) {
-      throw new BadRequestError("Solo se pueden seleccionar participantes elegibles de esta categoria.");
-    }
-
-    await manager.getRepository(FaJudgeEntryDecision).delete({
-      faJudgeFormId: form.id,
-      decision: "SELECTED"
-    });
-
-    await manager.getRepository(FaJudgeEntryDecision).save(
-      uniqueIds.map((participantId, index) =>
-        manager.getRepository(FaJudgeEntryDecision).create({
-          faJudgeFormId: form.id,
-          judgingParticipantId: participantId,
-          decision: "SELECTED",
-          selectionOrder: index + 1,
-          disqualificationReasonId: null
-        })
-      )
+    const selectedParticipantIds = await validateFaSelection(
+      manager,
+      stage,
+      input.selectedParticipantIds
     );
+    await replaceFaSelections(manager, form, selectedParticipantIds);
 
     return getFaForStage(manager, user, stage);
   });
@@ -1135,7 +1183,11 @@ export async function disqualifyParticipant(
   });
 }
 
-export async function closeFa(user: User, stageId: string) {
+export async function closeFa(
+  user: User,
+  stageId: string,
+  input: { selectedParticipantIds: string[] }
+) {
   assertUserRole(user, ["JUDGE"]);
   const dataSource = await getDataSource();
 
@@ -1145,31 +1197,35 @@ export async function closeFa(user: User, stageId: string) {
     if (stage.status !== "JUDGING_STARTED") {
       throw new BadRequestError("El FA no se puede cerrar porque el juzgamiento ya no esta activo.");
     }
-    const form = await getJudgeFormOrCreate(manager, stage, user);
+    const form = await getJudgeFormForUpdate(manager, stage, user);
 
     if (form.status !== "STARTED") {
       throw new BadRequestError("Solo se puede cerrar un FA iniciado.");
     }
 
-    const selectedCount = await manager.getRepository(FaJudgeEntryDecision).count({
-      where: { faJudgeFormId: form.id, decision: "SELECTED" }
+    const selectedParticipantIds = await validateFaSelection(
+      manager,
+      stage,
+      input.selectedParticipantIds
+    );
+    const selectedIds = new Set(selectedParticipantIds);
+    const participants = await manager.getRepository(JudgingParticipant).find({
+      where: { fairCategoryStageId: stage.id, status: "ELIGIBLE" }
     });
 
-    if (selectedCount > 10) {
-      throw new BadRequestError("El FA excede el maximo de 10 seleccionados.");
-    }
+    // El cierre reemplaza cualquier autosave previo. El lock del formulario evita
+    // que un PUT concurrente inserte una decisión entre este reemplazo y el cierre.
+    await manager
+      .getRepository(FaJudgeEntryDecision)
+      .createQueryBuilder()
+      .delete()
+      .where("fa_judge_form_id = :formId", { formId: form.id })
+      .andWhere("decision IN (:...decisions)", { decisions: ["SELECTED", "DISCARDED"] })
+      .execute();
+    await replaceFaSelections(manager, form, selectedParticipantIds);
 
-    const [participants, existingDecisions] = await Promise.all([
-      manager.getRepository(JudgingParticipant).find({
-        where: { fairCategoryStageId: stage.id, status: "ELIGIBLE" }
-      }),
-      manager.getRepository(FaJudgeEntryDecision).find({
-        where: { faJudgeFormId: form.id }
-      })
-    ]);
-    const decidedIds = new Set(existingDecisions.map((decision) => decision.judgingParticipantId));
     const discarded = participants
-      .filter((participant) => !decidedIds.has(participant.id))
+      .filter((participant) => !selectedIds.has(participant.id))
       .map((participant) =>
         manager.getRepository(FaJudgeEntryDecision).create({
           faJudgeFormId: form.id,

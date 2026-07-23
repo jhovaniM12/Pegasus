@@ -12,8 +12,8 @@ import { F1SelectionBoard } from "./f1-selection-board";
 import { FaDisqualifyDialog } from "./fa-disqualify-dialog";
 
 const ROUND_TITLES: Record<RoundType, string> = {
-  F1: "Tarjeta F1 — Cabeza de lote",
-  F2: "Tarjeta F2 — Puestos finales",
+  F1: "Prueba individual P1 — Cabeza de lote",
+  F2: "Prueba individual P2 — Puestos finales",
   TIE_BREAK: "Tarjeta de desempate",
 };
 
@@ -345,7 +345,7 @@ export function JudgeRoundWorkspace({
           <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/40 p-4">
             <div className="flex items-center gap-2">
               <Trophy className="size-4 text-emerald-700" />
-              <span className="text-sm font-semibold text-emerald-900">Consolidado FORMATO F1</span>
+              <span className="text-sm font-semibold text-emerald-900">Consolidado prueba individual P1</span>
             </div>
             <p className="mt-0.5 text-xs text-emerald-700">
               Finalistas consolidados: <strong>{consolidatedF1TrackPositions.length} ejemplares.</strong>
@@ -495,8 +495,10 @@ export function JudgeRoundWorkspace({
             disabled={busy || !canClose}
             onClick={() =>
               runAction(
-                "Cerrar prueba individual",
-                "Una vez cerrado, no podrás modificar las posiciones asignadas. ¿Estás seguro de que deseas cerrar el formato?",
+                roundType === "TIE_BREAK"
+                  ? "Cerrar desempate"
+                  : `Cerrar prueba individual ${roundType === "F1" ? "P1" : "P2"}`,
+                "Una vez cerrado, no podrás modificar las posiciones asignadas. ¿Estás seguro de que deseas cerrar?",
                 () => stagedFlowService.closeRoundForm(stageId),
                 "default",
                 "Cerrar prueba"
@@ -504,7 +506,9 @@ export function JudgeRoundWorkspace({
             }
           >
             <Lock className="size-5" />
-            Cerrar prueba individual
+            {roundType === "TIE_BREAK"
+              ? "Cerrar desempate"
+              : `Cerrar prueba individual ${roundType === "F1" ? "P1" : "P2"}`}
           </Button>
           {roundType === "TIE_BREAK" && !allTiedParticipantsRanked && (
             <p className="mt-2 text-center text-xs text-amber-700">

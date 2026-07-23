@@ -1,4 +1,5 @@
 import { MAX_AWARD_POSITIONS } from "@pegasus/core";
+import type { TieBreakReason } from "@pegasus/core";
 
 /**
  * Cómputo oficial de la tarjeta F2 (y de las rondas de desempate, que usan la misma lógica).
@@ -14,10 +15,12 @@ import { MAX_AWARD_POSITIONS } from "@pegasus/core";
  * 4. Excepción de "mayoría de primeros puestos": si un ejemplar recibe el primer
  *    puesto en la mayoría de las tarjetas, gana el primer lugar aunque su suma no
  *    sea la menor.
- * 5. Empate: si dos o más ejemplares con consideración mínima quedan con la misma
- *    suma (y ninguno está cubierto por la regla de mayoría), el sistema marca empate
- *    y bloquea el cierre hasta resolverlo con una ronda de desempate. Quienes no
- *    cumplen consideración mínima no entran al desempate aunque compartan suma.
+ * 5. Igualdad de suma: si dos o más ejemplares con consideración mínima comparten
+ *    suma (y ninguno está cubierto por la regla de mayoría), forman un único grupo.
+ *    Si el rango del grupo toca el top 5, participan todos sus integrantes.
+ * 6. Excepción 5.e: si todos los jueces asignan quinto, nadie lo declara desierto y
+ *    cada juez escoge un ejemplar diferente, esos ejemplares forman un bloque especial
+ *    independiente de las sumas y de la consideración mínima ordinaria.
  */
 
 export type JudgeCard = {
@@ -60,14 +63,17 @@ export type DesertedPositionResult = {
 };
 
 /**
- * Grupo de participantes empatados en suma de posiciones.
- * Contiene metadatos de rango y si bloquea el cierre del resultado oficial.
+ * Grupo que requiere una ronda de desempate.
+ *
+ * La causa se conserva explícitamente porque una igualdad de suma y la excepción
+ * reglamentaria 5.e son reglas independientes y nunca deben inferirse por la
+ * posición provisional o por filas TIED consecutivas.
  */
 export type TiedGroup = {
-  /** IDs de los participantes que comparten la misma suma. */
+  reason: TieBreakReason;
   participantIds: string[];
-  /** Suma compartida por todos los miembros del grupo. */
-  positionSum: number;
+  /** Suma compartida; null para la excepción especial 5.e. */
+  positionSum: number | null;
   /** Puesto final más alto (mejor) del grupo (1-indexed). */
   startPosition: number;
   /** Puesto final más bajo (peor) del grupo (1-indexed). */
@@ -201,32 +207,21 @@ export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult
     }
   }
 
-  const fifthPlaceVoteIds = new Set<string>();
-  for (const card of cards) {
-    for (const assigned of card.positions) {
-      if (assigned.position === MAX_AWARD_POSITIONS) {
-        fifthPlaceVoteIds.add(assigned.participantId);
-      }
-    }
-  }
-
-  const fifthPlaceDesertedVotes = desertedVoteCountByPosition.get(MAX_AWARD_POSITIONS) ?? 0;
-
   // Asignación de puestos (Reglamento FEDEQUINAS, notas aclaratorias 5.b, 5.c y 5.e):
   // 1) Respetar desiertos explícitos por mayoría de jueces.
   // 2) En cada puesto premiable, recorrer candidatos en orden de mérito hasta encontrar
   //    uno con consideración mínima (cardsCount >= threshold). Los que no cumplen quedan
   //    diferidos (sin cinta) y no consumen el puesto.
-  // 3) Para el quinto puesto, si ningún juez lo declaró desierto y varios jueces
-  //    seleccionaron ejemplares diferentes que cumplen consideración mínima, se marca
-  //    empate bloqueante para quinto en vez de asignarlo automáticamente (nota 5.e).
-  // 4) Desierto por agotamiento: si no queda ningún candidato que cumpla consideración
+  // 3) Desierto por agotamiento: si no queda ningún candidato que cumpla consideración
   //    mínima para ese puesto.
-  // 5) Ejemplares no premiables se reubican desde el puesto 6 (sin cinta).
+  // 4) Ejemplares no premiables se reubican desde el puesto 6 (sin cinta).
+  //
+  // La excepción 5.e se detecta DESPUÉS y de forma independiente a partir de las
+  // selecciones individuales de quinto de todos los jueces. No altera este ranking
+  // provisional ni desplaza candidatos antes de formar los grupos por suma.
   const ranked: Array<Aggregate & { finalPosition: number }> = [];
   const deferred: Aggregate[] = [];
   const desertedResults: DesertedPositionResult[] = [];
-  const forcedFifthTieIds = new Set<string>();
   let pointer = 0;
 
   for (let position = 1; position <= MAX_AWARD_POSITIONS; position += 1) {
@@ -234,31 +229,6 @@ export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult
     if (explicitVotes != null) {
       desertedResults.push({ finalPosition: position, votesCount: explicitVotes });
       continue;
-    }
-
-    if (position === MAX_AWARD_POSITIONS && fifthPlaceDesertedVotes === 0 && fifthPlaceVoteIds.size > 1) {
-      const rankedIds = new Set(ranked.map((participant) => participant.participantId));
-      const fifthPlaceCandidates = ordered.filter(
-        (candidate) =>
-          fifthPlaceVoteIds.has(candidate.participantId) &&
-          !rankedIds.has(candidate.participantId) &&
-          candidate.cardsCount >= threshold
-      );
-
-      if (fifthPlaceCandidates.length > 1) {
-        const fifthCandidateIds = new Set(fifthPlaceCandidates.map((candidate) => candidate.participantId));
-        let nextFifthPosition = position;
-        for (const candidate of fifthPlaceCandidates) {
-          ranked.push({ ...candidate, finalPosition: nextFifthPosition++ });
-          forcedFifthTieIds.add(candidate.participantId);
-        }
-        for (let index = deferred.length - 1; index >= 0; index -= 1) {
-          if (fifthCandidateIds.has(deferred[index].participantId)) {
-            deferred.splice(index, 1);
-          }
-        }
-        continue;
-      }
     }
 
     let assigned = false;
@@ -280,9 +250,7 @@ export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult
   }
 
   while (pointer < ordered.length) {
-    if (!forcedFifthTieIds.has(ordered[pointer].participantId)) {
-      deferred.push(ordered[pointer]);
-    }
+    deferred.push(ordered[pointer]);
     pointer += 1;
   }
 
@@ -320,8 +288,9 @@ export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult
     if (participantIds.length < 2) continue;
     const positions = participantIds.map((id) => positionById.get(id) ?? Number.MAX_SAFE_INTEGER);
     const startPosition = Math.min(...positions);
-    const endPosition = Math.max(...positions);
+    const endPosition = startPosition + participantIds.length - 1;
     tiedGroups.push({
+      reason: "SUM_EQUALITY",
       participantIds,
       positionSum,
       startPosition,
@@ -331,16 +300,36 @@ export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult
       blocksClosure: startPosition <= MAX_AWARD_POSITIONS
     });
   }
-  if (forcedFifthTieIds.size > 1) {
-    const participantIds = [...forcedFifthTieIds];
-    const positions = participantIds.map((id) => positionById.get(id) ?? Number.MAX_SAFE_INTEGER);
+
+  // Excepción 5.e: únicamente aplica cuando están todas las tarjetas esperadas,
+  // ningún juez declara desierto el quinto, cada tarjeta contiene exactamente una
+  // selección de quinto y todos los jueces escogieron ejemplares diferentes.
+  const fifthSelectionsByCard = cards.map((card) =>
+    card.positions.filter((position) => position.position === MAX_AWARD_POSITIONS)
+  );
+  const everyJudgeSelectedExactlyOneFifth =
+    cards.length === judgeCount && fifthSelectionsByCard.every((selections) => selections.length === 1);
+  const noJudgeDesertedFifth = cards.every(
+    (card) => !card.desertedPositions.includes(MAX_AWARD_POSITIONS)
+  );
+  const fifthPlaceParticipantIds = fifthSelectionsByCard.flatMap((selections) =>
+    selections.map((selection) => selection.participantId)
+  );
+  const everyJudgeSelectedDifferentFifth =
+    new Set(fifthPlaceParticipantIds).size === judgeCount;
+
+  if (
+    judgeCount > 1 &&
+    everyJudgeSelectedExactlyOneFifth &&
+    noJudgeDesertedFifth &&
+    everyJudgeSelectedDifferentFifth
+  ) {
     tiedGroups.push({
-      participantIds,
-      positionSum: Math.min(
-        ...participants.filter((participant) => forcedFifthTieIds.has(participant.participantId)).map((p) => p.positionSum)
-      ),
-      startPosition: Math.min(...positions),
-      endPosition: Math.max(...positions),
+      reason: "FIFTH_PLACE_EXCEPTION_5E",
+      participantIds: fifthPlaceParticipantIds,
+      positionSum: null,
+      startPosition: MAX_AWARD_POSITIONS,
+      endPosition: MAX_AWARD_POSITIONS + fifthPlaceParticipantIds.length - 1,
       blocksClosure: true
     });
   }

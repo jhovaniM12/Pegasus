@@ -33,7 +33,8 @@
     "db:seed:people": "pnpm --filter @pegasus/core db:seed:people",
     "db:seed:fair-staff": "pnpm --filter @pegasus/core db:seed:fair-staff",
     "db:seed:fair-results": "pnpm --filter @pegasus/core db:seed:fair-results",
-    "db:seed:disqualification-reasons": "pnpm --filter @pegasus/core db:seed:disqualification-reasons"
+    "db:seed:disqualification-reasons": "pnpm --filter @pegasus/core db:seed:disqualification-reasons",
+    "diagnose:tie-breaks": "tsx packages/functions/src/scripts/report-tie-break-anomalies.ts"
   },
   "devDependencies": {
     "@types/node": "^22.15.29",

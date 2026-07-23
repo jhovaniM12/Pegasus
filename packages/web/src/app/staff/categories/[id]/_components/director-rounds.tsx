@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { CheckCheck, CheckCircle2, Clock, Flag, Gavel, Trophy } from "lucide-react";
-import { getBlockingTiedBlocks, tieBlockKey } from "@pegasus/core/judging/tie-blocks";
+import { tieBlockKey, typedTieBlockKey } from "@pegasus/core/judging/tie-blocks";
 import { Button } from "@/components/ui/button";
 import { stagedFlowService } from "@/services/staged-flow.service";
 import type {
@@ -37,8 +37,14 @@ function allFormsClosed(round: RoundManagementItem | null): boolean {
   return Boolean(round && round.forms.length > 0 && round.forms.every((form) => form.status === "CLOSED"));
 }
 
-function getResolvedTieBlockKeys(rounds: RoundManagementItem[]): Set<string> {
-  const resolved = new Set<string>();
+function getResolvedTieBlockKeys(rounds: RoundManagementItem[]): {
+  typed: Set<string>;
+  legacy: Set<string>;
+} {
+  const resolved = {
+    typed: new Set<string>(),
+    legacy: new Set<string>(),
+  };
   for (const round of rounds) {
     if (round.roundType !== "TIE_BREAK" || round.status !== "CONSOLIDATED") continue;
     if (round.results.some((result) => result.status === "TIED")) continue;
@@ -50,7 +56,11 @@ function getResolvedTieBlockKeys(rounds: RoundManagementItem[]): Set<string> {
       }
     }
     if (participantIds.size > 1) {
-      resolved.add(tieBlockKey([...participantIds]));
+      if (round.tieBreakReason) {
+        resolved.typed.add(typedTieBlockKey(round.tieBreakReason, [...participantIds]));
+      } else {
+        resolved.legacy.add(tieBlockKey([...participantIds]));
+      }
     }
   }
   return resolved;
@@ -98,7 +108,9 @@ function DirectorActiveRoundCard({
       <div className="flex flex-col gap-3 border-b border-slate-200/60 bg-slate-50/80 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
           <Trophy className="size-4.5 text-slate-600" />
-          <span className="text-base font-semibold text-slate-800">Formato {roundType}</span>
+          <span className="text-base font-semibold text-slate-800">
+            Prueba individual {roundType === "F1" ? "P1" : "P2"}
+          </span>
         </div>
         <span className="flex items-center gap-1.5 rounded border border-slate-200/40 bg-slate-100 px-2 py-1 text-xs text-slate-700">
           Jueces cerrados:{" "}
@@ -246,15 +258,24 @@ export function DirectorRounds({
 
     const resolvedTieBlockKeys = getResolvedTieBlockKeys(rounds);
     const pendingTieBlock =
-      getBlockingTiedBlocks(f2.results, (row) => row.participantId).find(
-        (block) => !resolvedTieBlockKeys.has(tieBlockKey(block.map((row) => row.participantId)))
+      f2.tieBlocks.find(
+        (block) =>
+          !resolvedTieBlockKeys.typed.has(typedTieBlockKey(block.reason, block.participantIds)) &&
+          !resolvedTieBlockKeys.legacy.has(tieBlockKey(block.participantIds))
       ) ?? null;
 
     const blockInfo: TieBlockInfo | null = pendingTieBlock
       ? {
-          startPosition: Math.min(...pendingTieBlock.map((row) => row.finalPosition ?? 0)),
-          endPosition: Math.max(...pendingTieBlock.map((row) => row.finalPosition ?? 0)),
-          trackPositions: pendingTieBlock.map((row) => row.trackPosition).sort((a, b) => a - b),
+          reason: pendingTieBlock.reason,
+          startPosition: pendingTieBlock.startPosition,
+          endPosition: pendingTieBlock.endPosition,
+          trackPositions: pendingTieBlock.participantIds
+            .map(
+              (participantId) =>
+                f2.results.find((result) => result.participantId === participantId)?.trackPosition
+            )
+            .filter((trackPosition): trackPosition is number => trackPosition != null)
+            .sort((a, b) => a - b),
         }
       : null;
 

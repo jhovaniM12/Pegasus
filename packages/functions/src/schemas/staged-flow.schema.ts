@@ -11,6 +11,11 @@ export const updateFaDecisionsSchema = z.object({
   selectedParticipantIds: z.array(z.string().uuid()).max(10)
 });
 
+export const closeFaSchema = z.object({
+  // Un arreglo vacío es válido: el reglamento permite cerrar FA sin seleccionar ejemplares.
+  selectedParticipantIds: z.array(z.string().uuid()).max(10)
+});
+
 export const disqualifyParticipantSchema = z.object({
   reasonId: z.string().uuid()
 });

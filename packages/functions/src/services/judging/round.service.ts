@@ -17,13 +17,15 @@ import {
   type JudgingRoundResultStatus,
   MAX_AWARD_POSITIONS,
   type JudgingRoundType,
+  type TieBreakReason,
   type TieBreakTestType
 } from "@pegasus/core";
-import { getBlockingTiedBlocks, tieBlockKey } from "@pegasus/core/judging/tie-blocks";
+import { tieBlockKey, typedTieBlockKey } from "@pegasus/core/judging/tie-blocks";
 import type { EntityManager } from "typeorm";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { buildStageSummary, type StagedCategoryDto } from "../staged-flow.service.js";
 import { resolveAwardDistinctiveForPosition } from "./award-distinctives.js";
+import { resolveNextRoundType } from "./flow-rules.js";
 import { computeF2, type JudgeCard } from "./scoring.js";
 import {
   loadActiveReminders,
@@ -46,7 +48,6 @@ import {
 } from "./shared.js";
 
 const MAX_F1_SELECTIONS = 7;
-const F1_SURVIVOR_THRESHOLD = 8;
 const MIN_AWARD_POSITION = 1;
 
 export const TIE_BREAK_TEST_LABELS: Record<TieBreakTestType, string> = {
@@ -158,6 +159,12 @@ async function getRoundPositionBounds(
     return { min: MIN_AWARD_POSITION, max: MAX_AWARD_POSITIONS };
   }
 
+  if (round.tieBreakStartPosition != null && round.tieBreakEndPosition != null) {
+    return { min: round.tieBreakStartPosition, max: round.tieBreakEndPosition };
+  }
+
+  // Compatibilidad de lectura para rondas históricas creadas antes de persistir
+  // explícitamente la causa y el rango del bloque.
   const ids =
     participantIds && participantIds.length > 0
       ? participantIds
@@ -263,8 +270,7 @@ export async function openNextRound(user: User, stageId: string): Promise<Staged
       throw new BadRequestError("No hay ejemplares sobrevivientes para abrir la ronda.");
     }
 
-    const roundType: JudgingRoundType =
-      stage.status === "FA_CONSOLIDATED" && roster.length > F1_SURVIVOR_THRESHOLD ? "F1" : "F2";
+    const roundType = resolveNextRoundType(stage.status, roster.length);
 
     const round = await manager.getRepository(JudgingRound).save(
       manager.getRepository(JudgingRound).create({
@@ -882,16 +888,33 @@ async function loadTieBreakParticipantIds(manager: EntityManager, roundId: strin
   return [...new Set(entries.map((entry) => entry.judgingParticipantId))];
 }
 
+type PendingTieBlock = {
+  reason: TieBreakReason;
+  participantIds: string[];
+  positionSum: number | null;
+  startPosition: number;
+  endPosition: number;
+  results: JudgingRoundResult[];
+};
+
+type ResolvedTieBlockKeys = {
+  typed: Set<string>;
+  legacy: Set<string>;
+};
+
 async function loadResolvedTieBlockKeys(
   manager: EntityManager,
   stageId: string,
   parentRoundId: string
-): Promise<Set<string>> {
+): Promise<ResolvedTieBlockKeys> {
   const tieBreakRounds = await manager.getRepository(JudgingRound).find({
     where: { fairCategoryStageId: stageId, roundType: "TIE_BREAK", parentRoundId, status: "CONSOLIDATED" }
   });
 
-  const resolved = new Set<string>();
+  const resolved: ResolvedTieBlockKeys = {
+    typed: new Set<string>(),
+    legacy: new Set<string>()
+  };
   for (const tieBreakRound of tieBreakRounds) {
     const results = await manager.getRepository(JudgingRoundResult).find({
       where: { roundId: tieBreakRound.id }
@@ -901,23 +924,73 @@ async function loadResolvedTieBlockKeys(
 
     const participantIds = await loadTieBreakParticipantIds(manager, tieBreakRound.id);
     if (participantIds.length > 1) {
-      resolved.add(tieBlockKey(participantIds));
+      if (tieBreakRound.tieBreakReason) {
+        resolved.typed.add(typedTieBlockKey(tieBreakRound.tieBreakReason, participantIds));
+      } else {
+        // Las rondas históricas no tienen causa persistida. Se reconocen solo por
+        // participantes para no reabrirlas automáticamente; el saneamiento queda
+        // deliberadamente fuera del flujo transaccional.
+        resolved.legacy.add(tieBlockKey(participantIds));
+      }
     }
   }
 
   return resolved;
 }
 
-async function getNextPendingTieBlock(manager: EntityManager, f2: JudgingRound): Promise<JudgingRoundResult[] | null> {
+function isTieBlockResolved(block: PendingTieBlock, resolved: ResolvedTieBlockKeys): boolean {
+  return (
+    resolved.typed.has(typedTieBlockKey(block.reason, block.participantIds)) ||
+    resolved.legacy.has(tieBlockKey(block.participantIds))
+  );
+}
+
+async function loadBlockingTieBlocks(
+  manager: EntityManager,
+  f2: JudgingRound
+): Promise<PendingTieBlock[]> {
+  const stage = await getStageOrThrow(manager, f2.fairCategoryStageId);
+  const judges = await getUsersByFairRole(manager, stage.fairId, "2");
+  const cards = await loadJudgeCards(manager, f2.id);
+  const scoring = computeF2(cards, judges.length);
   const results = await manager.getRepository(JudgingRoundResult).find({
     where: { roundId: f2.id },
     order: { finalPosition: "ASC" }
   });
-  const blocks = getBlockingTiedBlocks(results, (row) => row.judgingParticipantId);
-  if (blocks.length === 0) return null;
+  const resultByParticipantId = new Map(
+    results.map((result) => [result.judgingParticipantId, result])
+  );
 
+  return scoring.tiedGroups
+    .filter((group) => group.blocksClosure)
+    .map((group): PendingTieBlock | null => {
+      const blockResults = group.participantIds
+        .map((participantId) => resultByParticipantId.get(participantId) ?? null)
+        .filter((result): result is JudgingRoundResult => result !== null);
+      if (blockResults.length !== group.participantIds.length) return null;
+
+      return {
+        reason: group.reason,
+        participantIds: [...group.participantIds],
+        positionSum: group.positionSum,
+        startPosition: group.startPosition,
+        endPosition: group.endPosition,
+        results: blockResults
+      };
+    })
+    .filter((block): block is PendingTieBlock => block !== null)
+    .sort((a, b) => {
+      if (a.startPosition !== b.startPosition) return a.startPosition - b.startPosition;
+      if (a.reason === b.reason) return 0;
+      return a.reason === "SUM_EQUALITY" ? -1 : 1;
+    });
+}
+
+async function getNextPendingTieBlock(manager: EntityManager, f2: JudgingRound): Promise<PendingTieBlock | null> {
+  const blocks = await loadBlockingTieBlocks(manager, f2);
+  if (blocks.length === 0) return null;
   const resolvedKeys = await loadResolvedTieBlockKeys(manager, f2.fairCategoryStageId, f2.id);
-  return blocks.find((block) => !resolvedKeys.has(tieBlockKey(block.map((row) => row.judgingParticipantId)))) ?? null;
+  return blocks.find((block) => !isTieBlockResolved(block, resolvedKeys)) ?? null;
 }
 
 async function consolidateRankingRound(
@@ -973,7 +1046,9 @@ async function consolidateRankingRound(
       payload: {
         roundId: round.id,
         tiedGroups: scoring.tiedGroups.map((g) => ({
+          reason: g.reason,
           participantIds: g.participantIds,
+          positionSum: g.positionSum,
           startPosition: g.startPosition,
           endPosition: g.endPosition,
           blocksClosure: g.blocksClosure
@@ -1028,16 +1103,17 @@ async function consolidateTieBreak(
   });
   let hasRemainingBlockingTie = false;
   if (parentRound) {
-    const parentResults = await manager.getRepository(JudgingRoundResult).find({
-      where: { roundId: parentRound.id },
-      order: { finalPosition: "ASC" }
-    });
     const resolvedKeys = await loadResolvedTieBlockKeys(manager, parentRound.fairCategoryStageId, parentRound.id);
     if (!scoring.hasBlockingTie) {
-      resolvedKeys.add(tieBlockKey(await loadTieBreakParticipantIds(manager, round.id)));
+      const participantIds = await loadTieBreakParticipantIds(manager, round.id);
+      if (round.tieBreakReason) {
+        resolvedKeys.typed.add(typedTieBlockKey(round.tieBreakReason, participantIds));
+      } else {
+        resolvedKeys.legacy.add(tieBlockKey(participantIds));
+      }
     }
-    hasRemainingBlockingTie = getBlockingTiedBlocks(parentResults, (row) => row.judgingParticipantId).some(
-      (block) => !resolvedKeys.has(tieBlockKey(block.map((row) => row.judgingParticipantId)))
+    hasRemainingBlockingTie = (await loadBlockingTieBlocks(manager, parentRound)).some(
+      (block) => !isTieBlockResolved(block, resolvedKeys)
     );
   }
 
@@ -1067,13 +1143,35 @@ export async function openTieBreak(
     const stage = await getStageOrThrow(manager, stageId);
     await assertStageAccess(manager, user, stage, ["3"]);
 
-    const f2 = await getLatestRound(manager, stage.id, "F2");
-    if (!f2 || f2.status !== "CONSOLIDATED") {
+    const latestF2 = await getLatestRound(manager, stage.id, "F2");
+    if (!latestF2 || latestF2.status !== "CONSOLIDATED") {
       throw new BadRequestError("Necesitas una ronda F2 consolidada para abrir un desempate.");
     }
 
-    const tiedResults = await getNextPendingTieBlock(manager, f2);
-    if (!tiedResults || tiedResults.length < 2) {
+    // Serializa aperturas concurrentes sobre el mismo F2. Sin este bloqueo, dos
+    // solicitudes simultáneas podían crear dos rondas para el mismo bloque.
+    const f2 = await manager.getRepository(JudgingRound).findOne({
+      where: { id: latestF2.id },
+      lock: { mode: "pessimistic_write" }
+    });
+    if (!f2) {
+      throw new NotFoundError("No se encontró la ronda F2 consolidada.");
+    }
+
+    const existingOpenTieBreak = await manager.getRepository(JudgingRound).findOne({
+      where: {
+        fairCategoryStageId: stage.id,
+        roundType: "TIE_BREAK",
+        parentRoundId: f2.id,
+        status: "OPEN"
+      }
+    });
+    if (existingOpenTieBreak) {
+      return buildStageSummary(manager, await getStageOrThrow(manager, stage.id));
+    }
+
+    const pendingTieBlock = await getNextPendingTieBlock(manager, f2);
+    if (!pendingTieBlock || pendingTieBlock.results.length < 2) {
       throw new BadRequestError("No hay un empate pendiente para resolver.");
     }
 
@@ -1088,6 +1186,9 @@ export async function openTieBreak(
         sequence: existingTieBreaks + 1,
         status: "OPEN",
         parentRoundId: f2.id,
+        tieBreakReason: pendingTieBlock.reason,
+        tieBreakStartPosition: pendingTieBlock.startPosition,
+        tieBreakEndPosition: pendingTieBlock.endPosition,
         openedAt: new Date(),
         openedByUserId: user.id,
         consolidatedAt: null,
@@ -1115,7 +1216,7 @@ export async function openTieBreak(
       manager,
       round,
       stage.fairId,
-      tiedResults.map((row) => row.judgingParticipantId)
+      pendingTieBlock.participantIds
     );
 
     const previousStatus = stage.status;
@@ -1127,7 +1228,15 @@ export async function openTieBreak(
       eventType: "TIE_BREAK_OPENED",
       fromStatus: previousStatus,
       toStatus: stage.status,
-      payload: { roundId: round.id, parentRoundId: f2.id, testTypes }
+      payload: {
+        roundId: round.id,
+        parentRoundId: f2.id,
+        tieBreakReason: pendingTieBlock.reason,
+        participantIds: pendingTieBlock.participantIds,
+        startPosition: pendingTieBlock.startPosition,
+        endPosition: pendingTieBlock.endPosition,
+        testTypes
+      }
     });
     const notification = stageNotificationContext(stage);
     await queueRoleNotifications(manager, stage, "2", {
@@ -1429,6 +1538,10 @@ export async function getRoundsManagement(user: User, stageId: string) {
         where: { roundId: round.id },
         order: { testOrder: "ASC" }
       });
+      const tieBlocks =
+        round.roundType === "F2" && round.status !== "OPEN"
+          ? await loadBlockingTieBlocks(manager, round)
+          : [];
 
       roundDtos.push({
         id: round.id,
@@ -1436,6 +1549,16 @@ export async function getRoundsManagement(user: User, stageId: string) {
         sequence: round.sequence,
         status: round.status,
         openedAt: round.openedAt?.toISOString() ?? null,
+        tieBreakReason: round.tieBreakReason,
+        tieBreakStartPosition: round.tieBreakStartPosition,
+        tieBreakEndPosition: round.tieBreakEndPosition,
+        tieBlocks: tieBlocks.map((block) => ({
+          reason: block.reason,
+          participantIds: block.participantIds,
+          positionSum: block.positionSum,
+          startPosition: block.startPosition,
+          endPosition: block.endPosition
+        })),
         forms: forms.map((form) => ({
           id: form.id,
           judgeName: form.judgeUser.person

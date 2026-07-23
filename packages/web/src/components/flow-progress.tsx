@@ -6,7 +6,7 @@ const stages: { status: StageStatus[]; label: string }[] = [
   { status: ["PRE_RING_STARTED"], label: "Pre-pista" },
   { status: ["PRE_RING_CLOSED"], label: "Aprobación" },
   { status: ["JUDGING_STARTED", "FA_CONSOLIDATED"], label: "FA" },
-  { status: ["F1_IN_PROGRESS", "F1_CONSOLIDATED", "F2_IN_PROGRESS", "TIE_BREAK_IN_PROGRESS"], label: "F1 / F2" },
+  { status: ["F1_IN_PROGRESS", "F1_CONSOLIDATED", "F2_IN_PROGRESS", "TIE_BREAK_IN_PROGRESS"], label: "P1 / P2" },
   { status: ["JUDGING_CLOSED", "JUDGING_DESERTED"], label: "Resultado" },
 ]
 

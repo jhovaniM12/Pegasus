@@ -19,6 +19,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
+    "test:judging-scenarios": "vitest run src/services/judging/judging-flow-scenarios.test.ts",
     "test:watch": "vitest",
     "dev": "PORT=3001 tsx watch src/dev-server.ts"
   },

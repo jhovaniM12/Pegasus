@@ -362,7 +362,7 @@ describe("computeF2 - voto de castigo", () => {
     expect(result.hasBlockingTie).toBe(false);
   });
 
-  it("marca desempate bloqueante para quinto si varios candidatos válidos recibieron quinto sin desierto explícito", () => {
+  it("no aplica 5.e cuando dos jueces coinciden en el mismo quinto", () => {
     const allEligible = ["A", "B", "C", "G", "E", "F"];
     const cards: JudgeCard[] = [
       card("j1", ["A", "B", "C", "G", "E"], ["F"]),
@@ -379,15 +379,119 @@ describe("computeF2 - voto de castigo", () => {
     expect(positionOf(result, "E")).toBe(5);
     expect(positionOf(result, "F")).toBe(6);
     expect(result.desertedResults).toEqual([]);
-    expect(result.hasBlockingTie).toBe(true);
+    expect(result.hasBlockingTie).toBe(false);
+    expect(result.tiedGroups).toHaveLength(0);
+  });
 
-    const fifthTie = result.tiedGroups.find((group) => group.participantIds.includes("E"));
+  it("aplica 5.e solo cuando todos los jueces eligen un quinto diferente", () => {
+    const allEligible = ["A", "B", "C", "D", "E", "F", "G"];
+    const cards: JudgeCard[] = [
+      card("j1", ["A", "B", "C", "D", "E"], allEligible),
+      card("j2", ["A", "B", "C", "D", "F"], allEligible),
+      card("j3", ["A", "B", "C", "D", "G"], allEligible)
+    ];
+
+    const result = computeF2(cards, 3);
+    const fifthTie = result.tiedGroups.find(
+      (group) => group.reason === "FIFTH_PLACE_EXCEPTION_5E"
+    );
+
     expect(fifthTie).toBeDefined();
-    expect(fifthTie!.participantIds.sort()).toEqual(["E", "F"]);
+    expect(fifthTie!.participantIds.sort()).toEqual(["E", "F", "G"]);
+    expect(fifthTie!.positionSum).toBeNull();
     expect(fifthTie!.startPosition).toBe(5);
+    expect(fifthTie!.endPosition).toBe(7);
     expect(fifthTie!.blocksClosure).toBe(true);
-    expect(result.participants.find((participant) => participant.participantId === "E")?.tied).toBe(true);
-    expect(result.participants.find((participant) => participant.participantId === "F")?.tied).toBe(true);
+  });
+
+  it("no aplica 5.e si falta la selección de quinto de un juez", () => {
+    const allEligible = ["A", "B", "C", "D", "E", "F", "G"];
+    const result = computeF2(
+      [
+        card("j1", ["A", "B", "C", "D", "E"], allEligible),
+        card("j2", ["A", "B", "C", "D", "F"], allEligible),
+        card("j3", ["A", "B", "C", "D"], allEligible)
+      ],
+      3
+    );
+
+    expect(result.tiedGroups.some((group) => group.reason === "FIFTH_PLACE_EXCEPTION_5E")).toBe(
+      false
+    );
+  });
+
+  it("no aplica 5.e si un juez declara desierto el quinto", () => {
+    const allEligible = ["A", "B", "C", "D", "E", "F"];
+    const thirdCard = card("j3", ["A", "B", "C", "D"], allEligible);
+    thirdCard.desertedPositions = [5];
+    const result = computeF2(
+      [
+        card("j1", ["A", "B", "C", "D", "E"], allEligible),
+        card("j2", ["A", "B", "C", "D", "F"], allEligible),
+        thirdCard
+      ],
+      3
+    );
+
+    expect(result.tiedGroups.some((group) => group.reason === "FIFTH_PLACE_EXCEPTION_5E")).toBe(
+      false
+    );
+  });
+
+  it("incluye el grupo completo de suma 12 y no crea 5.e si dos jueces coinciden en quinto", () => {
+    const allEligible = ["p1", "p2", "p3", "p4", "p5", "p6", "p7"];
+    const cards: JudgeCard[] = [
+      {
+        judgeUserId: "j2",
+        positions: [
+          { participantId: "p1", position: 1 },
+          { participantId: "p2", position: 3 },
+          { participantId: "p5", position: 4 },
+          { participantId: "p7", position: 5 }
+        ],
+        desertedPositions: [2],
+        eligibleParticipantIds: allEligible
+      },
+      {
+        judgeUserId: "j3",
+        positions: [
+          { participantId: "p4", position: 1 },
+          { participantId: "p5", position: 2 },
+          { participantId: "p6", position: 3 },
+          { participantId: "p3", position: 4 },
+          { participantId: "p7", position: 5 }
+        ],
+        desertedPositions: [],
+        eligibleParticipantIds: allEligible
+      },
+      {
+        judgeUserId: "j1",
+        positions: [
+          { participantId: "p1", position: 1 },
+          { participantId: "p3", position: 2 },
+          { participantId: "p2", position: 3 },
+          { participantId: "p4", position: 4 },
+          { participantId: "p6", position: 5 }
+        ],
+        desertedPositions: [],
+        eligibleParticipantIds: allEligible
+      }
+    ];
+
+    const result = computeF2(cards, 3);
+    const sumTie = result.tiedGroups.find(
+      (group) => group.reason === "SUM_EQUALITY" && group.positionSum === 12
+    );
+
+    expect(sumTie).toBeDefined();
+    expect(sumTie!.participantIds.sort()).toEqual(["p2", "p3", "p5"]);
+    expect(sumTie!.startPosition).toBe(3);
+    expect(sumTie!.endPosition).toBe(5);
+    expect(result.tiedGroups.some((group) => group.reason === "FIFTH_PLACE_EXCEPTION_5E")).toBe(
+      false
+    );
+    expect(positionOf(result, "p6")).toBe(6);
+    expect(positionOf(result, "p7")).toBe(7);
   });
 
   it("con 3 jueces, candidato sin consideración mínima no consume el puesto: se evalúa el siguiente elegible", () => {

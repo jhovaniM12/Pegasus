@@ -89,13 +89,16 @@ export function ActivateRoundCard({
       <div className="min-w-0 space-y-2">
         <div className="flex items-center gap-2">
           <Trophy className="size-4 shrink-0 text-slate-900" />
-          <h3 className="text-base font-semibold text-slate-900">Prueba individual</h3>
+          <h3 className="text-base font-semibold text-slate-900">
+            Prueba individual {config.roundType === "F1" ? "P1" : "P2"}
+          </h3>
         </div>
         <p className="text-sm text-slate-600">
-          La prueba individual aún no ha sido activada.
+          La prueba individual {config.roundType === "F1" ? "P1" : "P2"} aún no ha sido activada.
         </p>
         <p className="text-sm font-medium text-amber-700">
-          Hay {finalistCount} finalistas de {sourceLabel}. Se requiere iniciar la prueba individual.
+          Hay {finalistCount} finalistas de {sourceLabel}. Se requiere iniciar la prueba individual{" "}
+          {config.roundType === "F1" ? "P1" : "P2"}.
         </p>
       </div>
 
@@ -105,7 +108,7 @@ export function ActivateRoundCard({
         onClick={onActivate}
       >
         <Trophy className="size-4" />
-        Iniciar prueba individual
+        Iniciar prueba individual {config.roundType === "F1" ? "P1" : "P2"}
       </Button>
     </div>
   );

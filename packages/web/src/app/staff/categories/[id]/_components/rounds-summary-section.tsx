@@ -8,14 +8,14 @@ import { buildOfficialF2Results } from "./official-f2-results";
 import type { RoundFormStatus, RoundManagementItem } from "@/types/staged-flow";
 
 function roundTitle(round: RoundManagementItem): string {
-  if (round.roundType === "F1") return "Formato F1 — Cabeza de lote";
-  if (round.roundType === "F2") return "Formato F2 — Tarjeta final";
+  if (round.roundType === "F1") return "Prueba individual P1 — Cabeza de lote";
+  if (round.roundType === "F2") return "Prueba individual P2 — Tarjeta final";
   return `Desempate #${round.sequence}`;
 }
 
 function viewButtonLabel(round: RoundManagementItem): string {
-  if (round.roundType === "F1") return "Ver F1";
-  if (round.roundType === "F2") return "Ver F2";
+  if (round.roundType === "F1") return "Ver P1";
+  if (round.roundType === "F2") return "Ver P2";
   return `Ver desempate #${round.sequence}`;
 }
 
@@ -181,7 +181,7 @@ export function RoundsSummarySection({
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold text-slate-900">Resumen F1 / F2 / Desempates</h3>
+        <h3 className="text-sm font-semibold text-slate-900">Resumen P1 / P2 / Desempates</h3>
         <p className="mt-0.5 text-xs text-slate-500">
           Consulta el estado de las tarjetas y abre el detalle consolidado con tiempos por juez.
         </p>

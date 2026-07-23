@@ -12,18 +12,18 @@ import {
 import type { JudgeFormatKey } from "@/types/staged-flow";
 
 const ROUND_TITLES: Record<"F1" | "F2" | "TIE_BREAK", string> = {
-  F1: "prueba individual",
-  F2: "prueba individual",
+  F1: "prueba individual P1",
+  F2: "prueba individual P2",
   TIE_BREAK: "Formato desempate",
 };
 
 const ROUND_ACTIONS: Record<"F1" | "F2" | "TIE_BREAK", string[]> = {
   F1: [
-    "Iniciará tu tarjeta de prueba individual para esta categoría",
+    "Iniciará tu tarjeta de prueba individual P1 para esta categoría",
     "Te permitirá seleccionar los ejemplares que pasan a la final",
   ],
   F2: [
-    "Iniciará tu tarjeta de prueba individual para esta categoría",
+    "Iniciará tu tarjeta de prueba individual P2 para esta categoría",
     "Te permitirá asignar los puestos finales a los finalistas",
   ],
   TIE_BREAK: [
@@ -33,14 +33,14 @@ const ROUND_ACTIONS: Record<"F1" | "F2" | "TIE_BREAK", string[]> = {
 };
 
 const ROUND_CONFIRM_QUESTIONS: Record<"F1" | "F2" | "TIE_BREAK", string> = {
-  F1: "¿Estás seguro de que deseas iniciar el juzgamiento de prueba individual para esta categoría?",
-  F2: "¿Estás seguro de que deseas iniciar el juzgamiento de prueba individual para esta categoría?",
+  F1: "¿Estás seguro de que deseas iniciar el juzgamiento de prueba individual P1 para esta categoría?",
+  F2: "¿Estás seguro de que deseas iniciar el juzgamiento de prueba individual P2 para esta categoría?",
   TIE_BREAK: "¿Estás seguro de que deseas iniciar el juzgamiento de desempate para esta categoría?",
 };
 
 const ROUND_CONFIRM_LABELS: Record<"F1" | "F2" | "TIE_BREAK", string> = {
-  F1: "Iniciar prueba individual",
-  F2: "Iniciar prueba individual",
+  F1: "Iniciar prueba individual P1",
+  F2: "Iniciar prueba individual P2",
   TIE_BREAK: "Confirmar Inicio",
 };
 

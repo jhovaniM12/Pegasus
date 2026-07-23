@@ -1,3 +1,5 @@
+import type { TieBreakReason } from "@pegasus/core/judging/tie-blocks";
+
 export type StageStatus =
   | "NOT_STARTED"
   | "PRE_RING_STARTED"
@@ -294,6 +296,16 @@ export type RoundManagementItem = {
   sequence: number;
   status: RoundStatus;
   openedAt: string | null;
+  tieBreakReason: TieBreakReason | null;
+  tieBreakStartPosition: number | null;
+  tieBreakEndPosition: number | null;
+  tieBlocks: Array<{
+    reason: TieBreakReason;
+    participantIds: string[];
+    positionSum: number | null;
+    startPosition: number;
+    endPosition: number;
+  }>;
   forms: RoundManagementForm[];
   results: RoundResult[];
   desertedResults: DesertedRoundResult[];

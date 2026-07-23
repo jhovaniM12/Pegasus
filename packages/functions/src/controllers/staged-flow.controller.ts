@@ -43,6 +43,7 @@ import {
 } from "../services/judging/round-entry-annotations.service.js";
 import { getActiveStaffUser } from "../services/auth.service.js";
 import {
+  closeFaSchema,
   disqualifyParticipantSchema,
   desertCompetitionSchema,
   openTieBreakSchema,
@@ -184,7 +185,8 @@ export async function executeFaRepeatTrackRequestController(c: Context) {
 export async function closeFaController(c: Context) {
   const user = await getStaffUser(c);
   const stageId = requiredParam(c, "id");
-  const result = await closeFa(user, stageId);
+  const body = closeFaSchema.parse(await c.req.json());
+  const result = await closeFa(user, stageId, body);
   dispatchNotificationsAfterAction(stageId);
   return c.json(success(result));
 }

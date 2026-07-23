@@ -12,20 +12,20 @@ function TrackChip({ position }: { position: number }) {
 }
 
 function detailTitle(round: RoundManagementItem): string {
-  if (round.roundType === "F1") return "Formato F1 Consolidado";
-  if (round.roundType === "F2") return "Formato F2 Consolidado";
+  if (round.roundType === "F1") return "Prueba individual P1 consolidada";
+  if (round.roundType === "F2") return "Prueba individual P2 consolidada";
   return `Desempate #${round.sequence} Consolidado`;
 }
 
 function formLabel(round: RoundManagementItem): string {
-  if (round.roundType === "F1") return "Formato F1";
-  if (round.roundType === "F2") return "Formato F2";
+  if (round.roundType === "F1") return "Prueba individual P1";
+  if (round.roundType === "F2") return "Prueba individual P2";
   return `Desempate #${round.sequence}`;
 }
 
 function resultTitle(round: RoundManagementItem): string {
-  if (round.roundType === "F1") return "Resultado F1";
-  if (round.roundType === "F2") return "Resultado F2";
+  if (round.roundType === "F1") return "Resultado P1";
+  if (round.roundType === "F2") return "Resultado P2";
   return `Resultado desempate #${round.sequence}`;
 }
 
@@ -136,7 +136,7 @@ export function RoundConsolidatedDetail({ round, onBack }: RoundConsolidatedDeta
             <div className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-4">
               <div className="flex items-center gap-2">
                 <Trophy className="size-4 text-emerald-700" />
-                <span className="text-sm font-semibold text-emerald-900">Consolidado FORMATO F1</span>
+                <span className="text-sm font-semibold text-emerald-900">Consolidado prueba individual P1</span>
               </div>
               <p className="mt-0.5 text-xs text-emerald-700">
                 Finalistas consolidados: <strong>{sortedF1Finalists.length} ejemplares.</strong>

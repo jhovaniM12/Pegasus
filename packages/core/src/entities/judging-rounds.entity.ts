@@ -3,6 +3,7 @@ import { PegasusBaseEntity } from "./base.entity.js";
 import { FairCategoryStage } from "./staged-flow.entity.js";
 import { JudgingParticipant } from "./staged-flow.entity.js";
 import { User } from "./user.entity.js";
+import type { TieBreakReason } from "../judging/tie-blocks.js";
 
 /**
  * Modelo genérico de rondas de juzgamiento posteriores al FA (F1, F2 y desempates).
@@ -55,6 +56,16 @@ export class JudgingRound extends PegasusBaseEntity {
   /** Para rondas de desempate: ronda F2 cuyo empate se está resolviendo. */
   @Column({ name: "parent_round_id", type: "uuid", nullable: true })
   parentRoundId!: string | null;
+
+  /** Causa explícita del bloque; evita inferir 5.e por estado o consecutividad. */
+  @Column({ name: "tie_break_reason", type: "varchar", nullable: true })
+  tieBreakReason!: TieBreakReason | null;
+
+  @Column({ name: "tie_break_start_position", type: "integer", nullable: true })
+  tieBreakStartPosition!: number | null;
+
+  @Column({ name: "tie_break_end_position", type: "integer", nullable: true })
+  tieBreakEndPosition!: number | null;
 
   @Column({ name: "opened_at", type: "timestamp", nullable: true })
   openedAt!: Date | null;

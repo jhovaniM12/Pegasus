@@ -5,8 +5,8 @@ import type { JudgeFormat, JudgeFormatKey, JudgeFormatStatus } from "@/types/sta
 
 const FORMAT_LABELS: Record<JudgeFormatKey, string> = {
   FA: "Formato FA",
-  F1: "Formato F1",
-  F2: "Formato F2",
+  F1: "prueba individual P1",
+  F2: "prueba individual P2",
   TIE_BREAK: "Formato desempate",
 };
 
@@ -31,9 +31,9 @@ function formatButtonLabel(format: JudgeFormat): string {
       return "Iniciar juzgamiento de desempate";
     }
     if (format.participantCount != null) {
-      return `Iniciar Juzgamiento ${format.key} (${format.participantCount} finalistas)`;
+      return `Iniciar ${base} (${format.participantCount} finalistas)`;
     }
-    return `Iniciar Juzgamiento ${format.key}`;
+    return `Iniciar ${base}`;
   }
 
   if (format.isActive && format.formStatus === "STARTED") {

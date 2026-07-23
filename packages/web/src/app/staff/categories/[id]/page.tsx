@@ -200,6 +200,7 @@ export default function StaffCategoryPage() {
   const pendingFaSelectionRef = useRef<string[] | null>(null);
   const latestConfirmedFaSelectionRef = useRef<string[]>([]);
   const latestFaRequestIdRef = useRef(0);
+  const isClosingFaRef = useRef(false);
   const { toast } = useToast();
 
   const staffLoginPath = useCallback(() => {
@@ -528,6 +529,7 @@ export default function StaffCategoryPage() {
       latestConfirmedFaSelectionRef.current = [];
       pendingFaSelectionRef.current = null;
       isSyncingFaSelectionRef.current = false;
+      isClosingFaRef.current = false;
       // eslint-disable-next-line react-hooks/set-state-in-effect -- reset al salir de vista FA
       setFaSelectedIdsLocal([]);
       return;
@@ -581,7 +583,7 @@ export default function StaffCategoryPage() {
       }
     } finally {
       isSyncingFaSelectionRef.current = false;
-      if (pendingFaSelectionRef.current) {
+      if (pendingFaSelectionRef.current && !isClosingFaRef.current) {
         void flushFaSelection();
       }
     }
@@ -589,7 +591,14 @@ export default function StaffCategoryPage() {
 
   const toggleFaSelection = useCallback(
     (participantId: string) => {
-      if (!fa || summary?.status !== "JUDGING_STARTED" || fa.form.status !== "STARTED") return;
+      if (
+        !fa ||
+        isClosingFaRef.current ||
+        summary?.status !== "JUDGING_STARTED" ||
+        fa.form.status !== "STARTED"
+      ) {
+        return;
+      }
 
       // Leer siempre desde la ref síncrona para evitar estado stale en taps rápidos.
       const current = localSelectionRef.current;
@@ -973,7 +982,11 @@ export default function StaffCategoryPage() {
                       key={participant.id}
                       participant={participant}
                       selected={selectedIds.has(participant.id)}
-                      editable={summary.status === "JUDGING_STARTED" && fa.form.status === "STARTED"}
+                      editable={
+                        !busy &&
+                        summary.status === "JUDGING_STARTED" &&
+                        fa.form.status === "STARTED"
+                      }
                       onToggle={toggleFaSelection}
                       onRequestRepeatTrack={openFaRepeatTrack}
                       onOpenDisqualify={openFaDisqualify}
@@ -1165,9 +1178,15 @@ export default function StaffCategoryPage() {
         }}
         busy={busy}
         onConfirm={async () => {
+          const selectedParticipantIds = [...localSelectionRef.current];
+          // El snapshot enviado al cierre es la fuente definitiva. Los autosaves
+          // anteriores pueden terminar después sin revertir ni mostrar un error.
+          isClosingFaRef.current = true;
+          pendingFaSelectionRef.current = null;
+          latestFaRequestIdRef.current += 1;
           setBusy(true);
           try {
-            const response = await stagedFlowService.closeFa(stageId);
+            const response = await stagedFlowService.closeFa(stageId, selectedParticipantIds);
             if (response.data) {
               setFa(response.data);
               setSummary(response.data.stage);
@@ -1181,6 +1200,7 @@ export default function StaffCategoryPage() {
               variant: "error",
             });
           } finally {
+            isClosingFaRef.current = false;
             setBusy(false);
           }
         }}

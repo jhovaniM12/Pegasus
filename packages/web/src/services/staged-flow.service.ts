@@ -92,8 +92,10 @@ class StagedFlowService extends ApiService {
     );
   }
 
-  async closeFa(stageId: string): Promise<ApiResponse<FaState>> {
-    return this.post<ApiResponse<FaState>>(`/api/staff/fair-categories/${stageId}/fa/close`);
+  async closeFa(stageId: string, selectedParticipantIds: string[]): Promise<ApiResponse<FaState>> {
+    return this.post<ApiResponse<FaState>>(`/api/staff/fair-categories/${stageId}/fa/close`, {
+      selectedParticipantIds,
+    });
   }
 
   async getManagement(stageId: string): Promise<ApiResponse<ManagementState>> {
