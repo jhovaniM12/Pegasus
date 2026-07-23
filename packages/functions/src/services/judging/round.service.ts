@@ -456,7 +456,7 @@ export async function updateRoundForm(
       );
       const minAssignablePosition = round.roundType === "TIE_BREAK" ? positionBounds.min : MIN_AWARD_POSITION;
       const maxAssignablePosition =
-        round.roundType === "TIE_BREAK" ? positionBounds.max : eligibleCount + desertedPositions.length;
+        round.roundType === "TIE_BREAK" ? positionBounds.max : Math.min(eligibleCount, MAX_AWARD_POSITIONS);
       // Desiertos solo en puestos premiables (1..5); el desempate puede asignar hasta el 6.º (nota 5.e).
       const maxDesertablePosition = Math.min(maxAssignablePosition, MAX_AWARD_POSITIONS);
       const positionByParticipant = new Map(positions.map((p) => [p.participantId, p.position]));

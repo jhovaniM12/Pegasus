@@ -1090,6 +1090,10 @@ export async function disqualifyParticipant(
       throw new NotFoundError("No se encontro el motivo de descalificacion.");
     }
 
+    if (participant.status === "DISQUALIFIED") {
+      throw new BadRequestError("El ejemplar ya está descalificado.");
+    }
+
     participant.status = "DISQUALIFIED";
     participant.disqualifiedByJudgeFormId = form.id;
     participant.disqualifiedByUserId = user.id;

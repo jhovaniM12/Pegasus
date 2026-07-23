@@ -1,4 +1,4 @@
-import { ApiError, ApiService } from "@/services/api.service";
+import { ApiService } from "@/services/api.service";
 import type {
   ApiResponse,
   FaState,
@@ -21,20 +21,7 @@ class StagedFlowService extends ApiService {
   }
 
   async getCategory(stageId: string): Promise<ApiResponse<StagedCategory>> {
-    try {
-      return await this.get<ApiResponse<StagedCategory>>(`/api/staff/staged-categories/${stageId}`);
-    } catch (error) {
-      if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
-        throw error;
-      }
-
-      const list = await this.listCategories();
-      const category = list.data?.find((item) => item.stageId === stageId) ?? null;
-      if (!category) {
-        throw new Error(`Categoría ${stageId} no disponible.`);
-      }
-      return { success: true, data: category };
-    }
+    return this.get<ApiResponse<StagedCategory>>(`/api/staff/staged-categories/${stageId}`);
   }
 
   async startPreRing(stageId: string): Promise<ApiResponse<StagedCategory>> {

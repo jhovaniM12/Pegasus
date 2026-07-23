@@ -690,10 +690,7 @@ export default function StaffCategoryPage() {
     runAction(
       "Abrir desempate",
       "Se abrirá una ronda de desempate solo para los ejemplares empatados. Los jueces volverán a emitir su tarjeta.",
-      () => stagedFlowService.openTieBreak(stageId, testTypes),
-      "default",
-      undefined,
-      "/categories"
+      () => stagedFlowService.openTieBreak(stageId, testTypes)
     );
   };
 
@@ -1083,7 +1080,7 @@ export default function StaffCategoryPage() {
               variant: "success",
             });
             setActivateRoundTarget(null);
-            router.replace("/categories");
+            await load();
           } catch (error) {
             toast({
               title: "Error",
@@ -1146,7 +1143,6 @@ export default function StaffCategoryPage() {
             }
             toast({ title: "Formato FA cerrado", variant: "success" });
             setCloseFaOpen(false);
-            router.replace("/categories");
           } catch (error) {
             toast({
               title: "Error",

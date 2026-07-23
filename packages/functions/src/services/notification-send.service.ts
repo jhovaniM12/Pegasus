@@ -4,7 +4,7 @@ import { getBeamsClient } from "../lib/beams-client.js";
 import { withTimeout } from "../lib/with-timeout.js";
 import { getUsersByFairRole, type StaffRoleExternalId } from "./judging/shared.js";
 
-const BEAMS_TIMEOUT_MS = 15_000;
+const BEAMS_TIMEOUT_MS = 5_000;
 
 type WebNotificationPayload = {
   title: string;

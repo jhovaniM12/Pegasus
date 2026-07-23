@@ -499,8 +499,7 @@ export function JudgeRoundWorkspace({
                 "Una vez cerrado, no podrás modificar las posiciones asignadas. ¿Estás seguro de que deseas cerrar el formato?",
                 () => stagedFlowService.closeRoundForm(stageId),
                 "default",
-                "Cerrar prueba",
-                "/categories"
+                "Cerrar prueba"
               )
             }
           >

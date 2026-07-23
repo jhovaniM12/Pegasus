@@ -76,8 +76,8 @@ function requiredParam(c: Context, name: string): string {
   return value;
 }
 
-async function dispatchNotificationsAfterAction(stageId: string): Promise<void> {
-  await sendStageNotifications(stageId).catch((error) => {
+function dispatchNotificationsAfterAction(stageId: string): void {
+  void sendStageNotifications(stageId).catch((error) => {
     console.log(
       JSON.stringify({
         level: "ERROR",
@@ -104,7 +104,7 @@ export async function startPreRingController(c: Context) {
   const user = await getStaffUser(c);
   const stageId = requiredParam(c, "id");
   const result = await startPreRing(user, stageId);
-  await dispatchNotificationsAfterAction(stageId);
+  dispatchNotificationsAfterAction(stageId);
   return c.json(success(result));
 }
 
@@ -123,7 +123,7 @@ export async function closePreRingController(c: Context) {
   const user = await getStaffUser(c);
   const stageId = requiredParam(c, "id");
   const result = await closePreRing(user, stageId);
-  await dispatchNotificationsAfterAction(stageId);
+  dispatchNotificationsAfterAction(stageId);
   return c.json(success(result));
 }
 
@@ -131,7 +131,7 @@ export async function startJudgingController(c: Context) {
   const user = await getStaffUser(c);
   const stageId = requiredParam(c, "id");
   const result = await startJudging(user, stageId);
-  await dispatchNotificationsAfterAction(stageId);
+  dispatchNotificationsAfterAction(stageId);
   return c.json(success(result));
 }
 
@@ -160,7 +160,7 @@ export async function disqualifyParticipantController(c: Context) {
   const body = disqualifyParticipantSchema.parse(await c.req.json());
   const stageId = requiredParam(c, "id");
   const result = await disqualifyParticipant(user, stageId, requiredParam(c, "judgingParticipantId"), body.reasonId);
-  await dispatchNotificationsAfterAction(stageId);
+  dispatchNotificationsAfterAction(stageId);
   return c.json(success(result));
 }
 
@@ -168,7 +168,7 @@ export async function requestFaRepeatTrackController(c: Context) {
   const user = await getStaffUser(c);
   const stageId = requiredParam(c, "id");
   const result = await requestFaRepeatTrack(user, stageId, requiredParam(c, "judgingParticipantId"));
-  await dispatchNotificationsAfterAction(stageId);
+  dispatchNotificationsAfterAction(stageId);
   await sendStageRefreshSignal(stageId, "2");
   return c.json(success(result));
 }
@@ -185,7 +185,7 @@ export async function closeFaController(c: Context) {
   const user = await getStaffUser(c);
   const stageId = requiredParam(c, "id");
   const result = await closeFa(user, stageId);
-  await dispatchNotificationsAfterAction(stageId);
+  dispatchNotificationsAfterAction(stageId);
   return c.json(success(result));
 }
 
@@ -198,7 +198,7 @@ export async function consolidateFaController(c: Context) {
   const user = await getStaffUser(c);
   const stageId = requiredParam(c, "id");
   const result = await consolidateFa(user, stageId);
-  await dispatchNotificationsAfterAction(stageId);
+  dispatchNotificationsAfterAction(stageId);
   return c.json(success(result));
 }
 
@@ -208,7 +208,7 @@ export async function openNextRoundController(c: Context) {
   const user = await getStaffUser(c);
   const stageId = requiredParam(c, "id");
   const result = await openNextRound(user, stageId);
-  await dispatchNotificationsAfterAction(stageId);
+  dispatchNotificationsAfterAction(stageId);
   return c.json(success(result));
 }
 
@@ -267,7 +267,7 @@ export async function disqualifyRoundParticipantController(c: Context) {
     requiredParam(c, "participantId"),
     body.reasonId
   );
-  await dispatchNotificationsAfterAction(stageId);
+  dispatchNotificationsAfterAction(stageId);
   return c.json(success(result));
 }
 
@@ -282,7 +282,7 @@ export async function closeRoundFormController(c: Context) {
   const user = await getStaffUser(c);
   const stageId = requiredParam(c, "id");
   const result = await closeRoundForm(user, stageId);
-  await dispatchNotificationsAfterAction(stageId);
+  dispatchNotificationsAfterAction(stageId);
   return c.json(success(result));
 }
 
@@ -290,7 +290,7 @@ export async function consolidateRoundController(c: Context) {
   const user = await getStaffUser(c);
   const stageId = requiredParam(c, "id");
   const result = await consolidateRound(user, stageId);
-  await dispatchNotificationsAfterAction(stageId);
+  dispatchNotificationsAfterAction(stageId);
   return c.json(success(result));
 }
 
@@ -299,7 +299,7 @@ export async function openTieBreakController(c: Context) {
   const body = openTieBreakSchema.parse(await c.req.json());
   const stageId = requiredParam(c, "id");
   const result = await openTieBreak(user, stageId, body);
-  await dispatchNotificationsAfterAction(stageId);
+  dispatchNotificationsAfterAction(stageId);
   return c.json(success(result));
 }
 
@@ -307,7 +307,7 @@ export async function closeResultsController(c: Context) {
   const user = await getStaffUser(c);
   const stageId = requiredParam(c, "id");
   const result = await closeResults(user, stageId);
-  await dispatchNotificationsAfterAction(stageId);
+  dispatchNotificationsAfterAction(stageId);
   return c.json(success(result));
 }
 
@@ -316,7 +316,7 @@ export async function desertCompetitionController(c: Context) {
   const body = desertCompetitionSchema.parse(await c.req.json().catch(() => ({})));
   const stageId = requiredParam(c, "id");
   const result = await desertCompetition(user, stageId, body);
-  await dispatchNotificationsAfterAction(stageId);
+  dispatchNotificationsAfterAction(stageId);
   return c.json(success(result));
 }
 
