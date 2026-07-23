@@ -29,7 +29,10 @@ afterEach(async () => {
   await closeOfflineDatabase();
 });
 
-function faMutationInput(selectedParticipantIds: string[]) {
+function faMutationInput(
+  selectedParticipantIds: string[],
+  selectedTrackPositions: number[] = []
+) {
   return {
     deduplicationKey: `FA_FORM:${STAGE_ID}:${FORM_ID}`,
     userId: USER_ID,
@@ -38,7 +41,7 @@ function faMutationInput(selectedParticipantIds: string[]) {
     aggregateId: FORM_ID,
     operationType: "UPDATE_FA_SELECTION",
     baseRevision: 3,
-    payload: { selectedParticipantIds },
+    payload: { selectedParticipantIds, selectedTrackPositions },
   };
 }
 
@@ -46,13 +49,14 @@ describe("offline repository", () => {
   it("coalesce múltiples cambios pendientes en una sola intención estable", async () => {
     const first = await queueOfflineMutation(faMutationInput(["participant-1"]));
     const second = await queueOfflineMutation(
-      faMutationInput(["participant-1", "participant-2"])
+      faMutationInput(["participant-1", "participant-2"], [1, 8])
     );
 
     expect(second.operationId).toBe(first.operationId);
     expect(second.baseRevision).toBe(3);
     expect(second.payload).toEqual({
       selectedParticipantIds: ["participant-1", "participant-2"],
+      selectedTrackPositions: [1, 8],
     });
     await expect(listMutationsForUser(USER_ID)).resolves.toHaveLength(1);
   });

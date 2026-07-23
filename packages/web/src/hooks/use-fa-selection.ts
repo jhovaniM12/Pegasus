@@ -12,6 +12,8 @@ import {
 } from "@/offline/offline-repository";
 import { syncFaStage, type FaSelectionMutationPayload } from "@/offline/sync-engine";
 
+const FA_SYNC_DEBOUNCE_MS = 400;
+
 type UseFaSelectionParams = {
   stageId: string;
   userId: string | null;
@@ -48,10 +50,20 @@ export function useFaSelection({
   const isClosingFaRef = useRef(false);
   const syncInFlightRef = useRef(false);
   const selectionVersionRef = useRef(0);
+  const syncDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     faRef.current = fa;
   }, [fa]);
+
+  useEffect(
+    () => () => {
+      if (syncDebounceTimerRef.current) {
+        clearTimeout(syncDebounceTimerRef.current);
+      }
+    },
+    []
+  );
 
   const refreshPendingState = useCallback(async () => {
     if (!userId) {
@@ -204,6 +216,10 @@ export function useFaSelection({
         try {
           const payload: FaSelectionMutationPayload = {
             selectedParticipantIds: next,
+            selectedTrackPositions: currentFa.participants
+              .filter((participant) => next.includes(participant.id))
+              .map((participant) => participant.trackPosition)
+              .sort((left, right) => left - right),
           };
 
           await queueOfflineMutation({
@@ -220,8 +236,13 @@ export function useFaSelection({
           await refreshPendingState();
 
           if (connectivityState === "ONLINE") {
-            await syncNow();
-            if (selectionVersionRef.current !== version) return;
+            if (syncDebounceTimerRef.current) {
+              clearTimeout(syncDebounceTimerRef.current);
+            }
+            syncDebounceTimerRef.current = setTimeout(() => {
+              syncDebounceTimerRef.current = null;
+              void syncNow();
+            }, FA_SYNC_DEBOUNCE_MS);
           }
         } catch (error) {
           if (selectionVersionRef.current !== version) return;

@@ -6,6 +6,7 @@ import type { OfflineMutationEnvelope } from "./mutation-types";
 import {
   advancePendingBaseRevisions,
   confirmOfflineMutation,
+  listMutationsForUser,
   listPendingMutationsForStage,
   markMutationStatus,
   recoverStaleSyncingMutations,
@@ -96,6 +97,8 @@ export type VetCheckMutationPayload = {
 
 export type FaSelectionMutationPayload = {
   selectedParticipantIds: string[];
+  /** Solo para explicar conflictos al usuario; no se envía a la API. */
+  selectedTrackPositions?: number[];
 };
 
 export type RoundFormMutationPayload = {
@@ -754,4 +757,35 @@ export async function syncRoundStage(userId: string, stageId: string): Promise<S
   const result = { synced, conflicts, failed, round: latestRound };
   await finishSyncBatch(userId, stageId, startedAt, result);
   return result;
+}
+
+export type SyncAllPendingResult = {
+  synced: number;
+  conflicts: number;
+  failed: number;
+  stageIds: string[];
+};
+
+/**
+ * Drena la cola offline real del usuario (vet + FA + rondas) en todas las etapas con pendientes.
+ */
+export async function syncAllPendingForUser(userId: string): Promise<SyncAllPendingResult> {
+  await recoverStaleSyncingMutations(userId);
+  const open = await listMutationsForUser(userId, ["PENDING", "FAILED"]);
+  const stageIds = [...new Set(open.map((mutation) => mutation.stageId))];
+
+  let synced = 0;
+  let conflicts = 0;
+  let failed = 0;
+
+  for (const stageId of stageIds) {
+    const veterinary = await syncVeterinaryStage(userId, stageId);
+    const fa = await syncFaStage(userId, stageId);
+    const round = await syncRoundStage(userId, stageId);
+    synced += veterinary.synced + fa.synced + round.synced;
+    conflicts += veterinary.conflicts + fa.conflicts + round.conflicts;
+    failed += veterinary.failed + fa.failed + round.failed;
+  }
+
+  return { synced, conflicts, failed, stageIds };
 }

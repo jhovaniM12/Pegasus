@@ -1,4 +1,5 @@
 import { getOfflineDatabase } from "./db";
+import { notifyOfflineMutationsChanged } from "./offline-events";
 import type { QueueOfflineMutationInput } from "./mutation-types";
 import {
   OFFLINE_SCHEMA_VERSION,
@@ -111,6 +112,9 @@ export async function queueOfflineMutation<TPayload>(
     };
     await database.offlineMutations.add(mutation);
     return mutation;
+  }).then((mutation) => {
+    notifyOfflineMutationsChanged();
+    return mutation;
   });
 }
 
@@ -208,6 +212,9 @@ export async function recoverStaleSyncingMutations(
     }
   });
 
+  if (recovered > 0) {
+    notifyOfflineMutationsChanged();
+  }
   return recovered;
 }
 
@@ -237,6 +244,7 @@ export async function retryOfflineMutation(
     lastErrorDetails: null,
   };
   await database.offlineMutations.put(updated);
+  notifyOfflineMutationsChanged();
   return updated;
 }
 
@@ -245,6 +253,7 @@ export async function discardOfflineMutation(operationId: string): Promise<boole
   const mutation = await database.offlineMutations.get(operationId);
   if (!mutation || mutation.status === "SYNCING") return false;
   await database.offlineMutations.delete(operationId);
+  notifyOfflineMutationsChanged();
   return true;
 }
 
@@ -264,6 +273,7 @@ export async function markMutationStatus(
 
   const updated: OfflineMutation = { ...existing, ...patch };
   await database.offlineMutations.put(updated);
+  notifyOfflineMutationsChanged();
   return updated;
 }
 
@@ -318,6 +328,7 @@ export async function confirmOfflineMutation<TPayload>(
       await database.offlineMutations.delete(confirmation.operationId);
     }
   );
+  notifyOfflineMutationsChanged();
 }
 
 export async function clearOfflineDataForUser(userId: string): Promise<void> {

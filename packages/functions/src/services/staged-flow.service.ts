@@ -1158,13 +1158,33 @@ export async function updateFaDecisions(
     }
 
     const applyUpdate = async () => {
-      if (isOfflineEnvelope) {
+      if (isOfflineEnvelope && input.baseRevision !== form.revision) {
+        const currentSelections = await manager.getRepository(FaJudgeEntryDecision).find({
+          where: {
+            faJudgeFormId: form.id,
+            decision: "SELECTED"
+          },
+          relations: {
+            judgingParticipant: {
+              fairEntry: true
+            }
+          },
+          order: {
+            selectionOrder: "ASC"
+          }
+        });
         assertExpectedRevision(input.baseRevision, form.revision, {
           aggregateId: form.id,
           currentState: {
             id: form.id,
             status: form.status,
-            revision: form.revision
+            revision: form.revision,
+            selectedParticipantIds: currentSelections.map(
+              (selection) => selection.judgingParticipantId
+            ),
+            selectedTrackPositions: currentSelections.map(
+              (selection) => selection.judgingParticipant.fairEntry.trackPosition
+            )
           },
           resolution: "CAN_REAPPLY_LOCAL_DRAFT"
         });

@@ -118,7 +118,6 @@ export function JudgeRoundWorkspace({
   const hasLocalPendingRef = useRef(false);
 
   const {
-    pendingCount,
     hasBlockingPending,
     isSyncing,
     syncNow,
@@ -409,25 +408,8 @@ export function JudgeRoundWorkspace({
         <div>
           <h2 className="text-base font-semibold text-slate-950">{ROUND_TITLES[roundType]}</h2>
           <p className="text-sm text-slate-500">{progressLabel}</p>
-          {pendingCount > 0 && (
-            <p className="mt-1 text-xs font-medium text-amber-700">
-              {isSyncing
-                ? `Sincronizando ${pendingCount} cambio(s)…`
-                : `${pendingCount} cambio(s) guardados en este dispositivo`}
-            </p>
-          )}
         </div>
         <div className="flex flex-wrap gap-2">
-          {pendingCount > 0 && (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={isSyncing || busy}
-              onClick={() => void syncNow()}
-            >
-              Sincronizar ahora
-            </Button>
-          )}
           {formStatus === "PENDING" && (
             <Button
               className="bg-emerald-600 text-white hover:bg-emerald-700"
@@ -546,12 +528,6 @@ export function JudgeRoundWorkspace({
               ? "Cerrar desempate"
               : `Cerrar prueba individual ${roundType === "F1" ? "P1" : "P2"}`}
           </Button>
-          {hasBlockingPending && (
-            <p className="mt-2 text-center text-xs text-amber-700">
-              Tienes cambios guardados únicamente en este dispositivo. Debes sincronizarlos antes de
-              cerrar la tarjeta.
-            </p>
-          )}
           {roundType === "TIE_BREAK" && !allTiedParticipantsRanked && (
             <p className="mt-2 text-center text-xs text-amber-700">
               Asigna un puesto a cada ejemplar empatado antes de cerrar ({assignedByParticipant.length}/

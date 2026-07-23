@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { getTrustedOfflineDevice, recoverStaleSyncingMutations } from "@/offline/offline-repository";
+import {
+  getTrustedOfflineDevice,
+  recoverStaleSyncingMutations,
+} from "@/offline/offline-repository";
+import { OFFLINE_MUTATIONS_CHANGED_EVENT } from "@/offline/offline-events";
 import { getOfflineSyncMetrics, type OfflineSyncMetrics } from "@/offline/retention";
 
 const EMPTY_METRICS: OfflineSyncMetrics = {
@@ -33,14 +37,26 @@ export function useOfflineSyncSummary(pollMs = 8_000) {
 
   useEffect(() => {
     void refresh();
-    const timer = window.setInterval(() => void refresh(), pollMs);
     const onFocus = () => void refresh();
+    const onMutationsChanged = () => void refresh();
     window.addEventListener("focus", onFocus);
+    window.addEventListener(OFFLINE_MUTATIONS_CHANGED_EVENT, onMutationsChanged);
+
+    const activePollMs =
+      metrics.pendingCount + metrics.syncingCount > 0 ? Math.min(pollMs, 1_500) : pollMs;
+    const timer = window.setInterval(() => void refresh(), activePollMs);
+
     return () => {
       window.clearInterval(timer);
       window.removeEventListener("focus", onFocus);
+      window.removeEventListener(OFFLINE_MUTATIONS_CHANGED_EVENT, onMutationsChanged);
     };
-  }, [pollMs, refresh]);
+  }, [
+    metrics.pendingCount,
+    metrics.syncingCount,
+    pollMs,
+    refresh,
+  ]);
 
   const totalOpen =
     metrics.pendingCount + metrics.syncingCount + metrics.conflictCount + metrics.failedCount;

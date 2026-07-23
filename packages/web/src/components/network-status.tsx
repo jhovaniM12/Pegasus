@@ -25,6 +25,7 @@ import {
   type ConnectivityState,
 } from "@/offline/connectivity";
 import { useOfflineSyncSummary } from "@/hooks/use-offline-sync-summary";
+import { syncAllPendingForUser } from "@/offline/sync-engine";
 
 type NetworkStatusContextValue = {
   isOnline: boolean;
@@ -197,24 +198,42 @@ export function ConnectionIndicator({ className = "" }: { className?: string }) 
 
 type SyncIndicatorProps = {
   className?: string;
-  /** Si se indica junto a onSyncStage, el desplegable muestra el detalle de esa etapa. */
+  /** Si se indica, el detalle se filtra a esa etapa; el sync sigue drenando la cola real. */
   stageId?: string;
-  onSyncStage?: () => Promise<void>;
+  /** Callback opcional tras drenar (p. ej. refrescar estado de la pantalla). */
+  onAfterSync?: () => Promise<void> | void;
 };
 
-export function SyncIndicator({ className = "", stageId, onSyncStage }: SyncIndicatorProps) {
-  const { userId, metrics, totalOpen } = useOfflineSyncSummary();
+export function SyncIndicator({ className = "", stageId, onAfterSync }: SyncIndicatorProps) {
+  const { connectivityState } = useNetworkStatus();
+  const { userId, metrics, totalOpen, refresh } = useOfflineSyncSummary();
+  const [isDraining, setIsDraining] = useState(false);
   const hasConflicts = metrics.conflictCount > 0 || metrics.failedCount > 0;
-  const isSyncing = metrics.syncingCount > 0;
+  const isSyncing = isDraining || metrics.syncingCount > 0;
   const title = hasConflicts
     ? `${metrics.conflictCount + metrics.failedCount} conflicto(s) de sincronización`
     : isSyncing
-      ? `Sincronizando ${metrics.syncingCount} cambio(s)…`
+      ? `Sincronizando ${Math.max(metrics.syncingCount, 1)} cambio(s)…`
       : metrics.pendingCount > 0
         ? `${metrics.pendingCount} cambio(s) pendientes`
         : "Sincronización al día";
 
-  const showStageDetail = Boolean(stageId && onSyncStage && userId);
+  const runSync = useCallback(async () => {
+    if (!userId || isDraining) return;
+    if (connectivityState !== "ONLINE") {
+      await refresh();
+      return;
+    }
+
+    setIsDraining(true);
+    try {
+      await syncAllPendingForUser(userId);
+      await onAfterSync?.();
+    } finally {
+      await refresh();
+      setIsDraining(false);
+    }
+  }, [connectivityState, isDraining, onAfterSync, refresh, userId]);
 
   return (
     <DropdownMenu>
@@ -246,41 +265,15 @@ export function SyncIndicator({ className = "", stageId, onSyncStage }: SyncIndi
         }
       />
       <DropdownMenuContent align="end" className="w-auto p-0">
-        {showStageDetail ? (
-          <OfflineMutationCenter
-            userId={userId as string}
-            stageId={stageId as string}
-            onSync={onSyncStage as () => Promise<void>}
-          />
+        {userId ? (
+          <OfflineMutationCenter userId={userId} stageId={stageId} onSync={runSync} />
         ) : (
-          <div className="w-72 p-3 text-sm">
-            <p className="font-semibold text-slate-950">Estado de sincronización</p>
-            <dl className="mt-2 space-y-1 text-xs text-slate-600">
-              <div className="flex justify-between">
-                <dt>Pendientes</dt>
-                <dd className="font-medium text-slate-800">{metrics.pendingCount}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt>Sincronizando</dt>
-                <dd className="font-medium text-slate-800">{metrics.syncingCount}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt>Conflictos</dt>
-                <dd className="font-medium text-slate-800">{metrics.conflictCount}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt>Fallidos</dt>
-                <dd className="font-medium text-slate-800">{metrics.failedCount}</dd>
-              </div>
-            </dl>
-            {metrics.lastSuccessfulSyncAt && (
-              <p className="mt-2 text-xs text-slate-500">
-                Última sincronización exitosa: {new Date(metrics.lastSuccessfulSyncAt).toLocaleString()}
-              </p>
-            )}
-            {totalOpen === 0 && (
-              <p className="mt-2 text-xs text-slate-500">No hay cambios pendientes en este dispositivo.</p>
-            )}
+          <div className="w-72 p-3 text-sm text-slate-600">
+            <p className="font-semibold text-slate-950">Sincronizador</p>
+            <p className="mt-1 text-xs">
+              No hay una sesión offline confiable en este dispositivo. Inicia sesión en staff para
+              sincronizar cambios locales.
+            </p>
           </div>
         )}
       </DropdownMenuContent>

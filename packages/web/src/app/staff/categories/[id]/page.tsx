@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { ConfirmActionDialog } from "@/components/confirm-action-dialog";
 import { NotificationInbox } from "@/components/notification-inbox";
 import { ConnectionIndicator, SyncIndicator } from "@/components/network-status";
-import { syncRoundStage } from "@/offline/sync-engine";
 import { stagedFlowService } from "@/services/staged-flow.service";
 import { useToast } from "@/components/ui/toast";
 import { useStaffRealtimeRefresh } from "@/hooks/use-staff-realtime-refresh";
@@ -219,7 +218,6 @@ export default function StaffCategoryPage() {
     setChecks,
     updatingVetByEntryId,
     handleVetCheckUpdate,
-    pendingCount: vetPendingCount,
     hasBlockingPending: vetHasBlockingPending,
     isSyncing: vetIsSyncing,
     syncNow: syncVeterinaryNow,
@@ -256,7 +254,6 @@ export default function StaffCategoryPage() {
     selectedIds,
     selectedCount: faSelectedCount,
     localSelectionRef,
-    pendingCount: faPendingCount,
     hasBlockingPending: faHasBlockingPending,
     isSyncing: faIsSyncing,
     toggleSelection: toggleFaSelection,
@@ -823,14 +820,9 @@ export default function StaffCategoryPage() {
           <div className="flex items-center gap-2">
             <SyncIndicator
               stageId={stageId}
-              onSyncStage={
+              onAfterSync={
                 currentUser
                   ? async () => {
-                      await Promise.all([
-                        syncVeterinaryNow(),
-                        syncFaNow(),
-                        syncRoundStage(currentUser.id, stageId),
-                      ]);
                       await load({ silent: true });
                     }
                   : undefined
@@ -963,24 +955,7 @@ export default function StaffCategoryPage() {
                     {checks.filter((c) => c.status !== "PENDING").length}/{checks.length} revisados
                   </p>
                 )}
-                {vetPendingCount > 0 && (
-                  <p className="mt-1 text-xs font-medium text-amber-700">
-                    {vetIsSyncing
-                      ? `Sincronizando ${vetPendingCount} cambio(s)…`
-                      : `${vetPendingCount} cambio(s) guardados en este dispositivo`}
-                  </p>
-                )}
               </div>
-              {vetPendingCount > 0 && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={vetIsSyncing || busy}
-                  onClick={() => void syncVeterinaryNow()}
-                >
-                  Sincronizar ahora
-                </Button>
-              )}
             </div>
             <div className="mt-4 grid gap-3">
               {checks.map((check) => (
@@ -1008,12 +983,6 @@ export default function StaffCategoryPage() {
               <Lock className="size-5" />
               Cerrar pre-pista
             </Button>
-            {vetHasBlockingPending && (
-              <p className="mt-2 text-center text-xs text-amber-700">
-                Tienes cambios guardados únicamente en este dispositivo. Debes sincronizarlos antes de
-                cerrar la pre-pista.
-              </p>
-            )}
           </section>
         )}
 
@@ -1024,25 +993,8 @@ export default function StaffCategoryPage() {
               <div>
                 <h2 className="text-base font-semibold text-slate-950">Formato FA</h2>
                 <p className="text-sm text-slate-500">{faSelectedCount} / 10 seleccionados</p>
-                {faPendingCount > 0 && (
-                  <p className="mt-1 text-xs font-medium text-amber-700">
-                    {faIsSyncing
-                      ? `Sincronizando ${faPendingCount} cambio(s)…`
-                      : `${faPendingCount} cambio(s) guardados en este dispositivo`}
-                  </p>
-                )}
               </div>
               <div className="flex flex-wrap gap-2">
-                {faPendingCount > 0 && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={faIsSyncing || busy}
-                    onClick={() => void syncFaNow()}
-                  >
-                    Sincronizar ahora
-                  </Button>
-                )}
                 {fa.form.status !== "CLOSED" && (
                   <>
                     <Button
@@ -1071,12 +1023,6 @@ export default function StaffCategoryPage() {
                 )}
               </div>
             </div>
-            {faHasBlockingPending && fa.form.status === "STARTED" && (
-              <p className="mt-2 text-xs text-amber-700">
-                Tienes cambios guardados únicamente en este dispositivo. Debes sincronizarlos antes de
-                cerrar el FA.
-              </p>
-            )}
 
             {(fa.consolidated ?? []).length > 0 && (
               <div className="mt-4">
