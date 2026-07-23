@@ -4,6 +4,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { NetworkStatusProvider } from "@/components/network-status";
 import { ServiceWorkerUpdateBanner } from "@/components/service-worker-update-banner";
+import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ToastProvider } from "@/components/ui/toast";
 
@@ -47,19 +48,27 @@ export default function RootLayout({
     <html
       lang="es"
       className={`${inter.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <Script id="pegaso-sw-register" strategy="beforeInteractive">
           {`if("serviceWorker"in navigator){navigator.serviceWorker.register("/service-worker.js",{scope:"/"})}`}
         </Script>
-        <TooltipProvider>
-          <ToastProvider>
-            <NetworkStatusProvider>
-              <ServiceWorkerUpdateBanner />
-              {children}
-            </NetworkStatusProvider>
-          </ToastProvider>
-        </TooltipProvider>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <TooltipProvider>
+            <ToastProvider>
+              <NetworkStatusProvider>
+                <ServiceWorkerUpdateBanner />
+                {children}
+              </NetworkStatusProvider>
+            </ToastProvider>
+          </TooltipProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

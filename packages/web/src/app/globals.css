@@ -51,6 +51,7 @@
 }
 
 :root {
+  color-scheme: light;
   --zapote: oklch(0.78 0.16 84); /* Brand Gold/Yellow */
   --brand-red: oklch(0.52 0.19 25); /* Brand Vibrant Red */
   --background: oklch(0.985 0.006 250);
@@ -96,6 +97,48 @@
   --sidebar-ring: oklch(0.78 0.16 84);
 }
 
+.dark {
+  color-scheme: dark;
+  --zapote: oklch(0.76 0.14 84);
+  --brand-red: oklch(0.64 0.2 25);
+  --background: oklch(0.145 0.018 255);
+  --foreground: oklch(0.94 0.012 250);
+
+  --card: oklch(0.19 0.022 255);
+  --card-foreground: oklch(0.94 0.012 250);
+
+  --popover: oklch(0.19 0.022 255);
+  --popover-foreground: oklch(0.94 0.012 250);
+
+  --primary: oklch(0.72 0.1 250);
+  --primary-foreground: oklch(0.15 0.02 255);
+
+  --secondary: oklch(0.25 0.022 255);
+  --secondary-foreground: oklch(0.94 0.012 250);
+
+  --muted: oklch(0.235 0.018 255);
+  --muted-foreground: oklch(0.7 0.018 250);
+
+  --accent: oklch(0.27 0.025 255);
+  --accent-foreground: oklch(0.96 0.008 250);
+
+  --destructive: oklch(0.63 0.2 25);
+  --destructive-foreground: oklch(0.98 0 0);
+
+  --border: oklch(0.31 0.02 255);
+  --input: oklch(0.31 0.02 255);
+  --ring: oklch(0.65 0.11 250);
+
+  --sidebar: oklch(0.115 0.025 255);
+  --sidebar-foreground: oklch(0.9 0.012 250);
+  --sidebar-primary: oklch(0.76 0.14 84);
+  --sidebar-primary-foreground: oklch(0.14 0.02 255);
+  --sidebar-accent: oklch(0.21 0.04 255);
+  --sidebar-accent-foreground: oklch(0.96 0.006 250);
+  --sidebar-border: oklch(0.24 0.03 255);
+  --sidebar-ring: oklch(0.76 0.14 84);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -109,6 +152,46 @@
 }
 
 @layer utilities {
+  /*
+   * Compatibilidad temporal para vistas staff que aún usan colores Slate
+   * explícitos. Los componentes nuevos deben usar los tokens semánticos.
+   */
+  .dark .bg-white,
+  .dark .bg-white\/90 {
+    background-color: var(--card);
+  }
+
+  .dark .bg-\[\#f5f7fb\],
+  .dark .bg-\[\#f7f8f5\] {
+    background-color: var(--background);
+  }
+
+  .dark .bg-slate-50 {
+    background-color: var(--muted);
+  }
+
+  .dark .bg-slate-100 {
+    background-color: oklch(0.27 0.02 255);
+  }
+
+  .dark .border-slate-100,
+  .dark .border-slate-200,
+  .dark .border-slate-300 {
+    border-color: var(--border);
+  }
+
+  .dark .text-slate-950,
+  .dark .text-slate-900,
+  .dark .text-slate-800 {
+    color: var(--foreground);
+  }
+
+  .dark .text-slate-700,
+  .dark .text-slate-600,
+  .dark .text-slate-500 {
+    color: var(--muted-foreground);
+  }
+
   .subtle-shadow {
     box-shadow: 0 16px 40px -28px rgba(15, 23, 42, 0.45);
   }

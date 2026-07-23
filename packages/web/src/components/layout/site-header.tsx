@@ -14,6 +14,7 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { ConnectionIndicator, SyncIndicator } from "@/components/network-status";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Fragment } from "react";
 
 const routeLabels: Record<string, string> = {
@@ -79,6 +80,7 @@ export function SiteHeader() {
         </Breadcrumb>
       </div>
       <div className="flex shrink-0 items-center gap-2">
+        <ThemeToggle />
         <SyncIndicator />
         <ConnectionIndicator />
       </div>
