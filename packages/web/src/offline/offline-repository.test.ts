@@ -2,6 +2,7 @@ import "fake-indexeddb/auto";
 import { afterEach, describe, expect, it } from "vitest";
 import { closeOfflineDatabase, getOfflineDatabase } from "./db";
 import {
+  advancePendingBaseRevisions,
   cacheOfflineContext,
   clearOfflineDataForUser,
   getOfflineContext,
@@ -13,6 +14,7 @@ import {
   retryOfflineMutation,
   discardOfflineMutation,
   revokeOfflineDeviceTrust,
+  setOfflinePageBootAtMsForTests,
   trustOfflineDevice,
 } from "./offline-repository";
 
@@ -22,6 +24,7 @@ const STAGE_ID = "33333333-3333-4333-8333-333333333333";
 const FORM_ID = "44444444-4444-4444-8444-444444444444";
 
 afterEach(async () => {
+  setOfflinePageBootAtMsForTests(Date.now());
   await getOfflineDatabase().delete();
   await closeOfflineDatabase();
 });
@@ -64,10 +67,38 @@ describe("offline repository", () => {
     const mutations = await listMutationsForUser(USER_ID);
 
     expect(pending.operationId).not.toBe(syncing.operationId);
+    expect(pending.baseRevision).toBe(3);
     expect(mutations.map((mutation) => mutation.status).sort()).toEqual([
       "PENDING",
       "SYNCING",
     ]);
+  });
+
+  it("avanza baseRevision de PENDING hermanas del mismo agregado", async () => {
+    const syncing = await queueOfflineMutation(faMutationInput(["participant-1"]));
+    await getOfflineDatabase().offlineMutations.update(syncing.operationId, {
+      status: "SYNCING",
+    });
+    const pending = await queueOfflineMutation(faMutationInput(["participant-2"]));
+
+    await expect(
+      advancePendingBaseRevisions({
+        userId: USER_ID,
+        stageId: STAGE_ID,
+        appliedRevision: 4,
+        match: (mutation) =>
+          mutation.aggregateType === "FA_FORM" && mutation.aggregateId === FORM_ID,
+      })
+    ).resolves.toBe(1);
+
+    await expect(getOfflineDatabase().offlineMutations.get(pending.operationId)).resolves.toMatchObject({
+      baseRevision: 4,
+      status: "PENDING",
+    });
+    await expect(getOfflineDatabase().offlineMutations.get(syncing.operationId)).resolves.toMatchObject({
+      baseRevision: 3,
+      status: "SYNCING",
+    });
   });
 
   it("particiona los contextos por usuario y categoría", async () => {
@@ -120,9 +151,11 @@ describe("offline repository", () => {
     const recovered = await getOfflineDatabase().offlineMutations.get(mutation.operationId);
     expect(recovered?.operationId).toBe(mutation.operationId);
     expect(recovered?.status).toBe("PENDING");
+    expect(recovered?.lastErrorCode).toBe("SYNC_INTERRUPTED");
   });
 
-  it("no recupera una operación SYNCING reciente", async () => {
+  it("no recupera una operación SYNCING reciente de esta misma página", async () => {
+    setOfflinePageBootAtMsForTests(Date.now() - 60_000);
     const mutation = await queueOfflineMutation(faMutationInput(["participant-1"]));
     await getOfflineDatabase().offlineMutations.update(mutation.operationId, {
       status: "SYNCING",
@@ -134,6 +167,31 @@ describe("offline repository", () => {
     await expect(getOfflineDatabase().offlineMutations.get(mutation.operationId)).resolves.toMatchObject({
       operationId: mutation.operationId,
       status: "SYNCING",
+    });
+  });
+
+  it("recupera de inmediato SYNCING de una página anterior tras reload", async () => {
+    const bootAt = Date.now();
+    setOfflinePageBootAtMsForTests(bootAt);
+    const mutation = await queueOfflineMutation(faMutationInput(["participant-1"]));
+    await getOfflineDatabase().offlineMutations.update(mutation.operationId, {
+      status: "SYNCING",
+      // Intento de la sesión/página anterior (antes del boot actual).
+      lastAttemptAt: new Date(bootAt - 1_000).toISOString(),
+      lastErrorDetails: null,
+    });
+
+    await expect(
+      recoverStaleSyncingMutations(USER_ID, STAGE_ID, {
+        // Aunque el margen por edad aún no haya vencido...
+        staleAfterMs: 60_000,
+        now: bootAt + 500,
+      })
+    ).resolves.toBe(1);
+
+    await expect(getOfflineDatabase().offlineMutations.get(mutation.operationId)).resolves.toMatchObject({
+      status: "PENDING",
+      lastErrorCode: "SYNC_INTERRUPTED",
     });
   });
 

@@ -17,7 +17,19 @@ const ACTIVE_MUTATION_STATUSES: OfflineMutationStatus[] = [
   "CONFLICT",
   "FAILED",
 ];
-export const SYNCING_STALE_AFTER_MS = 2 * 60 * 1000;
+/** Misma página: solo recupera SYNCING colgados tras este margen. */
+export const SYNCING_STALE_AFTER_MS = 15_000;
+/** Arranque de este documento JS; mutaciones SYNCING anteriores son huérfanas tras reload. */
+let offlinePageBootAtMs = Date.now();
+
+export function getOfflinePageBootAtMs(): number {
+  return offlinePageBootAtMs;
+}
+
+/** Solo para tests. */
+export function setOfflinePageBootAtMsForTests(value: number): void {
+  offlinePageBootAtMs = value;
+}
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -164,19 +176,26 @@ export async function listMutationsForStage(
 export async function recoverStaleSyncingMutations(
   userId?: string,
   stageId?: string,
-  now = Date.now()
+  options: { now?: number; staleAfterMs?: number } = {}
 ): Promise<number> {
   const database = getOfflineDatabase();
+  const now = options.now ?? Date.now();
+  const staleAfterMs = options.staleAfterMs ?? SYNCING_STALE_AFTER_MS;
+  const staleBefore = now - staleAfterMs;
+  const pageBootAtMs = offlinePageBootAtMs;
   const candidates = await database.offlineMutations.where("status").equals("SYNCING").toArray();
-  const staleBefore = now - SYNCING_STALE_AFTER_MS;
   let recovered = 0;
 
   await database.transaction("rw", database.offlineMutations, async () => {
     for (const mutation of candidates) {
       if (userId && mutation.userId !== userId) continue;
       if (stageId && mutation.stageId !== stageId) continue;
+
       const lastAttempt = mutation.lastAttemptAt ? Date.parse(mutation.lastAttemptAt) : 0;
-      if (lastAttempt > staleBefore) continue;
+      const fromPreviousPage = !Number.isFinite(lastAttempt) || lastAttempt < pageBootAtMs;
+      const staleByAge = !Number.isFinite(lastAttempt) || lastAttempt <= staleBefore;
+      if (!fromPreviousPage && !staleByAge) continue;
+
       await database.offlineMutations.put({
         ...mutation,
         status: "PENDING",
@@ -246,6 +265,38 @@ export async function markMutationStatus(
   const updated: OfflineMutation = { ...existing, ...patch };
   await database.offlineMutations.put(updated);
   return updated;
+}
+
+/**
+ * Tras aplicar una mutación, avanza `baseRevision` de las PENDING hermanas
+ * que compartían la revisión anterior del mismo agregado/revisión de formulario.
+ */
+export async function advancePendingBaseRevisions(params: {
+  userId: string;
+  stageId: string;
+  appliedRevision: number;
+  match: (mutation: OfflineMutation) => boolean;
+}): Promise<number> {
+  const database = getOfflineDatabase();
+  let advanced = 0;
+
+  await database.transaction("rw", database.offlineMutations, async () => {
+    const candidates = await database.offlineMutations.where("stageId").equals(params.stageId).toArray();
+    for (const mutation of candidates) {
+      if (mutation.userId !== params.userId) continue;
+      if (mutation.status !== "PENDING") continue;
+      if (!params.match(mutation)) continue;
+      if (mutation.baseRevision >= params.appliedRevision) continue;
+
+      await database.offlineMutations.put({
+        ...mutation,
+        baseRevision: params.appliedRevision,
+      });
+      advanced += 1;
+    }
+  });
+
+  return advanced;
 }
 
 export async function confirmOfflineMutation<TPayload>(

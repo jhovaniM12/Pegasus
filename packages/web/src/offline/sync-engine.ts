@@ -4,6 +4,7 @@ import type { FaState, RoundState, VeterinaryCheck, VeterinaryCheckStatus } from
 import { checkPegasusConnectivity } from "./connectivity";
 import type { OfflineMutationEnvelope } from "./mutation-types";
 import {
+  advancePendingBaseRevisions,
   confirmOfflineMutation,
   listPendingMutationsForStage,
   markMutationStatus,
@@ -12,6 +13,80 @@ import {
 import { markLastSuccessfulSyncAt, purgeExpiredOfflineConfirmations } from "./retention";
 import type { OfflineMutation } from "./schema";
 import { recordOfflineTelemetry } from "./telemetry";
+
+const ROUND_AGGREGATE_TYPES = ["ROUND_FORM", "ROUND_NOTE", "ROUND_REMINDERS"] as const;
+type RoundAggregateType = (typeof ROUND_AGGREGATE_TYPES)[number];
+
+function isRoundAggregateType(value: string): value is RoundAggregateType {
+  return (ROUND_AGGREGATE_TYPES as readonly string[]).includes(value);
+}
+
+function roundFormIdFromMutation(mutation: OfflineMutation): string | null {
+  if (mutation.aggregateType === "ROUND_FORM") return mutation.aggregateId;
+  if (mutation.aggregateType === "ROUND_NOTE" || mutation.aggregateType === "ROUND_REMINDERS") {
+    const separator = mutation.aggregateId.indexOf(":");
+    if (separator <= 0) return null;
+    return mutation.aggregateId.slice(0, separator);
+  }
+  return null;
+}
+
+function withBaseRevision<TPayload>(
+  mutation: OfflineMutation<TPayload>,
+  baseRevision: number
+): OfflineMutation<TPayload> {
+  if (mutation.baseRevision === baseRevision) return mutation;
+  return { ...mutation, baseRevision };
+}
+
+function effectiveBaseRevision(
+  mutation: OfflineMutation,
+  chainedByScope: Map<string, number>
+): number {
+  const chained = chainedByScope.get(mutationRevisionScopeKey(mutation));
+  if (chained == null) return mutation.baseRevision;
+  return Math.max(mutation.baseRevision, chained);
+}
+
+function mutationRevisionScopeKey(mutation: OfflineMutation): string {
+  if (isRoundAggregateType(mutation.aggregateType)) {
+    const formId = roundFormIdFromMutation(mutation);
+    return formId ? `ROUND_FORM:${formId}` : `ROUND:${mutation.operationId}`;
+  }
+  return `${mutation.aggregateType}:${mutation.aggregateId}`;
+}
+
+async function chainPendingRevisionsAfterSuccess(
+  mutation: OfflineMutation,
+  appliedRevision: number,
+  chainedByScope: Map<string, number>
+): Promise<void> {
+  const scopeKey = mutationRevisionScopeKey(mutation);
+  chainedByScope.set(scopeKey, appliedRevision);
+
+  if (isRoundAggregateType(mutation.aggregateType)) {
+    const formId = roundFormIdFromMutation(mutation);
+    if (!formId) return;
+    await advancePendingBaseRevisions({
+      userId: mutation.userId,
+      stageId: mutation.stageId,
+      appliedRevision,
+      match: (candidate) =>
+        isRoundAggregateType(candidate.aggregateType) &&
+        roundFormIdFromMutation(candidate) === formId,
+    });
+    return;
+  }
+
+  await advancePendingBaseRevisions({
+    userId: mutation.userId,
+    stageId: mutation.stageId,
+    appliedRevision,
+    match: (candidate) =>
+      candidate.aggregateType === mutation.aggregateType &&
+      candidate.aggregateId === mutation.aggregateId,
+  });
+}
 
 export type VetCheckMutationPayload = {
   fairEntryId: string;
@@ -253,6 +328,7 @@ export async function syncVeterinaryStage(
   let conflicts = 0;
   let failed = 0;
   let latestChecks: VeterinaryCheck[] | null = null;
+  const chainedByScope = new Map<string, number>();
 
   // Vacía la cola aunque entren mutaciones nuevas mientras otra está SYNCING.
   const maxPasses = 20;
@@ -261,36 +337,42 @@ export async function syncVeterinaryStage(
     const veterinaryPending = pending.filter((mutation) => mutation.aggregateType === "VET_CHECK");
     if (veterinaryPending.length === 0) break;
 
-    let stoppedForSession = false;
+    let stopBatch = false;
     for (const mutation of veterinaryPending) {
-      await markMutationStatus(mutation.operationId, {
+      const effectiveMutation = withBaseRevision(
+        mutation as OfflineMutation<VetCheckMutationPayload>,
+        effectiveBaseRevision(mutation, chainedByScope)
+      );
+      await markMutationStatus(effectiveMutation.operationId, {
         status: "SYNCING",
-        attempts: mutation.attempts + 1,
+        attempts: effectiveMutation.attempts + 1,
         lastAttemptAt: new Date().toISOString(),
         nextRetryAt: null,
         lastErrorCode: null,
         lastErrorMessage: null,
         lastErrorDetails: null,
+        baseRevision: effectiveMutation.baseRevision,
       });
 
       try {
-        const result = await syncVeterinaryMutation(
-          mutation as OfflineMutation<VetCheckMutationPayload>
-        );
+        const result = await syncVeterinaryMutation(effectiveMutation);
         latestChecks = result.checks;
         synced += 1;
+        await chainPendingRevisionsAfterSuccess(
+          effectiveMutation,
+          result.revision,
+          chainedByScope
+        );
       } catch (error) {
-        const outcome = await handleSyncError(mutation, error);
+        const outcome = await handleSyncError(effectiveMutation, error);
         if (outcome === "conflict") conflicts += 1;
         else failed += 1;
-        if (outcome === "session") {
-          stoppedForSession = true;
-          break;
-        }
+        stopBatch = true;
+        break;
       }
     }
 
-    if (stoppedForSession || conflicts > 0 || failed > 0) break;
+    if (stopBatch || conflicts > 0 || failed > 0) break;
   }
 
   const result = { synced, conflicts, failed, checks: latestChecks };
@@ -354,6 +436,7 @@ export async function syncFaStage(userId: string, stageId: string): Promise<Sync
   let conflicts = 0;
   let failed = 0;
   let latestFa: FaState | null = null;
+  const chainedByScope = new Map<string, number>();
 
   // Vacía la cola aunque entren mutaciones nuevas mientras otra está SYNCING.
   const maxPasses = 20;
@@ -362,34 +445,42 @@ export async function syncFaStage(userId: string, stageId: string): Promise<Sync
     const faPending = pending.filter((mutation) => mutation.aggregateType === "FA_FORM");
     if (faPending.length === 0) break;
 
-    let stoppedForSession = false;
+    let stopBatch = false;
     for (const mutation of faPending) {
-      await markMutationStatus(mutation.operationId, {
+      const effectiveMutation = withBaseRevision(
+        mutation as OfflineMutation<FaSelectionMutationPayload>,
+        effectiveBaseRevision(mutation, chainedByScope)
+      );
+      await markMutationStatus(effectiveMutation.operationId, {
         status: "SYNCING",
-        attempts: mutation.attempts + 1,
+        attempts: effectiveMutation.attempts + 1,
         lastAttemptAt: new Date().toISOString(),
         nextRetryAt: null,
         lastErrorCode: null,
         lastErrorMessage: null,
         lastErrorDetails: null,
+        baseRevision: effectiveMutation.baseRevision,
       });
 
       try {
-        const result = await syncFaMutation(mutation as OfflineMutation<FaSelectionMutationPayload>);
+        const result = await syncFaMutation(effectiveMutation);
         latestFa = result.fa;
         synced += 1;
+        await chainPendingRevisionsAfterSuccess(
+          effectiveMutation,
+          result.revision,
+          chainedByScope
+        );
       } catch (error) {
-        const outcome = await handleSyncError(mutation, error);
+        const outcome = await handleSyncError(effectiveMutation, error);
         if (outcome === "conflict") conflicts += 1;
         else failed += 1;
-        if (outcome === "session") {
-          stoppedForSession = true;
-          break;
-        }
+        stopBatch = true;
+        break;
       }
     }
 
-    if (stoppedForSession || conflicts > 0 || failed > 0) break;
+    if (stopBatch || conflicts > 0 || failed > 0) break;
   }
 
   const result = { synced, conflicts, failed, fa: latestFa };
@@ -583,27 +674,25 @@ export async function syncRoundStage(userId: string, stageId: string): Promise<S
   let conflicts = 0;
   let failed = 0;
   let latestRound: RoundState | null = null;
-
-  const aggregateOrder = ["ROUND_FORM", "ROUND_NOTE", "ROUND_REMINDERS"] as const;
+  const chainedByScope = new Map<string, number>();
   const maxPasses = 20;
 
   for (let pass = 0; pass < maxPasses; pass += 1) {
     const pending = await listPendingMutationsForStage(userId, stageId);
     const roundPending = pending
-      .filter((mutation) =>
-        aggregateOrder.includes(mutation.aggregateType as (typeof aggregateOrder)[number])
-      )
+      .filter((mutation) => isRoundAggregateType(mutation.aggregateType))
       .sort((left, right) => {
-        const leftRank = aggregateOrder.indexOf(left.aggregateType as (typeof aggregateOrder)[number]);
-        const rightRank = aggregateOrder.indexOf(right.aggregateType as (typeof aggregateOrder)[number]);
+        const leftRank = ROUND_AGGREGATE_TYPES.indexOf(left.aggregateType as RoundAggregateType);
+        const rightRank = ROUND_AGGREGATE_TYPES.indexOf(right.aggregateType as RoundAggregateType);
         if (leftRank !== rightRank) return leftRank - rightRank;
         return left.createdAt.localeCompare(right.createdAt);
       });
 
     if (roundPending.length === 0) break;
 
-    let stoppedForSession = false;
+    let stopBatch = false;
     for (const mutation of roundPending) {
+      const baseRevision = effectiveBaseRevision(mutation, chainedByScope);
       await markMutationStatus(mutation.operationId, {
         status: "SYNCING",
         attempts: mutation.attempts + 1,
@@ -612,38 +701,54 @@ export async function syncRoundStage(userId: string, stageId: string): Promise<S
         lastErrorCode: null,
         lastErrorMessage: null,
         lastErrorDetails: null,
+        baseRevision,
       });
 
       try {
+        let revision: number;
         if (mutation.aggregateType === "ROUND_FORM") {
           const result = await syncRoundFormMutation(
-            mutation as OfflineMutation<RoundFormMutationPayload>
+            withBaseRevision(
+              mutation as OfflineMutation<RoundFormMutationPayload>,
+              baseRevision
+            )
           );
           latestRound = result.round;
+          revision = result.revision;
         } else if (mutation.aggregateType === "ROUND_NOTE") {
           const result = await syncRoundNoteMutation(
-            mutation as OfflineMutation<RoundNoteMutationPayload>
+            withBaseRevision(
+              mutation as OfflineMutation<RoundNoteMutationPayload>,
+              baseRevision
+            )
           );
           latestRound = result.round;
+          revision = result.revision;
         } else {
           const result = await syncRoundRemindersMutation(
-            mutation as OfflineMutation<RoundRemindersMutationPayload>
+            withBaseRevision(
+              mutation as OfflineMutation<RoundRemindersMutationPayload>,
+              baseRevision
+            )
           );
           latestRound = result.round;
+          revision = result.revision;
         }
         synced += 1;
+        await chainPendingRevisionsAfterSuccess(mutation, revision, chainedByScope);
       } catch (error) {
-        const outcome = await handleSyncError(mutation, error);
+        const outcome = await handleSyncError(
+          withBaseRevision(mutation, baseRevision),
+          error
+        );
         if (outcome === "conflict") conflicts += 1;
         else failed += 1;
-        if (outcome === "session") {
-          stoppedForSession = true;
-          break;
-        }
+        stopBatch = true;
+        break;
       }
     }
 
-    if (stoppedForSession || conflicts > 0 || failed > 0) break;
+    if (stopBatch || conflicts > 0 || failed > 0) break;
   }
 
   const result = { synced, conflicts, failed, round: latestRound };

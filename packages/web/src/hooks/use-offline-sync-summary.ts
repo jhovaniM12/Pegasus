@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { getTrustedOfflineDevice } from "@/offline/offline-repository";
+import { getTrustedOfflineDevice, recoverStaleSyncingMutations } from "@/offline/offline-repository";
 import { getOfflineSyncMetrics, type OfflineSyncMetrics } from "@/offline/retention";
 
 const EMPTY_METRICS: OfflineSyncMetrics = {
@@ -26,6 +26,8 @@ export function useOfflineSyncSummary(pollMs = 8_000) {
       setMetrics(EMPTY_METRICS);
       return;
     }
+    // Tras reload/SW, las SYNCING de la página anterior vuelven a PENDING de inmediato.
+    await recoverStaleSyncingMutations(nextUserId);
     setMetrics(await getOfflineSyncMetrics(nextUserId));
   }, []);
 
