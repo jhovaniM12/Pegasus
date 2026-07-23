@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -9,73 +10,86 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Wifi, WifiOff } from "lucide-react";
+import { TriangleAlert, Wifi, WifiOff } from "lucide-react";
 
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
+import {
+  checkPegasusConnectivity,
+  type ConnectivityState,
+} from "@/offline/connectivity";
 
 type NetworkStatusContextValue = {
   isOnline: boolean;
+  connectivityState: ConnectivityState;
+  checkNow: () => Promise<ConnectivityState>;
 };
 
 const NetworkStatusContext = createContext<NetworkStatusContextValue | null>(null);
-const CONNECTIVITY_CHECK_URL = "https://www.gstatic.com/generate_204";
 const CONNECTIVITY_CHECK_INTERVAL_MS = 5000;
-const CONNECTIVITY_CHECK_TIMEOUT_MS = 3500;
-
-async function checkInternetConnection(): Promise<boolean> {
-  if (!navigator.onLine) {
-    return false;
-  }
-
-  const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), CONNECTIVITY_CHECK_TIMEOUT_MS);
-
-  try {
-    await fetch(`${CONNECTIVITY_CHECK_URL}?t=${Date.now()}`, {
-      cache: "no-store",
-      mode: "no-cors",
-      signal: controller.signal,
-    });
-
-    return true;
-  } catch {
-    return false;
-  } finally {
-    window.clearTimeout(timeoutId);
-  }
-}
 
 export function NetworkStatusProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
-  const [isOnline, setIsOnline] = useState(true);
+  // No afirmar conexión hasta que la propia API de Pegaso responda.
+  const [connectivityState, setConnectivityState] = useState<ConnectivityState>("DEGRADED");
   const hasMounted = useRef(false);
   const wasOffline = useRef(false);
+  const consecutiveFailures = useRef(0);
+
+  const checkNow = useCallback(async (): Promise<ConnectivityState> => {
+    const apiAvailable = await checkPegasusConnectivity();
+    let nextState: ConnectivityState;
+
+    if (apiAvailable) {
+      consecutiveFailures.current = 0;
+      nextState = "ONLINE";
+    } else if (!navigator.onLine) {
+      consecutiveFailures.current += 1;
+      nextState = "OFFLINE";
+    } else {
+      consecutiveFailures.current += 1;
+      nextState = consecutiveFailures.current >= 2 ? "OFFLINE" : "DEGRADED";
+    }
+
+    setConnectivityState(nextState);
+    return nextState;
+  }, []);
 
   useEffect(() => {
     let isDisposed = false;
 
     const updateStatus = async () => {
-      const nextIsOnline = await checkInternetConnection();
+      const apiAvailable = await checkPegasusConnectivity();
 
       if (isDisposed) {
         return;
       }
 
-      setIsOnline(nextIsOnline);
+      let nextState: ConnectivityState;
+      if (apiAvailable) {
+        consecutiveFailures.current = 0;
+        nextState = "ONLINE";
+      } else if (!navigator.onLine) {
+        consecutiveFailures.current += 1;
+        nextState = "OFFLINE";
+      } else {
+        consecutiveFailures.current += 1;
+        nextState = consecutiveFailures.current >= 2 ? "OFFLINE" : "DEGRADED";
+      }
+      setConnectivityState(nextState);
 
       if (!hasMounted.current) {
         hasMounted.current = true;
-        wasOffline.current = !nextIsOnline;
+        wasOffline.current = nextState === "OFFLINE";
         return;
       }
 
-      if (!nextIsOnline) {
+      if (nextState === "OFFLINE") {
         if (!wasOffline.current) {
           toast({
             variant: "error",
             title: "Sin conexión",
-            description: "Estás en modo offline. Algunas acciones pueden no estar disponibles.",
+            description: "La API de Pegaso no responde. Algunas acciones pueden no estar disponibles.",
           });
         }
 
@@ -100,7 +114,12 @@ export function NetworkStatusProvider({ children }: { children: ReactNode }) {
     window.addEventListener("online", updateStatus);
     window.addEventListener("offline", updateStatus);
     window.addEventListener("focus", updateStatus);
-    document.addEventListener("visibilitychange", updateStatus);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void updateStatus();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       isDisposed = true;
@@ -108,11 +127,18 @@ export function NetworkStatusProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("online", updateStatus);
       window.removeEventListener("offline", updateStatus);
       window.removeEventListener("focus", updateStatus);
-      document.removeEventListener("visibilitychange", updateStatus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [toast]);
 
-  const value = useMemo(() => ({ isOnline }), [isOnline]);
+  const value = useMemo(
+    () => ({
+      isOnline: connectivityState === "ONLINE",
+      connectivityState,
+      checkNow,
+    }),
+    [checkNow, connectivityState]
+  );
 
   return (
     <NetworkStatusContext.Provider value={value}>
@@ -133,8 +159,15 @@ export function useNetworkStatus() {
 }
 
 export function ConnectionIndicator({ className = "" }: { className?: string }) {
-  const { isOnline } = useNetworkStatus();
-  const Icon = isOnline ? Wifi : WifiOff;
+  const { connectivityState } = useNetworkStatus();
+  const isOnline = connectivityState === "ONLINE";
+  const isDegraded = connectivityState === "DEGRADED";
+  const Icon = isOnline ? Wifi : isDegraded ? TriangleAlert : WifiOff;
+  const title = isOnline
+    ? "Conectado a Pegaso"
+    : isDegraded
+      ? "Conexión inestable con Pegaso"
+      : "Sin conexión con Pegaso";
 
   return (
     <div
@@ -142,10 +175,12 @@ export function ConnectionIndicator({ className = "" }: { className?: string }) 
         "flex h-10 w-10 items-center justify-center rounded-lg border",
         isOnline
           ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-          : "border-red-200 bg-red-50 text-red-700",
+          : isDegraded
+            ? "border-amber-200 bg-amber-50 text-amber-700"
+            : "border-red-200 bg-red-50 text-red-700",
         className
       )}
-      title={isOnline ? "Conectado a internet" : "Sin conexión a internet"}
+      title={title}
     >
       <Icon className="size-4 shrink-0" />
     </div>
@@ -153,17 +188,31 @@ export function ConnectionIndicator({ className = "" }: { className?: string }) 
 }
 
 function OfflineBanner() {
-  const { isOnline } = useNetworkStatus();
+  const { connectivityState } = useNetworkStatus();
 
-  if (isOnline) {
+  if (connectivityState === "ONLINE") {
     return null;
   }
 
+  const isDegraded = connectivityState === "DEGRADED";
+  const Icon = isDegraded ? TriangleAlert : WifiOff;
+
   return (
-    <div className="fixed inset-x-0 bottom-0 z-50 border-t border-red-200 bg-red-50 px-4 py-3 text-red-800 shadow-lg">
+    <div
+      className={cn(
+        "fixed inset-x-0 bottom-0 z-50 border-t px-4 py-3",
+        isDegraded
+          ? "border-amber-200 bg-amber-50 text-amber-800"
+          : "border-red-200 bg-red-50 text-red-800"
+      )}
+    >
       <div className="mx-auto flex max-w-7xl items-center justify-center gap-2 text-sm font-medium">
-        <WifiOff className="size-4 shrink-0" />
-        <span>Sin conexión a internet. Estás en modo offline.</span>
+        <Icon className="size-4 shrink-0" />
+        <span>
+          {isDegraded
+            ? "La conexión con Pegaso está inestable. Esperando confirmación de la API."
+            : "Sin conexión con Pegaso. Los cambios offline aún no están habilitados."}
+        </span>
       </div>
     </div>
   );

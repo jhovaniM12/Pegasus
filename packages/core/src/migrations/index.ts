@@ -27,3 +27,4 @@ export { RelaxNotificationOutboxIdempotency1717430400025 } from "./1717430400025
 export { SimplifyNotificationOutboxDelivery1717430400026 } from "./1717430400026-SimplifyNotificationOutboxDelivery.js";
 export { CreateFaRepeatTrackRequests1717430400027 } from "./1717430400027-CreateFaRepeatTrackRequests.js";
 export { AddTieBreakIdentity1717430400028 } from "./1717430400028-AddTieBreakIdentity.js";
+export { AddOfflineMutationFoundation1717430400029 } from "./1717430400029-AddOfflineMutationFoundation.js";

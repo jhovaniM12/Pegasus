@@ -48,6 +48,7 @@ export type ApiResponse<T> = {
 
 export type StagedCategory = {
   stageId: string;
+  revision: number;
   status: StageStatus;
   fair: { id: string; name: string | null };
   category: { id: string; name: string | null; minAgeMonths: number; maxAgeMonths: number };
@@ -65,6 +66,7 @@ export type StagedCategory = {
 
 export type VeterinaryCheck = {
   id: string;
+  revision: number;
   fairEntryId: string;
   trackPosition: number;
   riderName: string;
@@ -115,6 +117,7 @@ export type FaState = {
   stage: StagedCategory;
   form: {
     id: string;
+    revision: number;
     status: JudgeFormStatus;
     selectedCount: number;
     disqualifiedCount: number;
@@ -128,6 +131,7 @@ export type FaState = {
 
 export type ManagementVetCheck = {
   id: string;
+  revision: number;
   trackPosition: number;
   riderName: string;
   registrationNumber: string;
@@ -136,6 +140,7 @@ export type ManagementVetCheck = {
 
 export type ManagementJudgeForm = {
   id: string;
+  revision: number;
   judgeUserId: string;
   judgeName: string;
   status: JudgeFormStatus;
@@ -226,8 +231,22 @@ export type RoundReminderHistoryItem = {
 
 export type RoundState = {
   stage: StagedCategory;
-  round: { id: string; roundType: RoundType; sequence: number; status: RoundStatus };
-  form: { id: string; status: RoundFormStatus; closedAt: string | null; desertedPositions: number[] } | null;
+  round: {
+    id: string;
+    roundType: RoundType;
+    sequence: number;
+    status: RoundStatus;
+    tieBreakReason: TieBreakReason | null;
+    tieBreakStartPosition: number | null;
+    tieBreakEndPosition: number | null;
+  };
+  form: {
+    id: string;
+    revision: number;
+    status: RoundFormStatus;
+    closedAt: string | null;
+    desertedPositions: number[];
+  } | null;
   maxSelections: number | null;
   positionRange: { min: number; max: number } | null;
   availableReminders: RoundAvailableReminder[];
@@ -267,6 +286,7 @@ export type DesertedRoundResult = {
 
 export type RoundManagementForm = {
   id: string;
+  revision: number;
   judgeName: string;
   status: RoundFormStatus;
   startedAt: string | null;

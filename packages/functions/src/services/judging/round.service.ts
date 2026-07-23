@@ -333,6 +333,23 @@ async function getJudgeFormOrThrow(
   return form;
 }
 
+async function getJudgeFormForUpdate(
+  manager: EntityManager,
+  roundId: string,
+  judgeUserId: string
+): Promise<JudgingRoundForm> {
+  const form = await manager.getRepository(JudgingRoundForm).findOne({
+    where: { roundId, judgeUserId },
+    lock: { mode: "pessimistic_write" }
+  });
+
+  if (!form) {
+    throw new ForbiddenError("No tienes un formulario asignado en esta ronda.");
+  }
+
+  return form;
+}
+
 export async function startRoundForm(user: User, stageId: string) {
   assertUserRole(user, ["JUDGE"]);
   const dataSource = await getDataSource();
@@ -341,7 +358,7 @@ export async function startRoundForm(user: User, stageId: string) {
     const stage = await getStageOrThrow(manager, stageId);
     await assertStageAccess(manager, user, stage, ["2"]);
     const round = await getActiveRoundOrThrow(manager, stage.id);
-    const form = await getJudgeFormOrThrow(manager, round.id, user.id);
+    const form = await getJudgeFormForUpdate(manager, round.id, user.id);
 
     if (form.status === "CLOSED") {
       throw new BadRequestError("El formulario ya está cerrado.");
@@ -412,7 +429,7 @@ export async function updateRoundForm(
     const stage = await getStageOrThrow(manager, stageId);
     await assertStageAccess(manager, user, stage, ["2"]);
     const round = await getActiveRoundOrThrow(manager, stage.id);
-    const form = await getJudgeFormOrThrow(manager, round.id, user.id);
+    const form = await getJudgeFormForUpdate(manager, round.id, user.id);
 
     if (form.status !== "STARTED") {
       throw new BadRequestError("Solo puedes editar un formulario iniciado.");
@@ -515,6 +532,10 @@ export async function updateRoundForm(
     }
 
     await manager.getRepository(JudgingRoundEntry).save(entries);
+    // Las entradas son parte del agregado del formulario; la revisión también
+    // debe avanzar aunque el snapshot solo cambie filas hijas.
+    await manager.getRepository(JudgingRoundForm).increment({ id: form.id }, "revision", 1);
+    form.revision += 1;
     return getRoundStateForJudge(manager, user, stage, round);
   });
 }
@@ -538,7 +559,7 @@ export async function disqualifyRoundParticipant(
     }
 
     const round = await getActiveRoundOrThrow(manager, stage.id);
-    const form = await getJudgeFormOrThrow(manager, round.id, user.id);
+    const form = await getJudgeFormForUpdate(manager, round.id, user.id);
 
     if (form.status !== "STARTED") {
       throw new BadRequestError("Solo puedes descalificar con la tarjeta iniciada.");
@@ -581,6 +602,8 @@ export async function disqualifyRoundParticipant(
     participant.disqualifiedInRoundFormId = form.id;
     await manager.getRepository(JudgingParticipant).save(participant);
     await clearParticipantRoundAssignments(manager, round.id, participant.id);
+    await manager.getRepository(JudgingRoundForm).increment({ id: form.id }, "revision", 1);
+    form.revision += 1;
 
     await recordEvent(manager, {
       stageId: stage.id,
@@ -630,7 +653,7 @@ export async function closeRoundForm(user: User, stageId: string) {
     const stage = await getStageOrThrow(manager, stageId);
     await assertStageAccess(manager, user, stage, ["2"]);
     const round = await getActiveRoundOrThrow(manager, stage.id);
-    const form = await getJudgeFormOrThrow(manager, round.id, user.id);
+    const form = await getJudgeFormForUpdate(manager, round.id, user.id);
 
     if (form.status !== "STARTED") {
       throw new BadRequestError("Solo puedes cerrar un formulario iniciado.");
@@ -1456,11 +1479,15 @@ async function getRoundStateForJudge(
       id: round.id,
       roundType: round.roundType,
       sequence: round.sequence,
-      status: round.status
+      status: round.status,
+      tieBreakReason: round.tieBreakReason,
+      tieBreakStartPosition: round.tieBreakStartPosition,
+      tieBreakEndPosition: round.tieBreakEndPosition
     },
     form: form
       ? {
           id: form.id,
+          revision: form.revision,
           status: form.status,
           closedAt: form.closedAt?.toISOString() ?? null,
           desertedPositions: (
@@ -1561,6 +1588,7 @@ export async function getRoundsManagement(user: User, stageId: string) {
         })),
         forms: forms.map((form) => ({
           id: form.id,
+          revision: form.revision,
           judgeName: form.judgeUser.person
             ? `${form.judgeUser.person.name} ${form.judgeUser.person.lastName}`.trim()
             : ROLE_LABELS.JUDGE,

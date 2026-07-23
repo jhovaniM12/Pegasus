@@ -5,7 +5,10 @@ import { error } from "../lib/http.js";
 
 export const errorHandler: ErrorHandler = (err, c) => {
   if (err instanceof AppError) {
-    return c.json(error(err.code, err.message), err.statusCode as 400 | 401 | 403 | 404);
+    return c.json(
+      error(err.code, err.message, err.details),
+      err.statusCode as 400 | 401 | 403 | 404 | 409 | 422
+    );
   }
 
   if (err instanceof ZodError) {

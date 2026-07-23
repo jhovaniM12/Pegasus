@@ -51,6 +51,7 @@ export type JudgeFormatDto = {
 
 export type StagedCategoryDto = {
   stageId: string;
+  revision: number;
   status: FairCategoryStageStatus;
   fair: { id: string; name: string | null };
   category: { id: string; name: string | null; minAgeMonths: number; maxAgeMonths: number };
@@ -169,6 +170,7 @@ export async function buildStageSummary(manager: EntityManager, stage: FairCateg
 
   return {
     stageId: stage.id,
+    revision: stage.revision,
     status: stage.status,
     fair: { id: stage.fair.id, name: stage.fair.name },
     category: {
@@ -492,6 +494,7 @@ async function listVeterinaryChecksForStage(manager: EntityManager, stage: FairC
 
   return checks.map((check) => ({
     id: check.id,
+    revision: check.revision,
     fairEntryId: check.fairEntryId,
     trackPosition: check.fairEntry.trackPosition,
     riderName: check.fairEntry.riderName,
@@ -865,6 +868,7 @@ async function getFaForStage(manager: EntityManager, user: User, stage: FairCate
     stage: await buildStageSummary(manager, stage),
     form: {
       id: form.id,
+      revision: form.revision,
       status: form.status,
       selectedCount: decisions.filter((decision) => decision.decision === "SELECTED").length,
       disqualifiedCount: decisions.filter((decision) => decision.decision === "DISQUALIFIED").length,
@@ -1079,6 +1083,8 @@ export async function updateFaDecisions(
       input.selectedParticipantIds
     );
     await replaceFaSelections(manager, form, selectedParticipantIds);
+    await manager.getRepository(FaJudgeForm).increment({ id: form.id }, "revision", 1);
+    form.revision += 1;
 
     return getFaForStage(manager, user, stage);
   });
@@ -1316,6 +1322,7 @@ async function getManagementForStage(manager: EntityManager, stage: FairCategory
       },
       veterinaryChecks: checks.map((check) => ({
         id: check.id,
+        revision: check.revision,
         trackPosition: check.fairEntry.trackPosition,
         riderName: check.fairEntry.riderName,
         registrationNumber: check.fairEntry.registrationNumber,
@@ -1329,6 +1336,7 @@ async function getManagementForStage(manager: EntityManager, stage: FairCategory
           .map((d) => d.judgingParticipant.fairEntry.trackPosition);
         return {
           id: form.id,
+          revision: form.revision,
           judgeUserId: form.judgeUserId,
           judgeName: form.judgeUser.person
             ? `${form.judgeUser.person.name} ${form.judgeUser.person.lastName}`.trim()

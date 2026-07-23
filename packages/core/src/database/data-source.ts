@@ -31,6 +31,7 @@ import {
   JudgingRoundDesertedResult,
   TieBreakTest,
   NotificationOutbox,
+  OfflineOperationReceipt,
   Person,
   Role,
   Sex,
@@ -62,6 +63,7 @@ import {
   SimplifyNotificationOutboxDelivery1717430400026,
   CreateFaRepeatTrackRequests1717430400027,
   AddTieBreakIdentity1717430400028,
+  AddOfflineMutationFoundation1717430400029,
   CreateFairEntriesTable1717430400004,
   CreateFairResultsTable1717430400008,
   CreateFairStaffTable1717430400007,
@@ -128,6 +130,7 @@ export const AppDataSource = new DataSource({
     JudgingRoundDesertedResult,
     TieBreakTest,
     NotificationOutbox,
+    OfflineOperationReceipt,
     Person,
     Role,
     Sex,
@@ -168,7 +171,8 @@ export const AppDataSource = new DataSource({
     RelaxNotificationOutboxIdempotency1717430400025,
     SimplifyNotificationOutboxDelivery1717430400026,
     CreateFaRepeatTrackRequests1717430400027,
-    AddTieBreakIdentity1717430400028
+    AddTieBreakIdentity1717430400028,
+    AddOfflineMutationFoundation1717430400029
   ]
 });
 

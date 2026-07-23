@@ -11,5 +11,6 @@ const healthResponseSchema = z.object({
 export function healthController(c: Context) {
   const response = healthResponseSchema.parse(getHealthStatus());
 
+  c.header("Cache-Control", "no-store");
   return c.json(response);
 }

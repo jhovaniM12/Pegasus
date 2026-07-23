@@ -1,4 +1,4 @@
-import { Column, Entity, JoinColumn, ManyToOne, Unique } from "typeorm";
+import { Column, Entity, JoinColumn, ManyToOne, Unique, VersionColumn } from "typeorm";
 import { PegasusBaseEntity } from "./base.entity.js";
 import { FairCategoryStage } from "./staged-flow.entity.js";
 import { JudgingParticipant } from "./staged-flow.entity.js";
@@ -89,6 +89,9 @@ export class JudgingRound extends PegasusBaseEntity {
 @Unique("UQ_judging_round_forms_round_judge", ["roundId", "judgeUserId"])
 @Entity({ name: "judging_round_forms" })
 export class JudgingRoundForm extends PegasusBaseEntity {
+  @VersionColumn({ name: "revision", type: "integer", default: 0 })
+  revision!: number;
+
   @Column({ name: "round_id", type: "uuid" })
   roundId!: string;
 

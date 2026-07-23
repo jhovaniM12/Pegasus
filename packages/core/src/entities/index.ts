@@ -18,5 +18,6 @@ export * from "./sync.entity.js";
 export * from "./judging-reminder.entity.js";
 export * from "./judging-round-entry-annotations.entity.js";
 export * from "./judging-rounds.entity.js";
+export * from "./offline-operation-receipt.entity.js";
 export * from "./title.entity.js";
 export * from "./user.entity.js";

@@ -1,4 +1,4 @@
-import { Column, Entity, JoinColumn, ManyToOne, Unique } from "typeorm";
+import { Column, Entity, JoinColumn, ManyToOne, Unique, VersionColumn } from "typeorm";
 import { PegasusBaseEntity, SyncableEntity } from "./base.entity.js";
 import { Category } from "./category.entity.js";
 import { FairEntry } from "./fair-entries.js";
@@ -31,6 +31,9 @@ export type FaRepeatTrackRequestStatus = "PENDING" | "EXECUTED";
 @Unique("UQ_fair_category_stages_fair_category", ["fairId", "categoryId"])
 @Entity({ name: "fair_category_stages" })
 export class FairCategoryStage extends PegasusBaseEntity {
+  @VersionColumn({ name: "revision", type: "integer", default: 0 })
+  revision!: number;
+
   @Column({ name: "fair_id", type: "uuid" })
   fairId!: string;
 
@@ -91,6 +94,9 @@ export class FairCategoryStage extends PegasusBaseEntity {
 @Unique("UQ_veterinary_checks_stage_entry", ["fairCategoryStageId", "fairEntryId"])
 @Entity({ name: "veterinary_checks" })
 export class VeterinaryCheck extends PegasusBaseEntity {
+  @VersionColumn({ name: "revision", type: "integer", default: 0 })
+  revision!: number;
+
   @Column({ name: "fair_category_stage_id", type: "uuid" })
   fairCategoryStageId!: string;
 
@@ -188,6 +194,9 @@ export class JudgingParticipant extends PegasusBaseEntity {
 @Unique("UQ_fa_judge_forms_stage_judge", ["fairCategoryStageId", "judgeUserId"])
 @Entity({ name: "fa_judge_forms" })
 export class FaJudgeForm extends PegasusBaseEntity {
+  @VersionColumn({ name: "revision", type: "integer", default: 0 })
+  revision!: number;
+
   @Column({ name: "fair_category_stage_id", type: "uuid" })
   fairCategoryStageId!: string;
 
