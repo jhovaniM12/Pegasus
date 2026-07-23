@@ -108,8 +108,27 @@ export async function executeIdempotentMutation<TResponse>(
 
   if (existing) {
     if (existing.requestHash !== requestHash) {
+      console.info("[pegasus-offline]", "OFFLINE_MUTATION_REJECTED", {
+        operationId: input.operationId,
+        userId: input.userId,
+        stageId: input.stageId,
+        aggregateType: input.aggregateType,
+        aggregateId: input.aggregateId,
+        baseRevision: input.baseRevision,
+        resultCode: "IDEMPOTENCY_KEY_REUSED",
+      });
       throw new IdempotencyKeyReusedError(input.operationId);
     }
+
+    console.info("[pegasus-offline]", "OFFLINE_MUTATION_DUPLICATE", {
+      operationId: input.operationId,
+      userId: input.userId,
+      stageId: input.stageId,
+      aggregateType: input.aggregateType,
+      aggregateId: input.aggregateId,
+      baseRevision: input.baseRevision,
+      appliedRevision: existing.appliedRevision,
+    });
 
     return {
       responsePayload: existing.responsePayload as TResponse,
@@ -133,6 +152,16 @@ export async function executeIdempotentMutation<TResponse>(
     appliedRevision: applied.appliedRevision,
   });
   await repository.save(receipt);
+
+  console.info("[pegasus-offline]", "OFFLINE_MUTATION_ACCEPTED", {
+    operationId: input.operationId,
+    userId: input.userId,
+    stageId: input.stageId,
+    aggregateType: input.aggregateType,
+    aggregateId: input.aggregateId,
+    baseRevision: input.baseRevision,
+    appliedRevision: applied.appliedRevision,
+  });
 
   return {
     responsePayload: applied.responsePayload,

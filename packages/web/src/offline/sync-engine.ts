@@ -9,7 +9,9 @@ import {
   markMutationStatus,
   recoverStaleSyncingMutations,
 } from "./offline-repository";
+import { markLastSuccessfulSyncAt, purgeExpiredOfflineConfirmations } from "./retention";
 import type { OfflineMutation } from "./schema";
+import { recordOfflineTelemetry } from "./telemetry";
 
 export type VetCheckMutationPayload = {
   fairEntryId: string;
@@ -146,6 +148,15 @@ async function handleSyncError(
       lastErrorMessage: message,
       lastErrorDetails: details ?? null,
     });
+    recordOfflineTelemetry("OFFLINE_MUTATION_CONFLICT", {
+      operationId: mutation.operationId,
+      userId: mutation.userId,
+      stageId: mutation.stageId,
+      aggregateType: mutation.aggregateType,
+      aggregateId: mutation.aggregateId,
+      baseRevision: mutation.baseRevision,
+      resultCode: code,
+    });
     return "conflict";
   }
 
@@ -155,6 +166,15 @@ async function handleSyncError(
       lastErrorCode: code,
       lastErrorMessage: message,
       lastErrorDetails: apiError?.details ?? null,
+    });
+    recordOfflineTelemetry("OFFLINE_MUTATION_CONFLICT", {
+      operationId: mutation.operationId,
+      userId: mutation.userId,
+      stageId: mutation.stageId,
+      aggregateType: mutation.aggregateType,
+      aggregateId: mutation.aggregateId,
+      baseRevision: mutation.baseRevision,
+      resultCode: code,
     });
     return "conflict";
   }
@@ -177,13 +197,52 @@ async function handleSyncError(
     lastErrorDetails: apiError?.details ?? null,
     nextRetryAt: retryable ? new Date(Date.now() + 5_000).toISOString() : null,
   });
+  if (!retryable) {
+    recordOfflineTelemetry("OFFLINE_MUTATION_REJECTED", {
+      operationId: mutation.operationId,
+      userId: mutation.userId,
+      stageId: mutation.stageId,
+      aggregateType: mutation.aggregateType,
+      aggregateId: mutation.aggregateId,
+      baseRevision: mutation.baseRevision,
+      resultCode: code,
+    });
+  }
   return "failed";
+}
+
+async function finishSyncBatch(
+  userId: string,
+  stageId: string,
+  startedAt: number,
+  result: { synced: number; conflicts: number; failed: number }
+): Promise<void> {
+  await purgeExpiredOfflineConfirmations();
+  if (result.synced > 0) {
+    await markLastSuccessfulSyncAt();
+    recordOfflineTelemetry("OFFLINE_MUTATION_ACCEPTED", {
+      userId,
+      stageId,
+      syncedCount: result.synced,
+      durationMs: Date.now() - startedAt,
+      resultCode: "BATCH",
+    });
+  }
+  recordOfflineTelemetry("OFFLINE_SYNC_BATCH_COMPLETED", {
+    userId,
+    stageId,
+    syncedCount: result.synced,
+    conflictCount: result.conflicts,
+    failedCount: result.failed,
+    durationMs: Date.now() - startedAt,
+  });
 }
 
 export async function syncVeterinaryStage(
   userId: string,
   stageId: string
 ): Promise<SyncVetStageResult> {
+  const startedAt = Date.now();
   await recoverStaleSyncingMutations(userId, stageId);
   const online = await checkPegasusConnectivity();
   if (!online) {
@@ -234,7 +293,9 @@ export async function syncVeterinaryStage(
     if (stoppedForSession || conflicts > 0 || failed > 0) break;
   }
 
-  return { synced, conflicts, failed, checks: latestChecks };
+  const result = { synced, conflicts, failed, checks: latestChecks };
+  await finishSyncBatch(userId, stageId, startedAt, result);
+  return result;
 }
 
 async function syncFaMutation(
@@ -282,6 +343,7 @@ async function syncFaMutation(
 }
 
 export async function syncFaStage(userId: string, stageId: string): Promise<SyncFaStageResult> {
+  const startedAt = Date.now();
   await recoverStaleSyncingMutations(userId, stageId);
   const online = await checkPegasusConnectivity();
   if (!online) {
@@ -330,7 +392,9 @@ export async function syncFaStage(userId: string, stageId: string): Promise<Sync
     if (stoppedForSession || conflicts > 0 || failed > 0) break;
   }
 
-  return { synced, conflicts, failed, fa: latestFa };
+  const result = { synced, conflicts, failed, fa: latestFa };
+  await finishSyncBatch(userId, stageId, startedAt, result);
+  return result;
 }
 
 function isRoundFormPayload(payload: unknown): payload is RoundFormMutationPayload {
@@ -508,6 +572,7 @@ async function syncRoundRemindersMutation(
 }
 
 export async function syncRoundStage(userId: string, stageId: string): Promise<SyncRoundStageResult> {
+  const startedAt = Date.now();
   await recoverStaleSyncingMutations(userId, stageId);
   const online = await checkPegasusConnectivity();
   if (!online) {
@@ -581,5 +646,7 @@ export async function syncRoundStage(userId: string, stageId: string): Promise<S
     if (stoppedForSession || conflicts > 0 || failed > 0) break;
   }
 
-  return { synced, conflicts, failed, round: latestRound };
+  const result = { synced, conflicts, failed, round: latestRound };
+  await finishSyncBatch(userId, stageId, startedAt, result);
+  return result;
 }

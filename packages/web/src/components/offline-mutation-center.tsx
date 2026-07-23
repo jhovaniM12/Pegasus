@@ -10,6 +10,7 @@ import {
   recoverStaleSyncingMutations,
   retryOfflineMutation,
 } from "@/offline/offline-repository";
+import { getLastSuccessfulSyncAt } from "@/offline/retention";
 
 type Props = {
   userId: string;
@@ -18,12 +19,37 @@ type Props = {
 };
 
 function labelForStatus(status: OfflineMutation["status"]): string {
-  return {
-    PENDING: "Pendiente",
-    SYNCING: "Sincronizando",
-    CONFLICT: "Conflicto",
-    FAILED: "Fallida",
-  }[status];
+  switch (status) {
+    case "PENDING":
+      return "Pendiente";
+    case "SYNCING":
+      return "Sincronizando";
+    case "CONFLICT":
+      return "Conflicto";
+    case "FAILED":
+      return "Fallida";
+    default: {
+      const _exhaustive: never = status;
+      return _exhaustive;
+    }
+  }
+}
+
+function labelForOperation(operationType: string): string {
+  switch (operationType) {
+    case "UPDATE_VET_CHECK":
+      return "Checkeo veterinario";
+    case "UPDATE_FA_SELECTION":
+      return "Selección FA";
+    case "UPDATE_ROUND_FORM":
+      return "Tarjeta de ronda";
+    case "UPDATE_ROUND_NOTE":
+      return "Nota privada";
+    case "UPDATE_ROUND_REMINDERS":
+      return "Recordatorios";
+    default:
+      return operationType;
+  }
 }
 
 function isRevisionConflict(mutation: OfflineMutation): boolean {
@@ -34,10 +60,12 @@ export function OfflineMutationCenter({ userId, stageId, onSync }: Props) {
   const [mutations, setMutations] = useState<OfflineMutation[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     await recoverStaleSyncingMutations(userId, stageId);
     setMutations(await listMutationsForStage(userId, stageId));
+    setLastSyncAt(await getLastSuccessfulSyncAt());
   }, [stageId, userId]);
 
   useEffect(() => {
@@ -82,6 +110,11 @@ export function OfflineMutationCenter({ userId, stageId, onSync }: Props) {
           <p className="mt-1 text-sm text-amber-900">
             Revisa los cambios antes de cerrar la etapa. Descartar conserva el estado oficial del servidor.
           </p>
+          {lastSyncAt && (
+            <p className="mt-1 text-xs text-amber-800">
+              Última sincronización exitosa: {new Date(lastSyncAt).toLocaleString()}
+            </p>
+          )}
         </div>
       </div>
       <div className="mt-3 space-y-2">
@@ -97,7 +130,7 @@ export function OfflineMutationCenter({ userId, stageId, onSync }: Props) {
                 onClick={() => setExpandedId(expanded ? null : mutation.operationId)}
               >
                 <span>
-                  <span className="font-medium">{mutation.operationType}</span>
+                  <span className="font-medium">{labelForOperation(mutation.operationType)}</span>
                   <span className="ml-2 text-amber-800">{labelForStatus(mutation.status)}</span>
                 </span>
                 <ChevronDown className={`size-4 transition-transform ${expanded ? "rotate-180" : ""}`} />

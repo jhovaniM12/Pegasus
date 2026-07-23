@@ -18,6 +18,7 @@ import {
   checkPegasusConnectivity,
   type ConnectivityState,
 } from "@/offline/connectivity";
+import { useOfflineSyncSummary } from "@/hooks/use-offline-sync-summary";
 
 type NetworkStatusContextValue = {
   isOnline: boolean;
@@ -160,38 +161,74 @@ export function useNetworkStatus() {
 
 export function ConnectionIndicator({ className = "" }: { className?: string }) {
   const { connectivityState } = useNetworkStatus();
+  const { metrics, totalOpen } = useOfflineSyncSummary();
   const isOnline = connectivityState === "ONLINE";
   const isDegraded = connectivityState === "DEGRADED";
-  const Icon = isOnline ? Wifi : isDegraded ? TriangleAlert : WifiOff;
-  const title = isOnline
-    ? "Conectado a Pegaso"
-    : isDegraded
-      ? "Conexión inestable con Pegaso"
-      : "Sin conexión con Pegaso";
+  const hasConflicts = metrics.conflictCount > 0 || metrics.failedCount > 0;
+  const Icon = hasConflicts
+    ? TriangleAlert
+    : isOnline
+      ? Wifi
+      : isDegraded
+        ? TriangleAlert
+        : WifiOff;
+  const title = hasConflicts
+    ? `${metrics.conflictCount + metrics.failedCount} conflicto(s) de sincronización`
+    : metrics.syncingCount > 0
+      ? `Sincronizando ${metrics.syncingCount} cambio(s)`
+      : metrics.pendingCount > 0
+        ? `${metrics.pendingCount} cambio(s) pendientes`
+        : isOnline
+          ? "Conectado a Pegaso"
+          : isDegraded
+            ? "Conexión inestable con Pegaso"
+            : "Sin conexión con Pegaso";
 
   return (
     <div
       className={cn(
-        "flex h-10 w-10 items-center justify-center rounded-lg border",
-        isOnline
-          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-          : isDegraded
-            ? "border-amber-200 bg-amber-50 text-amber-700"
-            : "border-red-200 bg-red-50 text-red-700",
+        "relative flex h-10 w-10 items-center justify-center rounded-lg border",
+        hasConflicts
+          ? "border-amber-300 bg-amber-50 text-amber-800"
+          : isOnline
+            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+            : isDegraded
+              ? "border-amber-200 bg-amber-50 text-amber-700"
+              : "border-red-200 bg-red-50 text-red-700",
         className
       )}
       title={title}
     >
       <Icon className="size-4 shrink-0" />
+      {totalOpen > 0 && (
+        <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-600 px-1 text-[10px] font-semibold text-white">
+          {totalOpen > 9 ? "9+" : totalOpen}
+        </span>
+      )}
     </div>
   );
 }
 
 function OfflineBanner() {
   const { connectivityState } = useNetworkStatus();
+  const { metrics } = useOfflineSyncSummary();
 
-  if (connectivityState === "ONLINE") {
+  if (connectivityState === "ONLINE" && metrics.conflictCount === 0 && metrics.failedCount === 0) {
     return null;
+  }
+
+  if (connectivityState === "ONLINE" && (metrics.conflictCount > 0 || metrics.failedCount > 0)) {
+    return (
+      <div className="fixed inset-x-0 bottom-0 z-50 border-t border-amber-200 bg-amber-50 px-4 py-3 text-amber-900">
+        <div className="mx-auto flex max-w-7xl items-center justify-center gap-2 text-sm font-medium">
+          <TriangleAlert className="size-4 shrink-0" />
+          <span>
+            Hay {metrics.conflictCount + metrics.failedCount} cambio(s) con conflicto o fallidos en este
+            dispositivo. Revísalos en el centro de sincronización.
+          </span>
+        </div>
+      </div>
+    );
   }
 
   const isDegraded = connectivityState === "DEGRADED";
@@ -210,8 +247,10 @@ function OfflineBanner() {
         <Icon className="size-4 shrink-0" />
         <span>
           {isDegraded
-            ? "La conexión con Pegaso está inestable. Esperando confirmación de la API."
-            : "Sin conexión con Pegaso. Los cambios offline aún no están habilitados."}
+            ? "La conexión con Pegaso está inestable. Los cambios se guardan en este dispositivo."
+            : metrics.pendingCount > 0
+              ? `Sin conexión con Pegaso. ${metrics.pendingCount} cambio(s) guardados en este dispositivo.`
+              : "Sin conexión con Pegaso. Puedes seguir trabajando; los cambios se sincronizarán al recuperar la API."}
         </span>
       </div>
     </div>

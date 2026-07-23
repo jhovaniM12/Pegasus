@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmActionDialog } from "@/components/confirm-action-dialog";
 import { NotificationInbox } from "@/components/notification-inbox";
 import { OfflineMutationCenter } from "@/components/offline-mutation-center";
+import { syncRoundStage } from "@/offline/sync-engine";
 import { stagedFlowService } from "@/services/staged-flow.service";
 import { useToast } from "@/components/ui/toast";
 import { useStaffRealtimeRefresh } from "@/hooks/use-staff-realtime-refresh";
@@ -847,7 +848,12 @@ export default function StaffCategoryPage() {
             userId={currentUser.id}
             stageId={stageId}
             onSync={async () => {
-              await Promise.all([syncVeterinaryNow(), syncFaNow()]);
+              await Promise.all([
+                syncVeterinaryNow(),
+                syncFaNow(),
+                syncRoundStage(currentUser.id, stageId),
+              ]);
+              await load({ silent: true });
             }}
           />
         )}

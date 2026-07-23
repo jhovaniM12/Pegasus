@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { ConnectionIndicator } from "@/components/network-status";
+import { prepareStaffLogoutOffline } from "@/offline/retention";
 import { StageStatusBadge, stageStatusLabels } from "@/components/stage-status-badge";
 import { ConfirmActionDialog } from "@/components/confirm-action-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -502,6 +503,16 @@ export default function StaffPage() {
   );
 
   const logout = async () => {
+    if (currentUser?.id) {
+      const result = await prepareStaffLogoutOffline(currentUser.id);
+      if (result.blockedByPending) {
+        const proceed = window.confirm(
+          `Tienes ${result.pendingCount} cambio(s) offline pendientes en este dispositivo. ` +
+            "Se conservarán aislados para tu usuario. ¿Cerrar sesión de todos modos?"
+        );
+        if (!proceed) return;
+      }
+    }
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/login/staff");
     router.refresh();
