@@ -1415,12 +1415,27 @@ export async function closeFa(
 }
 
 export async function getManagement(user: User, stageId: string) {
+  assertUserRole(user, ["JUDGE", "TECHNICAL_DIRECTOR"]);
   const dataSource = await getDataSource();
 
   return dataSource.transaction(async (manager) => {
     const stage = await getStageOrThrow(manager, stageId);
     await assertStageAccess(manager, user, stage);
-    return getManagementForStage(manager, stage);
+    if (user.role === "JUDGE" && !stage.faConsolidatedAt) {
+      throw new ForbiddenError(
+        "Las selecciones de los jueces estarán disponibles después de consolidar el FA."
+      );
+    }
+    const management = await getManagementForStage(manager, stage);
+    if (user.role === "JUDGE") {
+      return {
+        ...management,
+        veterinaryChecks: [],
+        participants: [],
+        faRepeatTrackRequests: []
+      };
+    }
+    return management;
   });
 }
 

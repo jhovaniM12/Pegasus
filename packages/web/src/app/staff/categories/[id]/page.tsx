@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmActionDialog } from "@/components/confirm-action-dialog";
 import { NotificationInbox } from "@/components/notification-inbox";
 import { ConnectionIndicator, SyncIndicator } from "@/components/network-status";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { stagedFlowService } from "@/services/staged-flow.service";
 import { useToast } from "@/components/ui/toast";
 import { useStaffRealtimeRefresh } from "@/hooks/use-staff-realtime-refresh";
@@ -26,7 +27,7 @@ import { FaActionsLegend } from "./_components/fa-actions-legend";
 import { FaDisqualifyDialog } from "./_components/fa-disqualify-dialog";
 import { FaRepeatTrackDialog } from "./_components/fa-repeat-track-dialog";
 import { FaClosedState } from "./_components/fa-closed-state";
-import { FaConsolidatedBanner } from "./_components/fa-consolidated-banner";
+import { FaConsolidatedDetail } from "./_components/fa-consolidated-detail";
 import { ManagementView } from "./_components/management-view";
 import { JudgeRoundWorkspace } from "./_components/judge-round-workspace";
 import { DirectorRounds } from "./_components/director-rounds";
@@ -50,6 +51,15 @@ import type {
 } from "@/types/staged-flow";
 
 const JUDGE_ROUND_STATUSES: StagedCategory["status"][] = [
+  "F1_IN_PROGRESS",
+  "F1_CONSOLIDATED",
+  "F2_IN_PROGRESS",
+  "TIE_BREAK_IN_PROGRESS",
+  "JUDGING_CLOSED",
+];
+
+const FA_CONSOLIDATED_STATUSES: StagedCategory["status"][] = [
+  "FA_CONSOLIDATED",
   "F1_IN_PROGRESS",
   "F1_CONSOLIDATED",
   "F2_IN_PROGRESS",
@@ -82,7 +92,7 @@ function resolveJudgeView(viewParam: string | null): "FA" | "F1" | "F2" | "TIE_B
 // director técnico abrió F1 mientras un juez seguía en "?view=FA"), la vista quedó
 // obsoleta y el juez debe ser redirigido a la fase vigente en vez de quedar "en el limbo".
 const JUDGE_VIEW_VALID_STATUSES: Record<"FA" | "F1" | "F2" | "TIE_BREAK", StagedCategory["status"][]> = {
-  FA: ["JUDGING_STARTED", "FA_CONSOLIDATED"],
+  FA: ["JUDGING_STARTED", ...FA_CONSOLIDATED_STATUSES],
   F1: ["FA_CONSOLIDATED", "F1_IN_PROGRESS", "F1_CONSOLIDATED"],
   F2: ["F1_CONSOLIDATED", "F2_IN_PROGRESS"],
   TIE_BREAK: ["F2_IN_PROGRESS", "TIE_BREAK_IN_PROGRESS"],
@@ -114,6 +124,7 @@ async function loadJudgeWorkspace(
   fa: FaState | null;
   round: RoundState | null;
   roundsManagement: RoundsManagement | null;
+  management: ManagementState | null;
 }> {
   const view = resolveJudgeView(viewParam);
   const judgeHasClosedFa = current.judge?.faFormStatus === "CLOSED";
@@ -121,13 +132,17 @@ async function loadJudgeWorkspace(
   if (view === "FA") {
     const response = await stagedFlowService.getFa(stageId);
     const fa = response.data ?? null;
-    return { summary: fa?.stage ?? current, fa, round: null, roundsManagement: null };
+    const summary = fa?.stage ?? current;
+    const management = FA_CONSOLIDATED_STATUSES.includes(summary.status)
+      ? (await stagedFlowService.getManagement(stageId)).data ?? null
+      : null;
+    return { summary, fa, round: null, roundsManagement: null, management };
   }
 
   if (view != null) {
     const response = await stagedFlowService.getRoundByType(stageId, view);
     const round = response.data ?? null;
-    return { summary: round?.stage ?? current, fa: null, round, roundsManagement: null };
+    return { summary: round?.stage ?? current, fa: null, round, roundsManagement: null, management: null };
   }
 
   if (current.status === "JUDGING_CLOSED") {
@@ -138,34 +153,44 @@ async function loadJudgeWorkspace(
       fa: null,
       round: null,
       roundsManagement,
+      management: null,
     };
   }
 
   if (current.status === "JUDGING_STARTED") {
     const response = await stagedFlowService.getFa(stageId);
     const fa = response.data ?? null;
-    return { summary: fa?.stage ?? current, fa, round: null, roundsManagement: null };
+    return { summary: fa?.stage ?? current, fa, round: null, roundsManagement: null, management: null };
   }
 
   if (judgeHasClosedFa && current.status === "FA_CONSOLIDATED") {
-    const response = await stagedFlowService.getFa(stageId);
-    const fa = response.data ?? null;
-    return { summary: fa?.stage ?? current, fa, round: null, roundsManagement: null };
+    const [faResponse, managementResponse] = await Promise.all([
+      stagedFlowService.getFa(stageId),
+      stagedFlowService.getManagement(stageId),
+    ]);
+    const fa = faResponse.data ?? null;
+    return {
+      summary: fa?.stage ?? current,
+      fa,
+      round: null,
+      roundsManagement: null,
+      management: managementResponse.data ?? null,
+    };
   }
 
   if (JUDGE_ROUND_STATUSES.includes(current.status)) {
     const response = await stagedFlowService.getRound(stageId);
     const round = response.data ?? null;
-    return { summary: round?.stage ?? current, fa: null, round, roundsManagement: null };
+    return { summary: round?.stage ?? current, fa: null, round, roundsManagement: null, management: null };
   }
 
   if (judgeHasClosedFa) {
     const response = await stagedFlowService.getFa(stageId);
     const fa = response.data ?? null;
-    return { summary: fa?.stage ?? current, fa, round: null, roundsManagement: null };
+    return { summary: fa?.stage ?? current, fa, round: null, roundsManagement: null, management: null };
   }
 
-  return { summary: current, fa: null, round: null, roundsManagement: null };
+  return { summary: current, fa: null, round: null, roundsManagement: null, management: null };
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -339,13 +364,14 @@ export default function StaffCategoryPage() {
           }
 
           if (isJudgeViewStale("FA", summaryData.status)) {
-            // El director técnico avanzó la etapa (F1, F2, desempate, cierre) mientras el
-            // juez seguía anclado en "?view=FA". Se limpia el parámetro para que la carga
-            // sin vista fijada resuelva y muestre la fase vigente automáticamente.
+            // Antes de consolidar, la vista FA deja de ser válida si la etapa cambia.
             router.replace(`/staff/categories/${stageId}`);
             return;
           }
 
+          const faManagement = FA_CONSOLIDATED_STATUSES.includes(summaryData.status)
+            ? (await stagedFlowService.getManagement(stageId)).data ?? null
+            : null;
           setSummary(summaryData);
           setFa(faData);
           if (faData) {
@@ -353,6 +379,7 @@ export default function StaffCategoryPage() {
           }
           setRound(null);
           setRoundsManagement(null);
+          setManagement(faManagement);
           return;
         } catch (error) {
           if (isUnauthorizedError(error)) throw error;
@@ -363,6 +390,7 @@ export default function StaffCategoryPage() {
             setFa(offlineSnapshot.fa);
             setRound(null);
             setRoundsManagement(null);
+            setManagement(null);
             if (!silent) {
               toast({
                 title: "Modo offline",
@@ -417,6 +445,7 @@ export default function StaffCategoryPage() {
           setFa(null);
           setRound(roundData);
           setRoundsManagement(null);
+          setManagement(null);
           return;
         } catch (error) {
           if (isUnauthorizedError(error)) throw error;
@@ -432,6 +461,7 @@ export default function StaffCategoryPage() {
               setFa(null);
               setRound(offlineSnapshot.round);
               setRoundsManagement(null);
+              setManagement(null);
               if (!silent) {
                 toast({
                   title: "Modo offline",
@@ -526,6 +556,7 @@ export default function StaffCategoryPage() {
           setFa(null);
           setRound(null);
           setRoundsManagement(null);
+          setManagement(null);
           return;
         } catch (error) {
           if (isUnauthorizedError(error)) throw error;
@@ -536,6 +567,7 @@ export default function StaffCategoryPage() {
             setFa(null);
             setRound(null);
             setRoundsManagement(null);
+            setManagement(null);
             if (!silent) {
               toast({
                 title: "Modo offline",
@@ -576,6 +608,7 @@ export default function StaffCategoryPage() {
           }
           setRound(workspace.round);
           setRoundsManagement(workspace.roundsManagement);
+          setManagement(workspace.management);
         } catch (error) {
           if (isUnauthorizedError(error)) throw error;
 
@@ -810,14 +843,15 @@ export default function StaffCategoryPage() {
   return (
     <PushNotificationProvider userId={currentUser?.id}>
       <ContentReveal>
-        <div className="min-h-screen bg-[#f5f7fb]">
-      <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 px-4 py-4 backdrop-blur">
+        <div className="min-h-screen bg-background">
+      <header className="sticky top-0 z-10 border-b border-border bg-background/90 px-4 py-4 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
-          <Link href="/staff" className="inline-flex items-center gap-2 text-sm font-medium text-slate-600">
+          <Link href="/staff" className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground">
             <ArrowLeft className="size-4" />
             Volver
           </Link>
           <div className="flex items-center gap-2">
+            <ThemeToggle />
             <SyncIndicator
               stageId={stageId}
               onAfterSync={
@@ -1024,12 +1058,6 @@ export default function StaffCategoryPage() {
               </div>
             </div>
 
-            {(fa.consolidated ?? []).length > 0 && (
-              <div className="mt-4">
-                <FaConsolidatedBanner consolidated={fa.consolidated ?? []} />
-              </div>
-            )}
-
             {fa.form.status === "CLOSED" && (
               <div className="mt-4">
                 <FaClosedState
@@ -1037,7 +1065,18 @@ export default function StaffCategoryPage() {
                   selectedCount={fa.form.selectedCount}
                   stageStatus={summary.status}
                   syncUnavailable={sessionExpired}
-                  hideConsolidatedNotice={(fa.consolidated ?? []).length > 0}
+                  consolidated={fa.consolidated ?? []}
+                />
+              </div>
+            )}
+
+            {management && FA_CONSOLIDATED_STATUSES.includes(summary.status) && (
+              <div className="mt-4">
+                <FaConsolidatedDetail
+                  embedded
+                  judgeForms={management.judgeForms}
+                  consolidated={management.consolidated}
+                  judgingStartedAt={management.summary.judgingStartedAt}
                 />
               </div>
             )}
