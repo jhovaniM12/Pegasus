@@ -88,8 +88,6 @@ export function useRoundForm({
         onSyncNotice?.(
           "Hay conflictos de sincronización en la tarjeta. Revisa antes de cerrar."
         );
-      } else if (result.synced > 0) {
-        onSyncNotice?.("Tarjeta sincronizada con Pegaso.");
       }
       return result;
     } finally {

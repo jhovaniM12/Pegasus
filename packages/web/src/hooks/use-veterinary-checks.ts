@@ -107,8 +107,6 @@ export function useVeterinaryChecks({
         onSyncNotice?.(
           "Hay conflictos de sincronización. Revisa los checkeos antes de cerrar la pre-pista."
         );
-      } else if (result.synced > 0) {
-        onSyncNotice?.("Checkeos veterinarios sincronizados con Pegaso.");
       }
       return result;
     } finally {

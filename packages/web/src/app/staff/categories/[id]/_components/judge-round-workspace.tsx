@@ -135,7 +135,7 @@ export function JudgeRoundWorkspace({
     round,
     onRoundChange: onLocalUpdate,
     onSyncNotice: (message) => {
-      toast({ title: "Sincronización", description: message, variant: "success" });
+      toast({ title: "Conflicto de sincronización", description: message, variant: "error" });
     },
   });
 

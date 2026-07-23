@@ -7,7 +7,7 @@ import { ArrowLeft, Gavel, Lock, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmActionDialog } from "@/components/confirm-action-dialog";
 import { NotificationInbox } from "@/components/notification-inbox";
-import { OfflineMutationCenter } from "@/components/offline-mutation-center";
+import { ConnectionIndicator, SyncIndicator } from "@/components/network-status";
 import { syncRoundStage } from "@/offline/sync-engine";
 import { stagedFlowService } from "@/services/staged-flow.service";
 import { useToast } from "@/components/ui/toast";
@@ -237,9 +237,9 @@ export default function StaffCategoryPage() {
     },
     onSyncNotice: (message) => {
       toast({
-        title: "Sincronización",
+        title: "Conflicto de sincronización",
         description: message,
-        variant: "success",
+        variant: "error",
       });
     },
   });
@@ -280,9 +280,9 @@ export default function StaffCategoryPage() {
     },
     onSyncNotice: (message) => {
       toast({
-        title: "Sincronización",
+        title: "Conflicto de sincronización",
         description: message,
-        variant: "success",
+        variant: "error",
       });
     },
   });
@@ -814,16 +814,35 @@ export default function StaffCategoryPage() {
     <PushNotificationProvider userId={currentUser?.id}>
       <ContentReveal>
         <div className="min-h-screen bg-[#f5f7fb]">
-      <main className="mx-auto w-full max-w-6xl px-4 py-6">
-        {/* Top bar */}
-        <div className="mb-4 flex items-center justify-between gap-3">
+      <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 px-4 py-4 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
           <Link href="/staff" className="inline-flex items-center gap-2 text-sm font-medium text-slate-600">
             <ArrowLeft className="size-4" />
             Volver
           </Link>
-          <NotificationInbox />
+          <div className="flex items-center gap-2">
+            <SyncIndicator
+              stageId={stageId}
+              onSyncStage={
+                currentUser
+                  ? async () => {
+                      await Promise.all([
+                        syncVeterinaryNow(),
+                        syncFaNow(),
+                        syncRoundStage(currentUser.id, stageId),
+                      ]);
+                      await load({ silent: true });
+                    }
+                  : undefined
+              }
+            />
+            <NotificationInbox />
+            <ConnectionIndicator />
+          </div>
         </div>
+      </header>
 
+      <main className="mx-auto w-full max-w-6xl px-4 py-6">
         {sessionExpired && (
           <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -841,21 +860,6 @@ export default function StaffCategoryPage() {
               </Button>
             </div>
           </div>
-        )}
-
-        {currentUser && (
-          <OfflineMutationCenter
-            userId={currentUser.id}
-            stageId={stageId}
-            onSync={async () => {
-              await Promise.all([
-                syncVeterinaryNow(),
-                syncFaNow(),
-                syncRoundStage(currentUser.id, stageId),
-              ]);
-              await load({ silent: true });
-            }}
-          />
         )}
 
         {currentUser?.role === "TECHNICAL_DIRECTOR" && (

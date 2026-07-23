@@ -10,8 +10,14 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { TriangleAlert, Wifi, WifiOff } from "lucide-react";
+import { RefreshCw, TriangleAlert, Wifi, WifiOff } from "lucide-react";
 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { OfflineMutationCenter } from "@/components/offline-mutation-center";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import {
@@ -161,51 +167,124 @@ export function useNetworkStatus() {
 
 export function ConnectionIndicator({ className = "" }: { className?: string }) {
   const { connectivityState } = useNetworkStatus();
-  const { metrics, totalOpen } = useOfflineSyncSummary();
   const isOnline = connectivityState === "ONLINE";
   const isDegraded = connectivityState === "DEGRADED";
-  const hasConflicts = metrics.conflictCount > 0 || metrics.failedCount > 0;
-  const Icon = hasConflicts
-    ? TriangleAlert
-    : isOnline
-      ? Wifi
-      : isDegraded
-        ? TriangleAlert
-        : WifiOff;
-  const title = hasConflicts
-    ? `${metrics.conflictCount + metrics.failedCount} conflicto(s) de sincronización`
-    : metrics.syncingCount > 0
-      ? `Sincronizando ${metrics.syncingCount} cambio(s)`
-      : metrics.pendingCount > 0
-        ? `${metrics.pendingCount} cambio(s) pendientes`
-        : isOnline
-          ? "Conectado a Pegaso"
-          : isDegraded
-            ? "Conexión inestable con Pegaso"
-            : "Sin conexión con Pegaso";
+  const Icon = isOnline ? Wifi : isDegraded ? TriangleAlert : WifiOff;
+  const title = isOnline
+    ? "Conectado a Pegaso"
+    : isDegraded
+      ? "Conexión inestable con Pegaso"
+      : "Sin conexión con Pegaso";
 
   return (
     <div
       className={cn(
         "relative flex h-10 w-10 items-center justify-center rounded-lg border",
-        hasConflicts
-          ? "border-amber-300 bg-amber-50 text-amber-800"
-          : isOnline
-            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-            : isDegraded
-              ? "border-amber-200 bg-amber-50 text-amber-700"
-              : "border-red-200 bg-red-50 text-red-700",
+        isOnline
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+          : isDegraded
+            ? "border-amber-200 bg-amber-50 text-amber-700"
+            : "border-red-200 bg-red-50 text-red-700",
         className
       )}
       title={title}
+      aria-label={title}
     >
       <Icon className="size-4 shrink-0" />
-      {totalOpen > 0 && (
-        <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-600 px-1 text-[10px] font-semibold text-white">
-          {totalOpen > 9 ? "9+" : totalOpen}
-        </span>
-      )}
     </div>
+  );
+}
+
+type SyncIndicatorProps = {
+  className?: string;
+  /** Si se indica junto a onSyncStage, el desplegable muestra el detalle de esa etapa. */
+  stageId?: string;
+  onSyncStage?: () => Promise<void>;
+};
+
+export function SyncIndicator({ className = "", stageId, onSyncStage }: SyncIndicatorProps) {
+  const { userId, metrics, totalOpen } = useOfflineSyncSummary();
+  const hasConflicts = metrics.conflictCount > 0 || metrics.failedCount > 0;
+  const isSyncing = metrics.syncingCount > 0;
+  const title = hasConflicts
+    ? `${metrics.conflictCount + metrics.failedCount} conflicto(s) de sincronización`
+    : isSyncing
+      ? `Sincronizando ${metrics.syncingCount} cambio(s)…`
+      : metrics.pendingCount > 0
+        ? `${metrics.pendingCount} cambio(s) pendientes`
+        : "Sincronización al día";
+
+  const showStageDetail = Boolean(stageId && onSyncStage && userId);
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <button
+            type="button"
+            aria-label={title}
+            title={title}
+            className={cn(
+              "relative flex h-10 w-10 items-center justify-center rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300",
+              hasConflicts
+                ? "border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                : isSyncing
+                  ? "border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100"
+                  : totalOpen > 0
+                    ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                    : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-white",
+              className
+            )}
+          >
+            <RefreshCw className={cn("size-4 shrink-0", isSyncing && "animate-spin")} />
+            {totalOpen > 0 && (
+              <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-600 px-1 text-[10px] font-semibold text-white">
+                {totalOpen > 9 ? "9+" : totalOpen}
+              </span>
+            )}
+          </button>
+        }
+      />
+      <DropdownMenuContent align="end" className="w-auto p-0">
+        {showStageDetail ? (
+          <OfflineMutationCenter
+            userId={userId as string}
+            stageId={stageId as string}
+            onSync={onSyncStage as () => Promise<void>}
+          />
+        ) : (
+          <div className="w-72 p-3 text-sm">
+            <p className="font-semibold text-slate-950">Estado de sincronización</p>
+            <dl className="mt-2 space-y-1 text-xs text-slate-600">
+              <div className="flex justify-between">
+                <dt>Pendientes</dt>
+                <dd className="font-medium text-slate-800">{metrics.pendingCount}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt>Sincronizando</dt>
+                <dd className="font-medium text-slate-800">{metrics.syncingCount}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt>Conflictos</dt>
+                <dd className="font-medium text-slate-800">{metrics.conflictCount}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt>Fallidos</dt>
+                <dd className="font-medium text-slate-800">{metrics.failedCount}</dd>
+              </div>
+            </dl>
+            {metrics.lastSuccessfulSyncAt && (
+              <p className="mt-2 text-xs text-slate-500">
+                Última sincronización exitosa: {new Date(metrics.lastSuccessfulSyncAt).toLocaleString()}
+              </p>
+            )}
+            {totalOpen === 0 && (
+              <p className="mt-2 text-xs text-slate-500">No hay cambios pendientes en este dispositivo.</p>
+            )}
+          </div>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

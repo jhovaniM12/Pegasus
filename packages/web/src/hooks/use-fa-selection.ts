@@ -129,8 +129,6 @@ export function useFaSelection({
         onSyncNotice?.(
           "Hay conflictos de sincronización en el FA. Revisa la selección antes de cerrar."
         );
-      } else if (result.synced > 0) {
-        onSyncNotice?.("Selección FA sincronizada con Pegaso.");
       }
 
       return result;

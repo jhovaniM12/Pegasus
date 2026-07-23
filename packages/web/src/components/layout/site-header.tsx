@@ -13,6 +13,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
+import { ConnectionIndicator, SyncIndicator } from "@/components/network-status";
 import { Fragment } from "react";
 
 const routeLabels: Record<string, string> = {
@@ -52,7 +53,7 @@ export function SiteHeader() {
 
   return (
     <header className="flex h-16 shrink-0 items-center gap-2 border-b border-border px-4 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 flex-1 items-center gap-2">
         <SidebarTrigger className="-ml-1" />
         <Separator
           orientation="vertical"
@@ -76,6 +77,10 @@ export function SiteHeader() {
             ))}
           </BreadcrumbList>
         </Breadcrumb>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <SyncIndicator />
+        <ConnectionIndicator />
       </div>
     </header>
   );

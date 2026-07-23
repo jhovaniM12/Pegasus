@@ -20,7 +20,7 @@ import {
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { ConnectionIndicator } from "@/components/network-status";
+import { ConnectionIndicator, SyncIndicator } from "@/components/network-status";
 import { prepareStaffLogoutOffline } from "@/offline/retention";
 import { StageStatusBadge, stageStatusLabels } from "@/components/stage-status-badge";
 import { ConfirmActionDialog } from "@/components/confirm-action-dialog";
@@ -557,6 +557,7 @@ export default function StaffPage() {
           </div>
           <div className="hidden items-center gap-3 sm:flex">
             <PushNotificationPrompt />
+            <SyncIndicator />
             <NotificationInbox />
             <ConnectionIndicator />
             <StaffUserMenu currentUser={currentUser} onLogout={logout} className="max-w-72" />
@@ -568,6 +569,7 @@ export default function StaffPage() {
         <div className="mb-4 space-y-3 sm:hidden">
           <PushNotificationPrompt className="flex-wrap" />
           <div className="flex items-center gap-3">
+            <SyncIndicator className="shrink-0" />
             <NotificationInbox />
             <ConnectionIndicator className="shrink-0" />
             <StaffUserMenu currentUser={currentUser} onLogout={logout} className="w-full bg-white" />

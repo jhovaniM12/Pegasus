@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, ChevronDown, RotateCcw, Trash2 } from "lucide-react";
+import { ChevronDown, RotateCcw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { OfflineMutation } from "@/offline/schema";
 import {
@@ -61,6 +61,7 @@ export function OfflineMutationCenter({ userId, stageId, onSync }: Props) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
+  const [syncingAll, setSyncingAll] = useState(false);
 
   const refresh = useCallback(async () => {
     await recoverStaleSyncingMutations(userId, stageId);
@@ -99,31 +100,56 @@ export function OfflineMutationCenter({ userId, stageId, onSync }: Props) {
     }
   };
 
-  if (mutations.length === 0) return null;
+  const syncAll = async () => {
+    setSyncingAll(true);
+    try {
+      await onSync();
+    } finally {
+      await refresh();
+      setSyncingAll(false);
+    }
+  };
+
+  if (mutations.length === 0) {
+    return (
+      <div className="p-3 text-sm text-slate-600" aria-label="Cambios offline">
+        <p className="font-medium text-slate-800">Todo sincronizado</p>
+        <p className="mt-1 text-xs text-slate-500">
+          No hay cambios pendientes en este dispositivo para esta categoría.
+        </p>
+        {lastSyncAt && (
+          <p className="mt-1 text-xs text-slate-500">
+            Última sincronización exitosa: {new Date(lastSyncAt).toLocaleString()}
+          </p>
+        )}
+      </div>
+    );
+  }
 
   return (
-    <section className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-4" aria-label="Cambios offline">
-      <div className="flex items-start gap-3">
-        <AlertTriangle className="mt-0.5 size-5 shrink-0 text-amber-700" />
-        <div className="min-w-0 flex-1">
-          <h2 className="font-semibold text-amber-950">Cambios pendientes de este dispositivo</h2>
-          <p className="mt-1 text-sm text-amber-900">
-            Revisa los cambios antes de cerrar la etapa. Descartar conserva el estado oficial del servidor.
-          </p>
-          {lastSyncAt && (
-            <p className="mt-1 text-xs text-amber-800">
-              Última sincronización exitosa: {new Date(lastSyncAt).toLocaleString()}
-            </p>
-          )}
-        </div>
+    <div className="max-h-[70vh] w-[min(22rem,calc(100vw-2rem))] overflow-y-auto p-3" aria-label="Cambios offline">
+      <div className="flex items-start justify-between gap-2">
+        <p className="font-semibold text-slate-950">Cambios pendientes de este dispositivo</p>
+        <Button type="button" size="xs" variant="outline" disabled={syncingAll} onClick={() => void syncAll()}>
+          <RotateCcw className={`size-3.5 ${syncingAll ? "animate-spin" : ""}`} />
+          Sincronizar
+        </Button>
       </div>
+      <p className="mt-1 text-xs text-slate-600">
+        Revisa los cambios antes de cerrar la etapa. Descartar conserva el estado oficial del servidor.
+      </p>
+      {lastSyncAt && (
+        <p className="mt-1 text-xs text-slate-500">
+          Última sincronización exitosa: {new Date(lastSyncAt).toLocaleString()}
+        </p>
+      )}
       <div className="mt-3 space-y-2">
         {mutations.map((mutation) => {
           const expanded = expandedId === mutation.operationId;
           const busy = busyId === mutation.operationId;
           const revisionConflict = isRevisionConflict(mutation);
           return (
-            <div key={mutation.operationId} className="rounded-md border border-amber-200 bg-white p-3 text-sm">
+            <div key={mutation.operationId} className="rounded-md border border-slate-200 bg-white p-3 text-sm">
               <button
                 type="button"
                 className="flex w-full items-center justify-between gap-3 text-left"
@@ -131,7 +157,7 @@ export function OfflineMutationCenter({ userId, stageId, onSync }: Props) {
               >
                 <span>
                   <span className="font-medium">{labelForOperation(mutation.operationType)}</span>
-                  <span className="ml-2 text-amber-800">{labelForStatus(mutation.status)}</span>
+                  <span className="ml-2 text-amber-700">{labelForStatus(mutation.status)}</span>
                 </span>
                 <ChevronDown className={`size-4 transition-transform ${expanded ? "rotate-180" : ""}`} />
               </button>
@@ -177,6 +203,6 @@ export function OfflineMutationCenter({ userId, stageId, onSync }: Props) {
           );
         })}
       </div>
-    </section>
+    </div>
   );
 }
