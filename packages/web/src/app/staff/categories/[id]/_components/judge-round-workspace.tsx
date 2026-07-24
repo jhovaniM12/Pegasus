@@ -94,6 +94,33 @@ function syncParticipantsWithPositions(
   }));
 }
 
+/**
+ * Con mutaciones de tarjeta pendientes, preserva selección/puestos locales y
+ * incorpora anotaciones (nota, recordatorios, descalificación) del round entrante.
+ */
+function mergeIncomingAnnotations(
+  local: RoundParticipant[],
+  incoming: RoundParticipant[]
+): RoundParticipant[] {
+  const byId = new Map(incoming.map((participant) => [participant.id, participant]));
+  return local.map((participant) => {
+    const next = byId.get(participant.id);
+    if (!next) return participant;
+    return {
+      ...participant,
+      privateNote: next.privateNote,
+      reminders: next.reminders,
+      status: next.status,
+      disqualificationReason: next.disqualificationReason,
+      disqualifiedBy: next.disqualifiedBy,
+      horseName: next.horseName,
+      riderName: next.riderName,
+      registrationNumber: next.registrationNumber,
+      trackPosition: next.trackPosition,
+    };
+  });
+}
+
 export function JudgeRoundWorkspace({
   stageId,
   userId,
@@ -232,12 +259,55 @@ export function JudgeRoundWorkspace({
       localDesertedPositionsRef.current = round.form?.desertedPositions ?? [];
       setLocalParticipants(round.participants);
       setLocalDesertedPositions(round.form?.desertedPositions ?? []);
+      return;
     }
+
+    // Selección/puestos locales pendientes: no pisarlos, pero sí traer notas/recordatorios.
+    const merged = mergeIncomingAnnotations(localParticipantsRef.current, round.participants);
+    localParticipantsRef.current = merged;
+    setLocalParticipants(merged);
   }, [round]);
 
   useEffect(() => {
     void rememberServerRound(latestConfirmedRoundRef.current);
   }, [rememberServerRound, round.round.id, round.form?.id]);
+
+  const saveNote = async (participantId: string, note: string | null) => {
+    const next = localParticipantsRef.current.map((participant) =>
+      participant.id === participantId ? { ...participant, privateNote: note } : participant
+    );
+    localParticipantsRef.current = next;
+    setLocalParticipants(next);
+    await queueNote(participantId, note);
+  };
+
+  const saveReminders = async (
+    participantId: string,
+    reminders: Array<{ reminderId: string; effect: "SUMA" | "RESTA" }>
+  ) => {
+    const reminderCatalog = new Map(
+      round.availableReminders.map((item) => [item.id, item] as const)
+    );
+    const next = localParticipantsRef.current.map((participant) =>
+      participant.id === participantId
+        ? {
+            ...participant,
+            reminders: reminders.map((item) => {
+              const catalog = reminderCatalog.get(item.reminderId);
+              return {
+                reminderId: item.reminderId,
+                name: catalog?.name ?? "",
+                icon: catalog?.icon ?? "",
+                effect: item.effect,
+              };
+            }),
+          }
+        : participant
+    );
+    localParticipantsRef.current = next;
+    setLocalParticipants(next);
+    await queueReminders(participantId, reminders);
+  };
 
   const toggleSelect = (participantId: string) => {
     if (!editable) return;
@@ -472,8 +542,8 @@ export function JudgeRoundWorkspace({
                 onLocalUpdate(updated);
               }}
               onOpenDisqualify={setDisqualifyTarget}
-              onSaveNote={queueNote}
-              onSaveReminders={queueReminders}
+              onSaveNote={saveNote}
+              onSaveReminders={saveReminders}
             />
           ) : isPositionBoardRound ? (
             <F2PositionBoard
@@ -492,8 +562,8 @@ export function JudgeRoundWorkspace({
                 onLocalUpdate(updated);
               }}
               onOpenDisqualify={setDisqualifyTarget}
-              onSaveNote={queueNote}
-              onSaveReminders={queueReminders}
+              onSaveNote={saveNote}
+              onSaveReminders={saveReminders}
             />
           ) : null}
         </div>
