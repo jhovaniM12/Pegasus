@@ -59,24 +59,24 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="grid min-h-screen bg-[#f7f8f5] lg:grid-cols-[minmax(480px,0.92fr)_1.08fr]">
+    <div className="grid min-h-screen bg-background lg:grid-cols-[minmax(480px,0.92fr)_1.08fr]">
       <div className="flex min-h-screen w-full items-center justify-center px-6 py-10 sm:px-10 lg:px-16">
         <div className="w-full max-w-[420px]">
           <div className="mb-10">
             <PegasoLogo size="lg" priority />
-            <p className="mt-4 text-sm text-slate-500">Panel administrativo</p>
+            <p className="mt-4 text-sm text-muted-foreground">Panel administrativo</p>
           </div>
 
           <div className="mb-8">
-            <h1 className="text-4xl font-semibold tracking-normal text-slate-950">Iniciar sesión</h1>
-            <p className="mt-3 text-sm leading-6 text-slate-600">
+            <h1 className="text-4xl font-semibold tracking-normal text-foreground">Iniciar sesión</h1>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
               Ingresa tus credenciales para acceder al panel de control.
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-sm font-medium text-slate-700">Email corporativo</Label>
+              <Label htmlFor="email" className="text-sm font-medium text-foreground">Email corporativo</Label>
               <Input
                 id="email"
                 type="email"
@@ -84,11 +84,11 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="h-12 rounded-lg border-slate-200 bg-white px-4 text-slate-950 shadow-sm placeholder:text-slate-400 focus-visible:border-slate-400 focus-visible:ring-slate-200"
+                className="h-12 rounded-lg bg-background px-4 text-foreground shadow-sm focus-visible:ring-primary"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-sm font-medium text-slate-700">Contraseña</Label>
+              <Label htmlFor="password" className="text-sm font-medium text-foreground">Contraseña</Label>
               <div className="relative">
                 <Input
                   id="password"
@@ -97,13 +97,13 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="h-12 rounded-lg border-slate-200 bg-white px-4 pr-12 text-slate-950 shadow-sm focus-visible:border-slate-400 focus-visible:ring-slate-200"
+                  className="h-12 rounded-lg bg-background px-4 pr-12 text-foreground shadow-sm focus-visible:ring-primary"
                 />
                 <button
                   type="button"
                   aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
                   onClick={() => setShowPassword((current) => !current)}
-                  className="absolute right-3 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+                  className="absolute right-3 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
                 </button>
@@ -111,7 +111,7 @@ export default function LoginPage() {
             </div>
 
             {error && (
-              <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+              <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">
                 {error}
               </div>
             )}

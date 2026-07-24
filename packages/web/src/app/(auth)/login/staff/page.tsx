@@ -100,22 +100,22 @@ export default function AccessPage() {
       {isCheckingSession ? (
         <div className="relative z-10 text-sm font-medium text-white/90">Cargando...</div>
       ) : (
-        <div className="relative z-10 w-full max-w-sm rounded-lg border border-white/25 bg-white/92 p-6 shadow-2xl backdrop-blur-md">
+        <div className="relative z-10 w-full max-w-sm rounded-lg border border-border/50 bg-card/95 p-6 shadow-2xl backdrop-blur-md">
           <div className="mb-8 flex flex-col items-center gap-3 text-center">
             <PegasoLogo size="2xl" priority />
-            <p className="text-xs text-slate-500">Acceso de staff</p>
+            <p className="text-xs text-muted-foreground">Acceso de staff</p>
           </div>
 
           <div className="mb-6">
-            <h1 className="text-2xl font-semibold tracking-normal text-slate-950">Ingresa tu código</h1>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
+            <h1 className="text-2xl font-semibold tracking-normal text-foreground">Ingresa tu código</h1>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
               Usa el código asignado por el usuario ROOT para consultar tus categorías.
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="accessCode" className="text-sm font-semibold text-slate-800">
+              <Label htmlFor="accessCode" className="text-sm font-semibold text-foreground">
                 Código de acceso
               </Label>
               <Input
@@ -126,12 +126,12 @@ export default function AccessPage() {
                 required
                 minLength={6}
                 maxLength={6}
-                className="h-16 text-center text-2xl font-semibold uppercase tracking-[0.22em]"
+                className="h-16 bg-background text-center text-2xl font-semibold uppercase tracking-[0.22em] text-foreground"
               />
             </div>
 
             {error && (
-              <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+              <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">
                 {error}
               </div>
             )}
