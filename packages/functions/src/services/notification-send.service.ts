@@ -14,7 +14,7 @@ type WebNotificationPayload = {
 };
 
 function logPushFailure(notificationIds: string[], errorMessage: string): void {
-  console.log(
+  console.error(
     JSON.stringify({
       level: "ERROR",
       service: process.env.SERVICE_NAME ?? "pegaso-api",

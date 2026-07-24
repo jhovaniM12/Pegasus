@@ -30,3 +30,4 @@ export { AddTieBreakIdentity1717430400028 } from "./1717430400028-AddTieBreakIde
 export { AddOfflineMutationFoundation1717430400029 } from "./1717430400029-AddOfflineMutationFoundation.js";
 export { ExpandFairEntryImportIdentity1717430400030 } from "./1717430400030-ExpandFairEntryImportIdentity.js";
 export { AddUserAccessCodePlaintext1717430400031 } from "./1717430400031-AddUserAccessCodePlaintext.js";
+export { CreateJudgingRoundUnawardedResults1717430400032 } from "./1717430400032-CreateJudgingRoundUnawardedResults.js";

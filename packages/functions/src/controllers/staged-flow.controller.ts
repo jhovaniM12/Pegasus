@@ -80,7 +80,7 @@ function requiredParam(c: Context, name: string): string {
 
 function dispatchNotificationsAfterAction(stageId: string): void {
   void sendStageNotifications(stageId).catch((error) => {
-    console.log(
+    console.error(
       JSON.stringify({
         level: "ERROR",
         service: process.env.SERVICE_NAME ?? "pegaso-api",

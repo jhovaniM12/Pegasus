@@ -209,6 +209,30 @@ export class JudgingRoundDesertedResult extends PegasusBaseEntity {
   votesCount!: number;
 }
 
+/**
+ * Puestos no adjudicados por consideración mínima insuficiente.
+ * Separados de los desiertos: aquí assignedVotes siempre es > 0.
+ */
+@Unique("UQ_judging_round_unawarded_results_round_position", ["roundId", "finalPosition"])
+@Entity({ name: "judging_round_unawarded_results" })
+export class JudgingRoundUnawardedResult extends PegasusBaseEntity {
+  @Column({ name: "round_id", type: "uuid" })
+  roundId!: string;
+
+  @ManyToOne(() => JudgingRound, { nullable: false })
+  @JoinColumn({ name: "round_id" })
+  round!: JudgingRound;
+
+  @Column({ name: "final_position", type: "integer" })
+  finalPosition!: number;
+
+  @Column({ name: "assigned_votes", type: "integer" })
+  assignedVotes!: number;
+
+  @Column({ name: "minimum_required", type: "integer" })
+  minimumRequired!: number;
+}
+
 @Unique("UQ_award_distinctives_position", ["position"])
 @Entity({ name: "award_distinctives" })
 export class AwardDistinctive extends PegasusBaseEntity {

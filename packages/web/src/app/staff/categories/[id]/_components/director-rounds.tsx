@@ -217,13 +217,15 @@ export function DirectorRounds({
           className="w-full bg-amber-500 text-white hover:bg-amber-600 disabled:bg-amber-500/50"
           disabled={busy || !allFormsClosed(f1)}
           onClick={() =>
-            runAction("Consolidar F1", "Se calcularán los ejemplares que pasan a la tarjeta final F2.", () =>
-              stagedFlowService.consolidateRound(stageId)
+            runAction(
+              "Consolidar prueba individual",
+              "Se calcularán los ejemplares que pasan a la tarjeta final F2.",
+              () => stagedFlowService.consolidateRound(stageId)
             )
           }
         >
           <CheckCheck className="size-4" />
-          Consolidar F1
+          Consolidar prueba individual
         </Button>
       </DirectorActiveRoundCard>
     );
@@ -345,6 +347,10 @@ export function DirectorRounds({
       <OfficialResultBoard
         results={officialF2?.results ?? f2.results}
         desertedResults={officialF2?.desertedResults ?? f2.desertedResults}
+        unawardedResults={officialF2?.unawardedResults ?? f2.unawardedResults ?? []}
+        positionOutcomes={
+          officialF2?.positionOutcomes ?? f2.positionOutcomes ?? []
+        }
         showPodium
         title="Resultado oficial"
         forceOfficialStatus

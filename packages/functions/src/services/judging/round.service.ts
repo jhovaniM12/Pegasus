@@ -7,6 +7,7 @@ import {
   JudgingParticipant,
   JudgingRound,
   JudgingRoundDesertedResult,
+  JudgingRoundUnawardedResult,
   JudgingRoundEntry,
   JudgingRoundForm,
   JudgingRoundFormDesertedPosition,
@@ -830,8 +831,8 @@ export async function closeRoundForm(user: User, stageId: string, input: CloseRo
       const positioned = eligibleEntries.filter((entry) => entry.position !== null);
       const assigned = positioned.map((entry) => entry.position as number);
 
-      // F2 / desempate: los puestos no asignados en el rango premiable quedan desiertos al cerrar.
-      // En desempate se permiten puestos absolutos del bloque F2, por ejemplo 4° y 5°.
+      // F2 / desempate: las posiciones vacías permanecen vacías.
+      // No se fabrican votos de desierto; la consolidación decide el outcome.
       if (round.roundType === "F2" || round.roundType === "TIE_BREAK") {
         if (round.roundType === "TIE_BREAK" && positioned.length !== eligibleCount) {
           throw new BadRequestError(
@@ -847,21 +848,15 @@ export async function closeRoundForm(user: User, stageId: string, input: CloseRo
           throw new BadRequestError("No puedes repetir un mismo puesto.");
         }
 
-        const autoDeserted = Array.from(
-          { length: Math.max(0, maxDesertablePosition - minAssignablePosition + 1) },
-          (_, index) => minAssignablePosition + index
-        ).filter((position) => !assigned.includes(position) && position <= MAX_AWARD_POSITIONS);
-
-        await manager.getRepository(JudgingRoundFormDesertedPosition).delete({ roundFormId: form.id });
-        if (autoDeserted.length > 0) {
-          await manager.getRepository(JudgingRoundFormDesertedPosition).save(
-            autoDeserted.map((position) =>
-              manager.getRepository(JudgingRoundFormDesertedPosition).create({
-                roundFormId: form.id,
-                position
-              })
-            )
-          );
+        for (const position of deserted) {
+          if (position < minAssignablePosition || position > maxDesertablePosition) {
+            throw new BadRequestError(
+              `Solo puedes declarar desiertos los puestos premiables entre ${minAssignablePosition} y ${maxDesertablePosition}.`
+            );
+          }
+          if (assigned.includes(position)) {
+            throw new BadRequestError("No puedes cerrar con un puesto simultáneamente asignado y desierto.");
+          }
         }
       } else {
         for (const position of deserted) {
@@ -1181,6 +1176,7 @@ async function consolidateRankingRound(
 
   await manager.getRepository(JudgingRoundResult).delete({ roundId: round.id });
   await manager.getRepository(JudgingRoundDesertedResult).delete({ roundId: round.id });
+  await manager.getRepository(JudgingRoundUnawardedResult).delete({ roundId: round.id });
   if (scoring.participants.length > 0) {
     await manager.getRepository(JudgingRoundResult).save(
       scoring.participants.map((participant) =>
@@ -1202,6 +1198,18 @@ async function consolidateRankingRound(
           roundId: round.id,
           finalPosition: row.finalPosition,
           votesCount: row.votesCount
+        })
+      )
+    );
+  }
+  if (scoring.unawardedResults.length > 0) {
+    await manager.getRepository(JudgingRoundUnawardedResult).save(
+      scoring.unawardedResults.map((row) =>
+        manager.getRepository(JudgingRoundUnawardedResult).create({
+          roundId: round.id,
+          finalPosition: row.finalPosition,
+          assignedVotes: row.assignedVotes,
+          minimumRequired: row.minimumRequired
         })
       )
     );
@@ -1251,6 +1259,7 @@ async function consolidateTieBreak(
   // Resultados propios de la ronda de desempate (trazabilidad).
   await manager.getRepository(JudgingRoundResult).delete({ roundId: round.id });
   await manager.getRepository(JudgingRoundDesertedResult).delete({ roundId: round.id });
+  await manager.getRepository(JudgingRoundUnawardedResult).delete({ roundId: round.id });
   if (scoring.participants.length > 0) {
     await manager.getRepository(JudgingRoundResult).save(
       scoring.participants.map((participant) =>
@@ -1714,6 +1723,10 @@ export async function getRoundsManagement(user: User, stageId: string) {
         where: { roundId: round.id },
         order: { finalPosition: "ASC" }
       });
+      const unawardedResults = await manager.getRepository(JudgingRoundUnawardedResult).find({
+        where: { roundId: round.id },
+        order: { finalPosition: "ASC" }
+      });
       const tests = await manager.getRepository(TieBreakTest).find({
         where: { roundId: round.id },
         order: { testOrder: "ASC" }
@@ -1788,11 +1801,50 @@ export async function getRoundsManagement(user: User, stageId: string) {
           id: row.id,
           finalPosition: row.finalPosition,
           votesCount: row.votesCount,
+          outcomeType: "DESERTED" as const,
+          assignedVotes: 0,
           awardDistinctive:
             round.roundType === "F1"
               ? null
               : resolveAwardDistinctiveForPosition(distinctivesByPosition, row.finalPosition)
         })),
+        unawardedResults: unawardedResults.map((row) => ({
+          id: row.id,
+          finalPosition: row.finalPosition,
+          assignedVotes: row.assignedVotes,
+          minimumRequired: row.minimumRequired,
+          outcomeType: "UNAWARDED_MINIMUM_CONSIDERATION" as const,
+          awardDistinctive:
+            round.roundType === "F1"
+              ? null
+              : resolveAwardDistinctiveForPosition(distinctivesByPosition, row.finalPosition)
+        })),
+        positionOutcomes: [
+          ...desertedResults.map((row) => ({
+            finalPosition: row.finalPosition,
+            outcomeType: "DESERTED" as const,
+            participantId: null,
+            assignedVotes: 0,
+            minimumRequired: null as number | null,
+            votesCount: row.votesCount,
+            awardDistinctive:
+              round.roundType === "F1"
+                ? null
+                : resolveAwardDistinctiveForPosition(distinctivesByPosition, row.finalPosition)
+          })),
+          ...unawardedResults.map((row) => ({
+            finalPosition: row.finalPosition,
+            outcomeType: "UNAWARDED_MINIMUM_CONSIDERATION" as const,
+            participantId: null,
+            assignedVotes: row.assignedVotes,
+            minimumRequired: row.minimumRequired,
+            votesCount: null as number | null,
+            awardDistinctive:
+              round.roundType === "F1"
+                ? null
+                : resolveAwardDistinctiveForPosition(distinctivesByPosition, row.finalPosition)
+          }))
+        ].sort((a, b) => a.finalPosition - b.finalPosition),
         tests: tests.map((test) => ({
           id: test.id,
           testType: test.testType,

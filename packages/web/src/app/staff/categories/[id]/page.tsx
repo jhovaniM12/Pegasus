@@ -33,6 +33,7 @@ import { JudgeRoundWorkspace } from "./_components/judge-round-workspace";
 import { DirectorRounds } from "./_components/director-rounds";
 import { OfficialResultBoard } from "./_components/official-result-board";
 import { buildOfficialF2Results } from "./_components/official-f2-results";
+import { RoundConsolidatedDetail } from "./_components/round-consolidated-detail";
 import { ClosePreRingDialog } from "./_components/close-pre-ring-dialog";
 import { StartFaDialog } from "./_components/start-fa-dialog";
 import { CloseFaDialog } from "./_components/close-fa-dialog";
@@ -103,12 +104,15 @@ const JUDGE_VIEW_VALID_STATUSES: Record<"FA" | "F1" | "F2" | "TIE_BREAK", Staged
     "FA_CONSOLIDATED",
     "F1_IN_PROGRESS",
     "F1_CONSOLIDATED",
+    "F2_IN_PROGRESS",
+    "TIE_BREAK_IN_PROGRESS",
     "JUDGING_CLOSED",
     "JUDGING_DESERTED",
   ],
   F2: [
     "F1_CONSOLIDATED",
     "F2_IN_PROGRESS",
+    "TIE_BREAK_IN_PROGRESS",
     "JUDGING_CLOSED",
     "JUDGING_DESERTED",
   ],
@@ -167,11 +171,17 @@ async function loadJudgeWorkspace(
   if (view != null) {
     const response = await stagedFlowService.getRoundByType(stageId, view);
     const round = response.data ?? null;
+    const summary = withJudgeMeta(round?.stage ?? current);
+    const shouldLoadRoundsManagement =
+      view === "F1" && round != null && round.round.status !== "OPEN";
+    const roundsManagement = shouldLoadRoundsManagement
+      ? ((await stagedFlowService.getRoundsManagement(stageId)).data ?? null)
+      : null;
     return {
-      summary: withJudgeMeta(round?.stage ?? current),
+      summary,
       fa: null,
       round,
-      roundsManagement: null,
+      roundsManagement,
       management: null,
     };
   }
@@ -218,11 +228,17 @@ async function loadJudgeWorkspace(
   if (JUDGE_ROUND_STATUSES.includes(current.status)) {
     const response = await stagedFlowService.getRound(stageId);
     const round = response.data ?? null;
+    const summary = withJudgeMeta(round?.stage ?? current);
+    const shouldLoadRoundsManagement =
+      round?.round.roundType === "F1" && round.round.status !== "OPEN";
+    const roundsManagement = shouldLoadRoundsManagement
+      ? ((await stagedFlowService.getRoundsManagement(stageId)).data ?? null)
+      : null;
     return {
-      summary: withJudgeMeta(round?.stage ?? current),
+      summary,
       fa: null,
       round,
-      roundsManagement: null,
+      roundsManagement,
       management: null,
     };
   }
@@ -880,6 +896,12 @@ export default function StaffCategoryPage() {
       summary.status
     );
   const judgeOfficialF2 = roundsManagement ? buildOfficialF2Results(roundsManagement.rounds) : null;
+  const judgeConsolidatedF1 =
+    round?.round.roundType === "F1" && round.round.status !== "OPEN"
+      ? (roundsManagement?.rounds.find(
+          (item) => item.id === round.round.id || (item.roundType === "F1" && item.status !== "OPEN")
+        ) ?? null)
+      : null;
   const judgeNextRoundFormat =
     summary?.judge?.formats.find(
       (format): format is JudgeFormat & { key: "F1" | "F2" } =>
@@ -1257,6 +1279,8 @@ export default function StaffCategoryPage() {
               <OfficialResultBoard
                 results={judgeOfficialF2.results}
                 desertedResults={judgeOfficialF2.desertedResults}
+                unawardedResults={judgeOfficialF2.unawardedResults}
+                positionOutcomes={judgeOfficialF2.positionOutcomes}
                 showPodium
                 title="Resultado oficial"
                 forceOfficialStatus
@@ -1274,15 +1298,21 @@ export default function StaffCategoryPage() {
 
         {/* ── JUEZ: rondas F1 / F2 / desempate ──────────────────────────── */}
         {currentUser?.role === "JUDGE" && round && (
-          <JudgeRoundWorkspace
-            stageId={stageId}
-            userId={currentUser?.id ?? null}
-            round={round}
-            busy={busy}
-            onLocalUpdate={setRound}
-            syncUnavailable={sessionExpired}
-            runAction={runAction}
-          />
+          judgeConsolidatedF1 ? (
+            <div className="mt-4">
+              <RoundConsolidatedDetail round={judgeConsolidatedF1} />
+            </div>
+          ) : (
+            <JudgeRoundWorkspace
+              stageId={stageId}
+              userId={currentUser?.id ?? null}
+              round={round}
+              busy={busy}
+              onLocalUpdate={setRound}
+              syncUnavailable={sessionExpired}
+              runAction={runAction}
+            />
+          )
         )}
       </main>
 

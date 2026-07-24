@@ -31,7 +31,7 @@ function resultTitle(round: RoundManagementItem): string {
 
 type RoundConsolidatedDetailProps = {
   round: RoundManagementItem;
-  onBack: () => void;
+  onBack?: () => void;
 };
 
 export function RoundConsolidatedDetail({ round, onBack }: RoundConsolidatedDetailProps) {
@@ -48,14 +48,16 @@ export function RoundConsolidatedDetail({ round, onBack }: RoundConsolidatedDeta
           <CheckCircle2 className="size-4.5 text-emerald-600" />
           <span className="text-base font-semibold text-slate-800">{detailTitle(round)}</span>
         </div>
-        <button
-          type="button"
-          onClick={onBack}
-          className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50"
-        >
-          <ArrowLeft className="size-3.5" />
-          Volver
-        </button>
+        {onBack ? (
+          <button
+            type="button"
+            onClick={onBack}
+            className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50"
+          >
+            <ArrowLeft className="size-3.5" />
+            Volver
+          </button>
+        ) : null}
       </div>
 
       <div className="space-y-4 p-5">
@@ -131,7 +133,10 @@ export function RoundConsolidatedDetail({ round, onBack }: RoundConsolidatedDeta
             })}
         </div>
 
-        {round.results.length > 0 || round.desertedResults.length > 0 ? (
+        {round.results.length > 0 ||
+        round.desertedResults.length > 0 ||
+        (round.unawardedResults?.length ?? 0) > 0 ||
+        (round.positionOutcomes?.length ?? 0) > 0 ? (
           isF1 ? (
             <div className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-4">
               <div className="flex items-center gap-2">
@@ -156,6 +161,8 @@ export function RoundConsolidatedDetail({ round, onBack }: RoundConsolidatedDeta
               <OfficialResultBoard
                 results={round.results}
                 desertedResults={round.desertedResults}
+                unawardedResults={round.unawardedResults ?? []}
+                positionOutcomes={round.positionOutcomes ?? []}
                 showScoring
                 title={resultTitle(round)}
                 note={

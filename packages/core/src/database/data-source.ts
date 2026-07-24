@@ -29,6 +29,7 @@ import {
   JudgingRoundEntryReminderHistory,
   JudgingRoundResult,
   JudgingRoundDesertedResult,
+  JudgingRoundUnawardedResult,
   TieBreakTest,
   NotificationOutbox,
   OfflineOperationReceipt,
@@ -66,6 +67,7 @@ import {
   AddOfflineMutationFoundation1717430400029,
   ExpandFairEntryImportIdentity1717430400030,
   AddUserAccessCodePlaintext1717430400031,
+  CreateJudgingRoundUnawardedResults1717430400032,
   CreateFairEntriesTable1717430400004,
   CreateFairResultsTable1717430400008,
   CreateFairStaffTable1717430400007,
@@ -130,6 +132,7 @@ export const AppDataSource = new DataSource({
     JudgingRoundEntryReminderHistory,
     JudgingRoundResult,
     JudgingRoundDesertedResult,
+    JudgingRoundUnawardedResult,
     TieBreakTest,
     NotificationOutbox,
     OfflineOperationReceipt,
@@ -176,7 +179,8 @@ export const AppDataSource = new DataSource({
     AddTieBreakIdentity1717430400028,
     AddOfflineMutationFoundation1717430400029,
     ExpandFairEntryImportIdentity1717430400030,
-    AddUserAccessCodePlaintext1717430400031
+    AddUserAccessCodePlaintext1717430400031,
+    CreateJudgingRoundUnawardedResults1717430400032
   ]
 });
 

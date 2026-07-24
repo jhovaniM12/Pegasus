@@ -45,7 +45,10 @@ function canViewDetail(round: RoundManagementItem): boolean {
   return (
     round.status !== "OPEN" &&
     round.forms.some((form) => form.status === "CLOSED") &&
-    (round.results.length > 0 || round.desertedResults.length > 0)
+    (round.results.length > 0 ||
+      round.desertedResults.length > 0 ||
+      (round.unawardedResults?.length ?? 0) > 0 ||
+      (round.positionOutcomes?.length ?? 0) > 0)
   );
 }
 
@@ -85,11 +88,16 @@ export function RoundCompactSection({
           <span className="flex items-center gap-1.5 rounded border border-slate-200/40 bg-slate-100 px-2 py-1 text-slate-700">
             Tarjetas cerradas: <strong className="font-semibold">{closed}/{round.forms.length}</strong>
           </span>
-          {(round.results.length > 0 || round.desertedResults.length > 0) && (
+          {(round.results.length > 0 ||
+            round.desertedResults.length > 0 ||
+            (round.unawardedResults?.length ?? 0) > 0 ||
+            (round.positionOutcomes?.length ?? 0) > 0) && (
             <span className="flex items-center gap-1.5 rounded border border-slate-200/40 bg-slate-100 px-2 py-1 text-slate-700">
               Resultados:{" "}
               <strong className="font-semibold text-slate-800">
-                {round.results.length + round.desertedResults.length}
+                {round.results.length +
+                  round.desertedResults.length +
+                  (round.unawardedResults?.length ?? 0)}
               </strong>
             </span>
           )}
@@ -172,6 +180,8 @@ export function RoundsSummarySection({
           ...round,
           results: updatedF2.results,
           desertedResults: updatedF2.desertedResults,
+          unawardedResults: updatedF2.unawardedResults,
+          positionOutcomes: updatedF2.positionOutcomes,
         }
       : round
   );

@@ -2,7 +2,7 @@ importScripts("https://js.pusher.com/beams/service-worker.js");
 
 // Versión del SW: subir al cambiar la estrategia. No llamar skipWaiting automático
 // para no activar a mitad de una feria con mutaciones pendientes; la app decide.
-const SW_VERSION = "pegasus-sw-offline-v2-push-payload";
+const SW_VERSION = "pegasus-sw-offline-v3-quiet-telemetry";
 
 self.addEventListener("install", (event) => {
   // Mantener el SW en waiting hasta que la app envíe SKIP_WAITING.

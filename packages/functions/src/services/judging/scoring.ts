@@ -52,14 +52,29 @@ export type ScoredParticipant = {
   tied: boolean;
 };
 
+export type PositionOutcomeType =
+  | "AWARDED"
+  | "DESERTED"
+  | "UNAWARDED_MINIMUM_CONSIDERATION"
+  | "TIE_BREAK_REQUIRED";
+
 export type DesertedPositionResult = {
   finalPosition: number;
   /**
-   * Número de votos que respaldan el desierto para el puesto:
-   * - Desierto explícito: cantidad de jueces que lo declararon desierto.
-   * - Desierto por agotamiento: 0 (ningún candidato restante puede ocupar el puesto).
+   * Número de jueces que declararon el puesto desierto de forma explícita.
+   * Solo aplica cuando outcome = DESERTED (ningún juez asignó el puesto a un ejemplar).
    */
   votesCount: number;
+};
+
+/**
+ * Puesto con asignaciones reales de jueces, pero sin ejemplar que cumpla
+ * la consideración mínima exigida para recibir el premio.
+ */
+export type UnawardedPositionResult = {
+  finalPosition: number;
+  assignedVotes: number;
+  minimumRequired: number;
 };
 
 /**
@@ -89,7 +104,13 @@ export type TiedGroup = {
 
 export type ScoringResult = {
   participants: ScoredParticipant[];
+  /** Puestos verdaderamente desiertos: ningún juez asignó ese puesto a un ejemplar. */
   desertedResults: DesertedPositionResult[];
+  /**
+   * Puestos con asignaciones, pero sin candidato elegible por consideración mínima.
+   * Nunca deben confundirse con desiertos.
+   */
+  unawardedResults: UnawardedPositionResult[];
   /** True si existe al menos un grupo empatado (incluye no bloqueantes). */
   hasTie: boolean;
   /**
@@ -138,6 +159,7 @@ export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult
   const empty: ScoringResult = {
     participants: [],
     desertedResults: [],
+    unawardedResults: [],
     hasTie: false,
     hasBlockingTie: false,
     tiedGroups: [],
@@ -191,7 +213,7 @@ export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult
     return a.participantId.localeCompare(b.participantId);
   });
 
-  // Conteo de puestos desiertos explícitos por mayoría de jueces.
+  // Conteo de declaraciones explícitas de desierto y de asignaciones reales por puesto.
   const desertedVoteCountByPosition = new Map<number, number>();
   for (const card of cards) {
     const uniqueDeserted = new Set(card.desertedPositions);
@@ -200,28 +222,41 @@ export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult
       desertedVoteCountByPosition.set(position, (desertedVoteCountByPosition.get(position) ?? 0) + 1);
     }
   }
+  const assignedVotesByPosition = new Map<number, number>();
+  for (const card of cards) {
+    const uniqueAssigned = new Set(
+      card.positions
+        .map((entry) => entry.position)
+        .filter((position) => Number.isInteger(position) && position >= 1)
+    );
+    for (const position of uniqueAssigned) {
+      assignedVotesByPosition.set(position, (assignedVotesByPosition.get(position) ?? 0) + 1);
+    }
+  }
+
+  // Desierto explícito por mayoría: solo si NINGÚN juez asignó el puesto a un ejemplar.
+  // Invariante: assignedVotes > 0 ⇒ outcome != DESERTED.
   const explicitDesertedByMajority = new Map<number, number>();
   for (const [position, votesCount] of desertedVoteCountByPosition.entries()) {
-    if (votesCount >= threshold) {
+    const assignedVotes = assignedVotesByPosition.get(position) ?? 0;
+    if (votesCount >= threshold && assignedVotes === 0) {
       explicitDesertedByMajority.set(position, votesCount);
     }
   }
 
   // Asignación de puestos (Reglamento FEDEQUINAS, notas aclaratorias 5.b, 5.c y 5.e):
-  // 1) Respetar desiertos explícitos por mayoría de jueces.
+  // 1) Respetar desiertos explícitos por mayoría cuando no hubo asignaciones.
   // 2) En cada puesto premiable, recorrer candidatos en orden de mérito hasta encontrar
   //    uno con consideración mínima (cardsCount >= threshold). Los que no cumplen quedan
   //    diferidos (sin cinta) y no consumen el puesto.
-  // 3) Desierto por agotamiento: si no queda ningún candidato que cumpla consideración
-  //    mínima para ese puesto.
+  // 3) Si no queda candidato elegible:
+  //    - assignedVotes === 0 → DESERTED
+  //    - assignedVotes > 0  → UNAWARDED_MINIMUM_CONSIDERATION
   // 4) Ejemplares no premiables se reubican desde el puesto 6 (sin cinta).
-  //
-  // La excepción 5.e se detecta DESPUÉS y de forma independiente a partir de las
-  // selecciones individuales de quinto de todos los jueces. No altera este ranking
-  // provisional ni desplaza candidatos antes de formar los grupos por suma.
   const ranked: Array<Aggregate & { finalPosition: number }> = [];
   const deferred: Aggregate[] = [];
   const desertedResults: DesertedPositionResult[] = [];
+  const unawardedResults: UnawardedPositionResult[] = [];
   let pointer = 0;
 
   for (let position = 1; position <= MAX_AWARD_POSITIONS; position += 1) {
@@ -231,7 +266,7 @@ export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult
       continue;
     }
 
-    let assigned = false;
+    let awarded = false;
     while (pointer < ordered.length) {
       const candidate = ordered[pointer];
       pointer += 1;
@@ -240,12 +275,24 @@ export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult
         continue;
       }
       ranked.push({ ...candidate, finalPosition: position });
-      assigned = true;
+      awarded = true;
       break;
     }
 
-    if (!assigned) {
-      desertedResults.push({ finalPosition: position, votesCount: 0 });
+    if (!awarded) {
+      const assignedVotes = assignedVotesByPosition.get(position) ?? 0;
+      if (assignedVotes === 0) {
+        desertedResults.push({
+          finalPosition: position,
+          votesCount: desertedVoteCountByPosition.get(position) ?? 0
+        });
+      } else {
+        unawardedResults.push({
+          finalPosition: position,
+          assignedVotes,
+          minimumRequired: threshold
+        });
+      }
     }
   }
 
@@ -344,6 +391,7 @@ export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult
   return {
     participants,
     desertedResults: desertedResults.sort((a, b) => a.finalPosition - b.finalPosition),
+    unawardedResults: unawardedResults.sort((a, b) => a.finalPosition - b.finalPosition),
     hasTie: tiedGroups.length > 0,
     hasBlockingTie,
     tiedGroups,

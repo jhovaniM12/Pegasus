@@ -198,11 +198,16 @@ describe("computeF2 - voto de castigo", () => {
     expect(positionOf(result, "p14")).toBe(8);
     expect(positionOf(result, "p2")).toBe(9);
 
-    // El 5° queda desierto: los candidatos restantes no cumplen consideración mínima.
+    // El 5° no se adjudica: hubo asignaciones, pero ningún candidato restante cumple
+    // la consideración mínima. No es desierto.
     const pos7 = result.participants.find((p) => p.finalPosition === 7)?.participantId;
     expect(pos7).toBe("p8");
 
-    expect(result.desertedResults).toEqual([{ finalPosition: 5, votesCount: 0 }]);
+    expect(result.desertedResults).toEqual([]);
+    expect(result.unawardedResults).toEqual([
+      { finalPosition: 5, assignedVotes: expect.any(Number), minimumRequired: 2 }
+    ]);
+    expect(result.unawardedResults[0].assignedVotes).toBeGreaterThan(0);
     // p1 cumple consideración (2 jueces) y p8 no (1 juez): misma suma no genera empate
     // bloqueante; solo compiten por desempate quienes pueden recibir cinta.
     expect(result.participants.find((p) => p.participantId === "p1")?.tied).toBe(false);
@@ -210,7 +215,7 @@ describe("computeF2 - voto de castigo", () => {
     expect(result.hasBlockingTie).toBe(false);
   });
 
-  it("declara desierto el quinto si los candidatos restantes no cumplen consideración mínima", () => {
+  it("declara no adjudicado el quinto si los candidatos restantes no cumplen consideración mínima", () => {
     // Caso de la captura reportada:
     // J1: #2, #8, #4, #3, #9
     // J2: #1, #3, #2, #4, #6
@@ -261,7 +266,10 @@ describe("computeF2 - voto de castigo", () => {
     expect(positionOf(result, "p4")).toBe(3);
     expect(positionOf(result, "p6")).toBe(4);
     expect(positionOf(result, "p9")).not.toBe(5);
-    expect(result.desertedResults).toEqual([{ finalPosition: 5, votesCount: 0 }]);
+    expect(result.desertedResults).toEqual([]);
+    expect(result.unawardedResults).toEqual([
+      { finalPosition: 5, assignedVotes: 2, minimumRequired: 2 }
+    ]);
     expect(result.hasBlockingTie).toBe(true);
     expect(result.tiedGroups[0].participantIds.sort()).toEqual(["p3", "p4"]);
   });
@@ -314,7 +322,7 @@ describe("computeF2 - voto de castigo", () => {
     expect(result.hasBlockingTie).toBe(false);
   });
 
-  it("declara el quinto desierto explícito cuando hay mayoría de jueces", () => {
+  it("si hay mayoría de desiertos explícitos pero un juez asignó el puesto, no es DESERTED", () => {
     const allEligible = ["A", "B", "C", "D", "E"];
     const cards: JudgeCard[] = [
       {
@@ -358,8 +366,57 @@ describe("computeF2 - voto de castigo", () => {
     expect(positionOf(result, "A")).toBe(1);
     expect(positionOf(result, "D")).toBe(4);
     expect(positionOf(result, "E")).toBe(6);
-    expect(result.desertedResults).toEqual([{ finalPosition: 5, votesCount: 2 }]);
+    // assignedVotes(5) > 0 ⇒ nunca DESERTED; E no cumple consideración mínima.
+    expect(result.desertedResults).toEqual([]);
+    expect(result.unawardedResults).toEqual([
+      { finalPosition: 5, assignedVotes: 1, minimumRequired: 2 }
+    ]);
     expect(result.hasBlockingTie).toBe(false);
+  });
+
+  it("declara DESERTED el quinto cuando ningún juez lo asignó a un ejemplar", () => {
+    const allEligible = ["A", "B", "C", "D", "E"];
+    const cards: JudgeCard[] = [
+      {
+        judgeUserId: "j1",
+        positions: [
+          { participantId: "A", position: 1 },
+          { participantId: "B", position: 2 },
+          { participantId: "C", position: 3 },
+          { participantId: "D", position: 4 }
+        ],
+        desertedPositions: [5],
+        eligibleParticipantIds: allEligible
+      },
+      {
+        judgeUserId: "j2",
+        positions: [
+          { participantId: "A", position: 1 },
+          { participantId: "B", position: 2 },
+          { participantId: "C", position: 3 },
+          { participantId: "D", position: 4 }
+        ],
+        desertedPositions: [5],
+        eligibleParticipantIds: allEligible
+      },
+      {
+        judgeUserId: "j3",
+        positions: [
+          { participantId: "A", position: 1 },
+          { participantId: "B", position: 2 },
+          { participantId: "C", position: 3 },
+          { participantId: "D", position: 4 }
+        ],
+        desertedPositions: [5],
+        eligibleParticipantIds: allEligible
+      }
+    ];
+
+    const result = computeF2(cards, 3);
+
+    expect(result.desertedResults).toEqual([{ finalPosition: 5, votesCount: 3 }]);
+    expect(result.unawardedResults).toEqual([]);
+    expect(positionOf(result, "E")).toBe(6);
   });
 
   it("no aplica 5.e cuando dos jueces coinciden en el mismo quinto", () => {
@@ -562,15 +619,16 @@ describe("computeF2 - voto de castigo", () => {
     const result = computeF2(cards, 3);
 
     // A: 1+6+6=13, B: 6+1+6=13, C: 6+6+1=13
-    // Ninguno cumple consideración mínima (2 de 3) para premiación:
-    // los tres quedan diferidos y los puestos 1-5 se declaran desiertos por agotamiento.
-    // Sin consideración mínima no hay grupo de empate (ni bloqueante ni informativo).
+    // Ninguno cumple consideración mínima (2 de 3) para premiación.
+    // Posición 1 tuvo asignaciones ⇒ UNAWARDED; 2-5 sin asignaciones ⇒ DESERTED.
     expect(result.participants).toHaveLength(3);
     expect(result.hasTie).toBe(false);
     expect(result.hasBlockingTie).toBe(false);
     expect(result.tiedGroups).toHaveLength(0);
+    expect(result.unawardedResults).toEqual([
+      { finalPosition: 1, assignedVotes: 3, minimumRequired: 2 }
+    ]);
     expect(result.desertedResults).toEqual([
-      { finalPosition: 1, votesCount: 0 },
       { finalPosition: 2, votesCount: 0 },
       { finalPosition: 3, votesCount: 0 },
       { finalPosition: 4, votesCount: 0 },
@@ -629,7 +687,7 @@ describe("computeF2 - casos borde", () => {
     ]);
   });
 
-  it("si un puesto es declarado desierto por mayoría, queda en desertedResults y se salta en el ranking", () => {
+  it("si un puesto tiene asignaciones de jueces, nunca queda como DESERTED aunque haya votos de desierto", () => {
     const cards: JudgeCard[] = [
       {
         judgeUserId: "j1",
@@ -663,13 +721,15 @@ describe("computeF2 - casos borde", () => {
       }
     ];
     const result = computeF2(cards, 3);
+    // Los tres jueces asignaron el 3.º a C ⇒ AWARDED; 4.º y 5.º sin asignaciones ⇒ DESERTED.
     expect(result.desertedResults).toEqual([
-      { finalPosition: 3, votesCount: 2 },
+      { finalPosition: 4, votesCount: 0 },
       { finalPosition: 5, votesCount: 0 }
     ]);
+    expect(result.unawardedResults).toEqual([]);
     expect(positionOf(result, "A")).toBe(1);
     expect(positionOf(result, "B")).toBe(2);
-    expect(positionOf(result, "C")).toBe(4);
+    expect(positionOf(result, "C")).toBe(3);
   });
 
   it("si un ejemplar no cumple consideración mínima, no puede ocupar puesto premiable", () => {
@@ -681,9 +741,11 @@ describe("computeF2 - casos borde", () => {
       { judgeUserId: "j3", positions: [{ participantId: "C", position: 1 }], desertedPositions: [], eligibleParticipantIds: allEligible }
     ];
     const result = computeF2(cards, 3);
-    // Ninguno cumple la consideración mínima (2 de 3) para premiación.
+    // Posición 1 tuvo asignaciones ⇒ UNAWARDED; resto sin asignaciones ⇒ DESERTED.
+    expect(result.unawardedResults).toEqual([
+      { finalPosition: 1, assignedVotes: 3, minimumRequired: 2 }
+    ]);
     expect(result.desertedResults).toEqual([
-      { finalPosition: 1, votesCount: 0 },
       { finalPosition: 2, votesCount: 0 },
       { finalPosition: 3, votesCount: 0 },
       { finalPosition: 4, votesCount: 0 },
@@ -818,15 +880,114 @@ describe("computeF2 - grupos de empate y bloqueo de cierre", () => {
 
     const result = computeF2(cards, 5);
 
-    // 2° desierto explícito por mayoría (3/5).
-    // C no cumple consideración mínima (2/5) y se difiere; no quedan elegibles → 3°-5° desiertos.
+    // 2° desierto real: ningún juez lo asignó (3 votos explícitos).
+    // C no cumple consideración mínima (2/5) y se difiere; 3°-5° sin asignaciones ⇒ DESERTED.
     expect(result.desertedResults).toEqual([
       { finalPosition: 2, votesCount: 3 },
       { finalPosition: 3, votesCount: 0 },
       { finalPosition: 4, votesCount: 0 },
       { finalPosition: 5, votesCount: 0 }
     ]);
+    expect(result.unawardedResults).toEqual([]);
     expect(positionOf(result, "A")).toBe(1);
     expect(positionOf(result, "C")).toBe(6);
+  });
+});
+
+describe("computeF2 - invariante DESERTED vs UNAWARDED", () => {
+  it("assignedVotes === 0 produce DESERTED", () => {
+    const cards: JudgeCard[] = [
+      card("j1", ["A", "B", "C"]),
+      card("j2", ["A", "B", "C"]),
+      card("j3", ["A", "B", "C"])
+    ];
+    const result = computeF2(cards, 3);
+    expect(result.desertedResults).toEqual([
+      { finalPosition: 4, votesCount: 0 },
+      { finalPosition: 5, votesCount: 0 }
+    ]);
+    expect(result.unawardedResults).toEqual([]);
+  });
+
+  it("assignedVotes > 0 nunca produce DESERTED", () => {
+    const cards: JudgeCard[] = [
+      {
+        judgeUserId: "j1",
+        positions: [{ participantId: "A", position: 4 }],
+        desertedPositions: [],
+        eligibleParticipantIds: ["A", "B", "C"]
+      },
+      {
+        judgeUserId: "j2",
+        positions: [],
+        desertedPositions: [],
+        eligibleParticipantIds: ["A", "B", "C"]
+      },
+      {
+        judgeUserId: "j3",
+        positions: [],
+        desertedPositions: [],
+        eligibleParticipantIds: ["A", "B", "C"]
+      }
+    ];
+    const result = computeF2(cards, 3);
+    expect(result.desertedResults.find((row) => row.finalPosition === 4)).toBeUndefined();
+    expect(result.unawardedResults).toContainEqual({
+      finalPosition: 4,
+      assignedVotes: 1,
+      minimumRequired: 2
+    });
+  });
+
+  it("una sola asignación sin consideración mínima produce UNAWARDED_MINIMUM_CONSIDERATION", () => {
+    const cards: JudgeCard[] = [
+      {
+        judgeUserId: "j1",
+        positions: [{ participantId: "X", position: 1 }],
+        desertedPositions: [],
+        eligibleParticipantIds: ["X"]
+      },
+      {
+        judgeUserId: "j2",
+        positions: [],
+        desertedPositions: [],
+        eligibleParticipantIds: ["X"]
+      },
+      {
+        judgeUserId: "j3",
+        positions: [],
+        desertedPositions: [],
+        eligibleParticipantIds: ["X"]
+      }
+    ];
+    const result = computeF2(cards, 3);
+    expect(result.desertedResults.find((row) => row.finalPosition === 1)).toBeUndefined();
+    expect(result.unawardedResults).toEqual([
+      { finalPosition: 1, assignedVotes: 1, minimumRequired: 2 }
+    ]);
+  });
+
+  it("dos de tres jueces asignando el mismo ejemplar permiten adjudicarlo", () => {
+    const cards: JudgeCard[] = [
+      card("j1", ["A", "B", "C"]),
+      card("j2", ["A", "B", "C"]),
+      {
+        judgeUserId: "j3",
+        positions: [
+          { participantId: "B", position: 1 },
+          { participantId: "A", position: 2 },
+          { participantId: "C", position: 3 }
+        ],
+        desertedPositions: [],
+        eligibleParticipantIds: ["A", "B", "C"]
+      }
+    ];
+    const result = computeF2(cards, 3);
+    expect(positionOf(result, "A")).toBe(1);
+    expect(result.desertedResults).toEqual([
+      { finalPosition: 4, votesCount: 0 },
+      { finalPosition: 5, votesCount: 0 }
+    ]);
+    expect(result.unawardedResults).toEqual([]);
   });
 });

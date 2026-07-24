@@ -226,7 +226,10 @@ export function stageNotificationContext(stage: FairCategoryStage) {
 /** Nombre visible de un usuario de staff (juez, director, etc.). */
 export function formatStaffDisplayName(user: User, fallback = "Juez"): string {
   if (user.person) {
-    const fullName = `${user.person.name} ${user.person.lastName}`.trim();
+    const fullName = [user.person.name, user.person.lastName]
+      .map((part) => (typeof part === "string" ? part.trim() : ""))
+      .filter(Boolean)
+      .join(" ");
     if (fullName) return fullName;
   }
   return fallback;

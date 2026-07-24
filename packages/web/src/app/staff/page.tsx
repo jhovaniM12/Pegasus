@@ -733,11 +733,11 @@ export default function StaffPage() {
                         <span className="block text-base font-bold text-amber-950 dark:text-amber-100">{item.veterinary.pending}</span>
                         <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-600">Pendientes</span>
                       </div>
-                      <div className="rounded-md border border-blue-200/60 bg-blue-50/40 p-2 dark:bg-blue-950/10 dark:border-blue-900/20">
-                        <span className="block text-base font-bold text-blue-950 dark:text-blue-100">
-                          {item.judging.closedForms}/{item.judging.totalJudges}
+                      <div className="rounded-md border border-red-200/60 bg-red-50/40 p-2 dark:bg-red-950/10 dark:border-red-900/20">
+                        <span className="block text-base font-bold text-red-950 dark:text-red-100">
+                          {item.veterinary.rejected}
                         </span>
-                        <span className="text-[10px] font-semibold uppercase tracking-wider text-blue-600">FA Cerrados</span>
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-red-600">Rechazados</span>
                       </div>
                     </div>
                   </div>

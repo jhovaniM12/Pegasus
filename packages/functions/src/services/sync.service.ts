@@ -28,6 +28,7 @@ const SYNC_CLEANUP_TABLES = [
   "judging_round_entries",
   "judging_round_results",
   "judging_round_deserted_results",
+  "judging_round_unawarded_results",
   "tie_break_tests",
   "judging_round_forms",
   "judging_rounds",

@@ -1,5 +1,6 @@
 "use client";
 
+import type { KeyboardEvent, MouseEvent } from "react";
 import { RotateCcw, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FaParticipant } from "@/types/staged-flow";
@@ -23,7 +24,9 @@ export function FaParticipantCard({
 }: FaParticipantCardProps) {
   const disqualified = participant.status === "DISQUALIFIED";
   const repeatRequest = participant.repeatTrackRequest;
-  const repeatDisabled = !editable || disqualified || repeatRequest !== null;
+  const canSelect = editable && !disqualified;
+  const canRepeat = editable && !disqualified && repeatRequest === null;
+  const canDisqualify = editable && !disqualified;
   const repeatTitle =
     repeatRequest?.status === "EXECUTED"
       ? `Repetición ejecutada${repeatRequest.requestedBy ? `, solicitada por ${repeatRequest.requestedBy.name}` : ""}`
@@ -31,34 +34,66 @@ export function FaParticipantCard({
         ? `Repetición solicitada${repeatRequest.requestedBy ? ` por ${repeatRequest.requestedBy.name}` : ""}`
         : "Solicitar repetir pista";
 
+  const handleSelect = () => {
+    if (!canSelect) return;
+    onToggle(participant.id);
+  };
+
+  const handleCardKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (!canSelect) return;
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onToggle(participant.id);
+    }
+  };
+
+  const handleRepeatClick = (event: MouseEvent<HTMLButtonElement>) => {
+    // Evita que el clic “caiga” en la selección de la tarjeta (sobre todo con botones inactivos).
+    event.stopPropagation();
+    if (!canRepeat) return;
+    onRequestRepeatTrack(participant.id);
+  };
+
+  const handleDisqualifyClick = (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (!canDisqualify) return;
+    onOpenDisqualify(participant.id);
+  };
+
   return (
     <article
+      role={canSelect ? "button" : undefined}
+      tabIndex={canSelect ? 0 : undefined}
+      onClick={handleSelect}
+      onKeyDown={handleCardKeyDown}
       className={cn(
-        "relative overflow-hidden rounded-xl border transition-all duration-150 p-4",
+        "group relative overflow-hidden rounded-xl border p-4 transition-all duration-150",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500",
         disqualified
           ? "border-slate-200 bg-slate-50/60 opacity-60"
           : !editable && selected
             ? "border-slate-300 bg-slate-100"
             : selected
               ? "border-amber-500 bg-amber-50/40 shadow-sm"
-              : "border-slate-200 bg-white hover:border-slate-300 shadow-sm"
+              : "border-slate-200 bg-white hover:border-slate-300 shadow-sm",
+        canSelect ? "cursor-pointer" : "cursor-default"
       )}
     >
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex min-w-0 items-center justify-between gap-3">
         <div className="flex shrink-0 items-center justify-center">
           <button
             type="button"
-            disabled={repeatDisabled}
-            onClick={() => onRequestRepeatTrack(participant.id)}
+            aria-disabled={!canRepeat}
+            onClick={handleRepeatClick}
             className={cn(
               "flex size-9 items-center justify-center rounded-full border transition-colors",
               repeatRequest?.status === "EXECUTED"
-                ? "border-emerald-100 bg-emerald-50 text-emerald-600"
+                ? "border-emerald-100 bg-emerald-50 text-emerald-600 cursor-default"
                 : repeatRequest
-                  ? "border-amber-100 bg-amber-50 text-amber-600"
-                  : repeatDisabled
-                    ? "border-slate-100 bg-slate-50 text-slate-300 cursor-default"
-                    : "border-amber-100 bg-amber-50 hover:bg-amber-100 text-amber-700 cursor-pointer active:scale-95"
+                  ? "border-amber-100 bg-amber-50 text-amber-600 cursor-default"
+                  : canRepeat
+                    ? "border-amber-100 bg-amber-50 hover:bg-amber-100 text-amber-700 cursor-pointer active:scale-95"
+                    : "border-slate-100 bg-slate-50 text-slate-300 cursor-default"
             )}
             title={repeatTitle}
           >
@@ -66,16 +101,7 @@ export function FaParticipantCard({
           </button>
         </div>
 
-        <button
-          type="button"
-          disabled={!editable || disqualified}
-          onClick={() => onToggle(participant.id)}
-          className={cn(
-            "flex flex-1 flex-col items-center justify-center py-2 transition-all",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-500",
-            editable && !disqualified ? "cursor-pointer active:scale-95" : "cursor-default"
-          )}
-        >
+        <div className="flex min-w-0 flex-1 flex-col items-center justify-center py-2">
           <span
             className={cn(
               "text-3xl font-extrabold tracking-tight leading-none",
@@ -92,7 +118,7 @@ export function FaParticipantCard({
           </span>
           <span
             className={cn(
-              "mt-1.5 max-w-full truncate px-1 text-center text-xs font-semibold",
+              "mt-1.5 w-full truncate text-center text-xs font-semibold",
               disqualified
                 ? "text-slate-400"
                 : !editable && selected
@@ -119,18 +145,18 @@ export function FaParticipantCard({
           >
             {disqualified ? "Descalificado" : selected ? "Seleccionado" : "Seleccionar"}
           </span>
-        </button>
+        </div>
 
         <div className="flex shrink-0 items-center justify-center">
           <button
             type="button"
-            disabled={!editable || disqualified}
-            onClick={() => onOpenDisqualify(participant.id)}
+            aria-disabled={!canDisqualify}
+            onClick={handleDisqualifyClick}
             className={cn(
               "flex size-9 items-center justify-center rounded-full border transition-all duration-150",
-              !editable || disqualified
-                ? "border-slate-100 bg-slate-50 text-slate-300 cursor-default"
-                : "border-red-100 bg-red-50 hover:bg-red-100 text-red-600 active:scale-95 cursor-pointer"
+              canDisqualify
+                ? "border-red-100 bg-red-50 hover:bg-red-100 text-red-600 active:scale-95 cursor-pointer"
+                : "border-slate-100 bg-slate-50 text-slate-300 cursor-default"
             )}
             title="Descalificar participante"
           >

@@ -21,9 +21,9 @@ const ROUND_TITLES: Record<RoundType, string> = {
 
 const ROUND_HINTS: Record<RoundType, string> = {
   F1: "Selecciona los ejemplares que pasan a la tarjeta final.",
-  F2: "Toca el botón de puesto en cada tarjeta para asignar la posición. Al insertar en un puesto ocupado los demás se desplazan. Los ejemplares sin puesto quedan desiertos.",
+  F2: "Toca el botón de puesto en cada tarjeta para asignar la posición. Al insertar en un puesto ocupado los demás se desplazan. Los puestos vacíos quedan sin asignar hasta la consolidación.",
   TIE_BREAK:
-    "Toca el botón de puesto en cada tarjeta para asignar la posición. Al insertar en un puesto ocupado los demás se desplazan. Los ejemplares sin puesto quedan desiertos.",
+    "Toca el botón de puesto en cada tarjeta para asignar la posición. Al insertar en un puesto ocupado los demás se desplazan. Debes asignar un puesto a cada ejemplar empatado.",
 };
 
 const MAX_F2_POSITIONS = 5;
@@ -45,17 +45,6 @@ function assignWithCascade(
     : without;
   const bounded = shifted.filter((a) => a.position <= maxPosition && allowedSet.has(a.position));
   return [...bounded, { participantId, position: targetPosition }];
-}
-
-function computeAutoDeserted(
-  assignments: Array<{ participantId: string; position: number }>,
-  allowedPositions: number[]
-): number[] {
-  const assignedSet = new Set(assignments.map((a) => a.position));
-  // Solo puestos premiables (1..5) pueden declararse desiertos; el 6.º+ no es desierto.
-  return allowedPositions.filter(
-    (position) => !assignedSet.has(position) && position <= MAX_F2_POSITIONS
-  );
 }
 
 type JudgeRoundWorkspaceProps = {
@@ -358,14 +347,15 @@ export function JudgeRoundWorkspace({
     const currentAssignments = getCurrentAssignments();
     if (!allowedPositions.includes(targetPosition)) return;
     const nextAssignments = assignWithCascade(currentAssignments, participantId, targetPosition, allowedPositions);
-    persistRankingState(nextAssignments, computeAutoDeserted(nextAssignments, allowedPositions));
+    // Las posiciones vacías no se marcan como desiertos al editar; la consolidación decide DESERTED vs UNAWARDED.
+    persistRankingState(nextAssignments, []);
   };
 
   const unassignParticipantF2 = (participantId: string) => {
     if (!editable) return;
     const currentAssignments = getCurrentAssignments();
     const nextAssignments = currentAssignments.filter((row) => row.participantId !== participantId);
-    persistRankingState(nextAssignments, computeAutoDeserted(nextAssignments, allowedPositions));
+    persistRankingState(nextAssignments, []);
   };
 
   const totalEligible = eligibleParticipants.length;
@@ -418,6 +408,15 @@ export function JudgeRoundWorkspace({
     }
   };
 
+  const stageStatus = round.stage.status;
+  const officialResultPublished =
+    stageStatus === "JUDGING_CLOSED" || stageStatus === "JUDGING_DESERTED";
+  const consolidatedWaitingMessage = officialResultPublished
+    ? "El Director Técnico ya cerró el resultado oficial de la categoría."
+    : stageStatus === "TIE_BREAK_IN_PROGRESS" && roundType !== "TIE_BREAK"
+      ? "Pendiente que el Director Técnico habilite la tarjeta de desempate."
+      : "Pendiente que el Director Técnico cierre el resultado oficial o abra la ronda de desempate, en caso de que exista un empate.";
+
   // Estados de la ronda ajenos a la edición del juez.
   if (round.round.status !== "OPEN") {
     return (
@@ -449,9 +448,17 @@ export function JudgeRoundWorkspace({
           <div className="mt-4 flex flex-col items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50/40 px-6 py-8 text-center">
             <CheckCircle2 className="size-8 text-emerald-600" />
             <p className="text-sm font-semibold text-slate-900">Ronda consolidada</p>
-            <p className="max-w-md text-sm text-slate-500">
-              El Director Técnico consolidó esta ronda. Espera la siguiente fase o el resultado oficial.
-            </p>
+            <p className="max-w-md text-sm text-slate-500">{consolidatedWaitingMessage}</p>
+            {officialResultPublished ? null : syncUnavailable ? (
+              <span className="inline-flex text-xs font-medium text-red-600">
+                Sesión expirada. Vuelve a ingresar para actualizar la categoría.
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-xs italic text-slate-400">
+                <Loader2 className="size-3.5 animate-spin" />
+                Sincronizando en tiempo real...
+              </span>
+            )}
           </div>
         )}
         {roundType === "F1" && formStatus !== "PENDING" && (

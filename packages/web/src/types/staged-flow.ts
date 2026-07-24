@@ -290,10 +290,37 @@ export type RoundResult = {
   resolvedByTieBreak?: boolean;
 };
 
+export type PositionOutcomeType =
+  | "AWARDED"
+  | "DESERTED"
+  | "UNAWARDED_MINIMUM_CONSIDERATION"
+  | "TIE_BREAK_REQUIRED";
+
 export type DesertedRoundResult = {
   id: string;
   finalPosition: number;
   votesCount: number;
+  outcomeType?: "DESERTED";
+  assignedVotes?: number;
+  awardDistinctive: AwardDistinctiveDto | null;
+};
+
+export type UnawardedRoundResult = {
+  id: string;
+  finalPosition: number;
+  assignedVotes: number;
+  minimumRequired: number;
+  outcomeType: "UNAWARDED_MINIMUM_CONSIDERATION";
+  awardDistinctive: AwardDistinctiveDto | null;
+};
+
+export type PositionOutcome = {
+  finalPosition: number;
+  outcomeType: Exclude<PositionOutcomeType, "AWARDED" | "TIE_BREAK_REQUIRED">;
+  participantId: null;
+  assignedVotes: number;
+  minimumRequired: number | null;
+  votesCount: number | null;
   awardDistinctive: AwardDistinctiveDto | null;
 };
 
@@ -342,6 +369,8 @@ export type RoundManagementItem = {
   forms: RoundManagementForm[];
   results: RoundResult[];
   desertedResults: DesertedRoundResult[];
+  unawardedResults?: UnawardedRoundResult[];
+  positionOutcomes?: PositionOutcome[];
   tests: TieBreakTestDto[];
 };
 

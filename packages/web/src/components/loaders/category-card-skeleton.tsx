@@ -40,7 +40,7 @@ export function CategoryCardSkeleton({ index = 0 }: CategoryCardSkeletonProps) {
           </div>
         </div>
 
-        {/* Stats row: Aprobados / Pendientes / FA cerrados */}
+        {/* Stats row: Aprobados / Pendientes / Rechazados */}
         <div className="grid grid-cols-3 gap-2">
           <Skeleton className="h-12 rounded-md" />
           <Skeleton className="h-12 rounded-md" />

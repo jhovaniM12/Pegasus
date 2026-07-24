@@ -2,12 +2,19 @@
 
 import { AlertTriangle, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { DesertedRoundResult, RoundResult } from "@/types/staged-flow";
+import type {
+  DesertedRoundResult,
+  PositionOutcome,
+  RoundResult,
+  UnawardedRoundResult,
+} from "@/types/staged-flow";
 import { Cinta } from "@/components/cinta";
 
 type OfficialResultBoardProps = {
   results: RoundResult[];
   desertedResults?: DesertedRoundResult[];
+  unawardedResults?: UnawardedRoundResult[];
+  positionOutcomes?: PositionOutcome[];
   /** F2 muestra suma de puestos y primeros lugares; F1 solo conteo de votos. */
   showScoring?: boolean;
   /** Podio visual (top 3). Solo para resultado oficial cerrado. */
@@ -41,6 +48,78 @@ function positionStyle(position: number) {
   return POSITION_STYLES[position as keyof typeof POSITION_STYLES] ?? null;
 }
 
+function resolveOutcomes({
+  desertedResults,
+  unawardedResults,
+  positionOutcomes,
+}: {
+  desertedResults: DesertedRoundResult[];
+  unawardedResults: UnawardedRoundResult[];
+  positionOutcomes: PositionOutcome[];
+}): PositionOutcome[] {
+  if (positionOutcomes.length > 0) return positionOutcomes;
+
+  return [
+    ...desertedResults.map((row) => ({
+      finalPosition: row.finalPosition,
+      outcomeType: "DESERTED" as const,
+      participantId: null,
+      assignedVotes: row.assignedVotes ?? 0,
+      minimumRequired: null,
+      votesCount: row.votesCount,
+      awardDistinctive: row.awardDistinctive,
+    })),
+    ...unawardedResults.map((row) => ({
+      finalPosition: row.finalPosition,
+      outcomeType: "UNAWARDED_MINIMUM_CONSIDERATION" as const,
+      participantId: null,
+      assignedVotes: row.assignedVotes,
+      minimumRequired: row.minimumRequired,
+      votesCount: null,
+      awardDistinctive: row.awardDistinctive,
+    })),
+  ].sort((a, b) => a.finalPosition - b.finalPosition);
+}
+
+function outcomeLabel(outcome: PositionOutcome): string {
+  switch (outcome.outcomeType) {
+    case "DESERTED":
+      return "Puesto desierto";
+    case "UNAWARDED_MINIMUM_CONSIDERATION":
+      return "Puesto no adjudicado";
+    default: {
+      const _exhaustive: never = outcome.outcomeType;
+      return _exhaustive;
+    }
+  }
+}
+
+function outcomeDescription(outcome: PositionOutcome): string | null {
+  switch (outcome.outcomeType) {
+    case "DESERTED":
+      return "Ningún juez asignó este puesto";
+    case "UNAWARDED_MINIMUM_CONSIDERATION":
+      return "Ningún ejemplar alcanzó la consideración mínima";
+    default: {
+      const _exhaustive: never = outcome.outcomeType;
+      return _exhaustive;
+    }
+  }
+}
+
+function outcomeBadgeLabel(outcome: PositionOutcome): string {
+  switch (outcome.outcomeType) {
+    case "DESERTED":
+      return "Desierto";
+    case "UNAWARDED_MINIMUM_CONSIDERATION":
+      return "No adjudicado";
+    default: {
+      const _exhaustive: never = outcome.outcomeType;
+      return _exhaustive;
+    }
+  }
+}
+
 function DistinctiveBadge({
   distinctive,
   deserted,
@@ -59,11 +138,11 @@ function DistinctiveBadge({
 type PodiumSlot = {
   position: number;
   result?: RoundResult;
-  deserted?: DesertedRoundResult;
+  outcome?: PositionOutcome;
 };
 
 function PodiumCard({ slot }: { slot: PodiumSlot }) {
-  const { position, result, deserted } = slot;
+  const { position, result, outcome } = slot;
   const style = positionStyle(position);
   if (!style) return null;
 
@@ -84,8 +163,8 @@ function PodiumCard({ slot }: { slot: PodiumSlot }) {
             </div>
             <p className="mt-1.5 font-mono text-[10px] text-slate-400">{result.registrationNumber}</p>
           </>
-        ) : deserted ? (
-          <p className="mt-2 text-xs font-semibold text-slate-500">Puesto desierto</p>
+        ) : outcome ? (
+          <p className="mt-2 text-xs font-semibold text-slate-500">{outcomeLabel(outcome)}</p>
         ) : (
           <p className="mt-2 text-xs text-slate-400">—</p>
         )}
@@ -106,20 +185,20 @@ function PodiumCard({ slot }: { slot: PodiumSlot }) {
 
 function Podium({
   sorted,
-  desertedByPosition,
+  outcomeByPosition,
 }: {
   sorted: RoundResult[];
-  desertedByPosition: Map<number, DesertedRoundResult>;
+  outcomeByPosition: Map<number, PositionOutcome>;
 }) {
   const slot = (pos: number): PodiumSlot => ({
     position: pos,
     result: sorted.find((r) => r.finalPosition === pos),
-    deserted: desertedByPosition.get(pos),
+    outcome: outcomeByPosition.get(pos),
   });
 
   const hasAnyTop3 =
     sorted.some((r) => r.finalPosition !== null && r.finalPosition <= 3) ||
-    [1, 2, 3].some((p) => desertedByPosition.has(p));
+    [1, 2, 3].some((p) => outcomeByPosition.has(p));
 
   if (!hasAnyTop3) return null;
 
@@ -139,21 +218,21 @@ function Podium({
 
 function StatusBadge({
   row,
-  desertedRow,
+  outcome,
   provisionalLabel,
   provisionalVariant,
   forceOfficialStatus,
 }: {
   row?: RoundResult;
-  desertedRow?: DesertedRoundResult;
+  outcome?: PositionOutcome;
   provisionalLabel: string;
   provisionalVariant: "neutral" | "tieBreak";
   forceOfficialStatus: boolean;
 }) {
-  if (desertedRow && !row) {
+  if (outcome && !row) {
     return (
       <span className="inline-flex items-center rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
-        Desierto
+        {outcomeBadgeLabel(outcome)}
       </span>
     );
   }
@@ -203,6 +282,8 @@ function StatusBadge({
 export function OfficialResultBoard({
   results,
   desertedResults = [],
+  unawardedResults = [],
+  positionOutcomes = [],
   showScoring = true,
   showPodium = false,
   title = "Resultado F2",
@@ -211,7 +292,9 @@ export function OfficialResultBoard({
   provisionalVariant = "neutral",
   forceOfficialStatus = false,
 }: OfficialResultBoardProps) {
-  if (results.length === 0) {
+  const outcomes = resolveOutcomes({ desertedResults, unawardedResults, positionOutcomes });
+
+  if (results.length === 0 && outcomes.length === 0) {
     return (
       <div className="rounded-xl border border-slate-200 bg-white p-5 text-center text-sm text-slate-400">
         Aún no hay resultados consolidados.
@@ -220,15 +303,15 @@ export function OfficialResultBoard({
   }
 
   const sorted = [...results].sort((a, b) => (a.finalPosition ?? 0) - (b.finalPosition ?? 0));
-  const desertedByPosition = new Map(desertedResults.map((row) => [row.finalPosition, row]));
+  const outcomeByPosition = new Map(outcomes.map((row) => [row.finalPosition, row]));
   const maxPosition = Math.max(
     0,
     ...sorted.map((row) => row.finalPosition ?? 0),
-    ...desertedResults.map((row) => row.finalPosition)
+    ...outcomes.map((row) => row.finalPosition)
   );
   const hasTop3 =
     sorted.some((row) => row.finalPosition !== null && row.finalPosition <= 3) ||
-    [1, 2, 3].some((position) => desertedByPosition.has(position));
+    [1, 2, 3].some((position) => outcomeByPosition.has(position));
 
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -245,7 +328,7 @@ export function OfficialResultBoard({
 
       {showPodium && hasTop3 && (
         <>
-          <Podium sorted={sorted} desertedByPosition={desertedByPosition} />
+          <Podium sorted={sorted} outcomeByPosition={outcomeByPosition} />
           <div className="mx-5 border-t border-slate-100" />
         </>
       )}
@@ -265,19 +348,20 @@ export function OfficialResultBoard({
           <tbody>
             {Array.from({ length: maxPosition }, (_, index) => index + 1).map((position) => {
               const row = sorted.find((result) => result.finalPosition === position);
-              const desertedRow = desertedByPosition.get(position);
-              if (!row && !desertedRow) return null;
+              const outcome = outcomeByPosition.get(position);
+              if (!row && !outcome) return null;
 
               const isTied = row?.status === "TIED" && !forceOfficialStatus;
+              const isDeserted = outcome?.outcomeType === "DESERTED";
 
               return (
                 <tr
-                  key={row?.id ?? `deserted-${position}`}
+                  key={row?.id ?? `outcome-${outcome?.outcomeType}-${position}`}
                   className={cn(
                     "border-b border-slate-100 text-sm last:border-0",
                     isTied
                       ? "bg-amber-50/60"
-                      : desertedRow
+                      : outcome
                         ? "bg-slate-50/70"
                         : "hover:bg-slate-50/40"
                   )}
@@ -296,16 +380,21 @@ export function OfficialResultBoard({
                         </p>
                         <p className="font-mono text-xs text-slate-400">{row.registrationNumber}</p>
                       </>
-                    ) : (
-                      <p className="font-semibold text-slate-500">Puesto desierto</p>
-                    )}
+                    ) : outcome ? (
+                      <>
+                        <p className="font-semibold text-slate-500">{outcomeLabel(outcome)}</p>
+                        {outcomeDescription(outcome) && (
+                          <p className="mt-0.5 text-xs text-slate-400">{outcomeDescription(outcome)}</p>
+                        )}
+                      </>
+                    ) : null}
                   </td>
 
                   <td className="py-3 pr-3">
                     <div className="flex justify-center">
                       <DistinctiveBadge
-                        distinctive={row?.awardDistinctive ?? desertedRow?.awardDistinctive ?? null}
-                        deserted={Boolean(desertedRow && !row)}
+                        distinctive={row?.awardDistinctive ?? outcome?.awardDistinctive ?? null}
+                        deserted={Boolean(isDeserted && !row)}
                       />
                     </div>
                   </td>
@@ -318,14 +407,18 @@ export function OfficialResultBoard({
 
                   {showScoring && (
                     <td className="py-3 pr-3 text-right tabular-nums text-slate-600">
-                      {row ? row.firstPlaceVotes : desertedRow?.votesCount ?? "—"}
+                      {row
+                        ? row.firstPlaceVotes
+                        : outcome?.outcomeType === "DESERTED"
+                          ? (outcome.votesCount ?? "—")
+                          : outcome?.assignedVotes ?? "—"}
                     </td>
                   )}
 
                   <td className="py-3 pr-4 text-right">
                     <StatusBadge
                       row={row}
-                      desertedRow={desertedRow}
+                      outcome={outcome}
                       provisionalLabel={provisionalLabel}
                       provisionalVariant={provisionalVariant}
                       forceOfficialStatus={forceOfficialStatus}

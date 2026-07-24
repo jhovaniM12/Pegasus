@@ -29,11 +29,8 @@ export type OfflineTelemetryEvent = {
 
 type TelemetrySink = (event: OfflineTelemetryEvent) => void;
 
-const DEFAULT_SINK: TelemetrySink = (event) => {
-  if (typeof console === "undefined") return;
-  // Sin payload de tarjeta: solo metadatos operativos.
-  console.info("[pegasus-offline]", event.name, event);
-};
+/** Sin salida a consola: la telemetría solo se usa si alguien registra un sink (p. ej. tests). */
+const DEFAULT_SINK: TelemetrySink = () => undefined;
 
 let sink: TelemetrySink = DEFAULT_SINK;
 
@@ -45,6 +42,7 @@ export function recordOfflineTelemetry(
   name: OfflineTelemetryEventName,
   fields: Omit<OfflineTelemetryEvent, "name" | "at"> = {}
 ): void {
+  if (sink === DEFAULT_SINK) return;
   sink({
     name,
     at: new Date().toISOString(),

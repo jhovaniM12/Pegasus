@@ -1,14 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Clock, History } from "lucide-react";
 
 import { useToast } from "@/components/ui/toast";
 import { stagedFlowService } from "@/services/staged-flow.service";
 import type { RoundParticipant, RoundState } from "@/types/staged-flow";
 import { F1EntryCard } from "./f1-entry-card";
 import { F1NoteDialog } from "./f1-note-dialog";
-import { F1ReminderHistory } from "./f1-reminder-history";
 import { F1RemindersBar } from "./f1-reminders-bar";
 import { F1RemindersDialog } from "./f1-reminders-dialog";
 
@@ -41,7 +39,6 @@ export function F1SelectionBoard({
   onSaveReminders,
 }: F1SelectionBoardProps) {
   const { toast } = useToast();
-  const [historyOpen, setHistoryOpen] = useState(true);
   const [annotationBusy, setAnnotationBusy] = useState(false);
   const [remindersTarget, setRemindersTarget] = useState<RoundParticipant | null>(null);
   const [noteTarget, setNoteTarget] = useState<RoundParticipant | null>(null);
@@ -105,30 +102,16 @@ export function F1SelectionBoard({
   return (
     <div className="space-y-4">
       <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold text-slate-900">Recordatorios disponibles</p>
-            <p className="mt-1 text-xs text-slate-500">
-              Usa el botón + en cada tarjeta para marcar SUMA o RESTA en un ejemplar.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setHistoryOpen((open) => !open)}
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:text-blue-700"
-          >
-            {historyOpen ? <Clock className="size-4" /> : <History className="size-4" />}
-            {historyOpen ? "Ocultar historial" : "Mostrar historial"}
-          </button>
+        <div>
+          <p className="text-sm font-semibold text-slate-900">Recordatorios disponibles</p>
+          <p className="mt-1 text-xs text-slate-500">
+            Usa el botón + en cada tarjeta para marcar SUMA o RESTA en un ejemplar.
+          </p>
         </div>
         <div className="mt-3">
           <F1RemindersBar reminders={round.availableReminders} />
         </div>
       </div>
-
-      {historyOpen && (
-        <F1ReminderHistory items={round.reminderHistory} onClose={() => setHistoryOpen(false)} />
-      )}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {round.participants.map((participant) => (
