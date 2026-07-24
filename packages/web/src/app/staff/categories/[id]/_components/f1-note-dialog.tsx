@@ -39,8 +39,12 @@ function F1NoteDialogBody({
 
   const handleSave = async () => {
     const trimmed = note.trim();
-    await onSave(participant.id, trimmed ? trimmed : null);
-    onOpenChange(false);
+    try {
+      await onSave(participant.id, trimmed ? trimmed : null);
+      onOpenChange(false);
+    } catch {
+      // El board muestra el toast; el diálogo permanece abierto para reintentar.
+    }
   };
 
   return (

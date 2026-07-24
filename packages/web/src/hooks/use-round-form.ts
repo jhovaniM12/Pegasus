@@ -2,9 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useNetworkStatus } from "@/components/network-status";
 import {
+  advancePendingBaseRevisions,
   countBlockingMutationsForStage,
+  discardOfflineMutation,
   getTrustedOfflineDevice,
   hasBlockingMutationsForStage,
+  listPendingMutationsForStage,
   queueOfflineMutation,
 } from "@/offline/offline-repository";
 import { cacheRoundStageSnapshot, readRoundStageSnapshot } from "@/offline/round-cache";
@@ -14,6 +17,7 @@ import {
   type RoundNoteMutationPayload,
   type RoundRemindersMutationPayload,
 } from "@/offline/sync-engine";
+import { stagedFlowService } from "@/services/staged-flow.service";
 import type { RoundState } from "@/types/staged-flow";
 
 type UseRoundFormParams = {
@@ -37,6 +41,7 @@ export function useRoundForm({
   const [isSyncing, setIsSyncing] = useState(false);
   const roundRef = useRef(round);
   const syncInFlightRef = useRef(false);
+  const syncRequestedRef = useRef(false);
   const isClosingRef = useRef(false);
 
   useEffect(() => {
@@ -72,25 +77,40 @@ export function useRoundForm({
   );
 
   const syncNow = useCallback(async () => {
-    if (!userId || syncInFlightRef.current) {
+    if (!userId) {
+      return { synced: 0, conflicts: 0, failed: 0, round: null as RoundState | null };
+    }
+    if (syncInFlightRef.current) {
+      // No perder mutaciones encoladas mientras otra sincronización está terminando.
+      syncRequestedRef.current = true;
       return { synced: 0, conflicts: 0, failed: 0, round: null as RoundState | null };
     }
     syncInFlightRef.current = true;
     setIsSyncing(true);
+    let latestResult = {
+      synced: 0,
+      conflicts: 0,
+      failed: 0,
+      round: null as RoundState | null,
+    };
     try {
-      const result = await syncRoundStage(userId, stageId);
-      if (result.round) {
-        roundRef.current = result.round;
-        onRoundChange(result.round);
-        await cacheRoundStageSnapshot({ userId, round: result.round });
-      }
-      await refreshPendingState();
-      if (result.conflicts > 0) {
-        onSyncNotice?.(
-          "Hay conflictos de sincronización en la tarjeta. Revisa antes de cerrar."
-        );
-      }
-      return result;
+      do {
+        syncRequestedRef.current = false;
+        latestResult = await syncRoundStage(userId, stageId);
+        if (latestResult.round) {
+          roundRef.current = latestResult.round;
+          onRoundChange(latestResult.round);
+          await cacheRoundStageSnapshot({ userId, round: latestResult.round });
+        }
+        await refreshPendingState();
+        if (latestResult.conflicts > 0) {
+          onSyncNotice?.(
+            "Hay conflictos de sincronización en la tarjeta. Revisa antes de cerrar."
+          );
+        }
+      } while (syncRequestedRef.current);
+
+      return latestResult;
     } finally {
       syncInFlightRef.current = false;
       setIsSyncing(false);
@@ -174,10 +194,93 @@ export function useRoundForm({
     [connectivityState, onRoundChange, refreshPendingState, stageId, syncNow, userId]
   );
 
+  const advanceRoundFormRevisions = useCallback(
+    async (formId: string, appliedRevision: number) => {
+      if (!userId) return;
+      await advancePendingBaseRevisions({
+        userId,
+        stageId,
+        appliedRevision,
+        match: (mutation) => {
+          if (mutation.aggregateType === "ROUND_FORM") {
+            return mutation.aggregateId === formId;
+          }
+          if (
+            mutation.aggregateType === "ROUND_NOTE" ||
+            mutation.aggregateType === "ROUND_REMINDERS"
+          ) {
+            return mutation.aggregateId.startsWith(`${formId}:`);
+          }
+          return false;
+        },
+      });
+    },
+    [stageId, userId]
+  );
+
+  const discardPendingAnnotation = useCallback(
+    async (
+      formId: string,
+      participantId: string,
+      aggregateType: "ROUND_NOTE" | "ROUND_REMINDERS"
+    ) => {
+      if (!userId) return;
+      const pending = await listPendingMutationsForStage(userId, stageId);
+      const aggregateId = `${formId}:${participantId}`;
+      await Promise.all(
+        pending
+          .filter(
+            (mutation) =>
+              mutation.aggregateType === aggregateType && mutation.aggregateId === aggregateId
+          )
+          .map((mutation) => discardOfflineMutation(mutation.operationId))
+      );
+    },
+    [stageId, userId]
+  );
+
   const queueNote = useCallback(
     async (participantId: string, note: string | null) => {
       const current = roundRef.current;
-      if (!userId || !current.form || isClosingRef.current) return;
+      if (!userId || !current.form || isClosingRef.current) {
+        throw new Error("No hay formulario de ronda disponible para guardar la nota.");
+      }
+
+      const formId = current.form.id;
+
+      // En línea: guardar directo (sin revisión offline) para no bloquear el diálogo
+      // ni perder la nota por conflictos de selección pendientes.
+      if (connectivityState === "ONLINE") {
+        const response = await stagedFlowService.updateRoundEntryNote(
+          stageId,
+          participantId,
+          note
+        );
+        const server = response.data;
+        if (!server?.form) {
+          throw new Error("La API no confirmó el guardado de la nota.");
+        }
+
+        const merged: RoundState = {
+          ...current,
+          form: {
+            ...current.form,
+            revision: server.form.revision,
+          },
+          participants: current.participants.map((participant) =>
+            participant.id === participantId
+              ? { ...participant, privateNote: note }
+              : participant
+          ),
+        };
+        roundRef.current = merged;
+        onRoundChange(merged);
+        await cacheRoundStageSnapshot({ userId, round: merged });
+        await discardPendingAnnotation(formId, participantId, "ROUND_NOTE");
+        await advanceRoundFormRevisions(formId, server.form.revision);
+        await refreshPendingState();
+        return;
+      }
 
       const payload: RoundNoteMutationPayload = {
         roundId: current.round.id,
@@ -187,11 +290,11 @@ export function useRoundForm({
       };
 
       await queueOfflineMutation({
-        deduplicationKey: `ROUND_NOTE:${current.round.id}:${current.form.id}:${participantId}`,
+        deduplicationKey: `ROUND_NOTE:${current.round.id}:${formId}:${participantId}`,
         userId,
         stageId,
         aggregateType: "ROUND_NOTE",
-        aggregateId: `${current.form.id}:${participantId}`,
+        aggregateId: `${formId}:${participantId}`,
         operationType: "UPDATE_ROUND_NOTE",
         baseRevision: current.form.revision,
         payload,
@@ -207,11 +310,16 @@ export function useRoundForm({
       onRoundChange(optimistic);
       await cacheRoundStageSnapshot({ userId, round: optimistic });
       await refreshPendingState();
-      if (connectivityState === "ONLINE") {
-        await syncNow();
-      }
     },
-    [connectivityState, onRoundChange, refreshPendingState, stageId, syncNow, userId]
+    [
+      advanceRoundFormRevisions,
+      connectivityState,
+      discardPendingAnnotation,
+      onRoundChange,
+      refreshPendingState,
+      stageId,
+      userId,
+    ]
   );
 
   const queueReminders = useCallback(
@@ -220,7 +328,56 @@ export function useRoundForm({
       reminders: Array<{ reminderId: string; effect: "SUMA" | "RESTA" }>
     ) => {
       const current = roundRef.current;
-      if (!userId || !current.form || isClosingRef.current) return;
+      if (!userId || !current.form || isClosingRef.current) {
+        throw new Error("No hay formulario de ronda disponible para guardar los recordatorios.");
+      }
+
+      const formId = current.form.id;
+      const reminderCatalog = new Map(
+        current.availableReminders.map((item) => [item.id, item] as const)
+      );
+      const nextReminders = reminders.map((item) => {
+        const catalog = reminderCatalog.get(item.reminderId);
+        return {
+          reminderId: item.reminderId,
+          name: catalog?.name ?? "",
+          icon: catalog?.icon ?? "",
+          effect: item.effect,
+        };
+      });
+
+      if (connectivityState === "ONLINE") {
+        const response = await stagedFlowService.updateRoundEntryReminders(
+          stageId,
+          participantId,
+          reminders
+        );
+        const server = response.data;
+        if (!server?.form) {
+          throw new Error("La API no confirmó el guardado de los recordatorios.");
+        }
+
+        const merged: RoundState = {
+          ...current,
+          form: {
+            ...current.form,
+            revision: server.form.revision,
+          },
+          participants: current.participants.map((participant) =>
+            participant.id === participantId
+              ? { ...participant, reminders: nextReminders }
+              : participant
+          ),
+          reminderHistory: server.reminderHistory ?? current.reminderHistory,
+        };
+        roundRef.current = merged;
+        onRoundChange(merged);
+        await cacheRoundStageSnapshot({ userId, round: merged });
+        await discardPendingAnnotation(formId, participantId, "ROUND_REMINDERS");
+        await advanceRoundFormRevisions(formId, server.form.revision);
+        await refreshPendingState();
+        return;
+      }
 
       const payload: RoundRemindersMutationPayload = {
         roundId: current.round.id,
@@ -230,35 +387,21 @@ export function useRoundForm({
       };
 
       await queueOfflineMutation({
-        deduplicationKey: `ROUND_REMINDERS:${current.round.id}:${current.form.id}:${participantId}`,
+        deduplicationKey: `ROUND_REMINDERS:${current.round.id}:${formId}:${participantId}`,
         userId,
         stageId,
         aggregateType: "ROUND_REMINDERS",
-        aggregateId: `${current.form.id}:${participantId}`,
+        aggregateId: `${formId}:${participantId}`,
         operationType: "UPDATE_ROUND_REMINDERS",
         baseRevision: current.form.revision,
         payload,
       });
 
-      const reminderCatalog = new Map(
-        current.availableReminders.map((item) => [item.id, item] as const)
-      );
       const optimistic: RoundState = {
         ...current,
         participants: current.participants.map((participant) =>
           participant.id === participantId
-            ? {
-                ...participant,
-                reminders: reminders.map((item) => {
-                  const catalog = reminderCatalog.get(item.reminderId);
-                  return {
-                    reminderId: item.reminderId,
-                    name: catalog?.name ?? "",
-                    icon: catalog?.icon ?? "",
-                    effect: item.effect,
-                  };
-                }),
-              }
+            ? { ...participant, reminders: nextReminders }
             : participant
         ),
       };
@@ -266,11 +409,16 @@ export function useRoundForm({
       onRoundChange(optimistic);
       await cacheRoundStageSnapshot({ userId, round: optimistic });
       await refreshPendingState();
-      if (connectivityState === "ONLINE") {
-        await syncNow();
-      }
     },
-    [connectivityState, onRoundChange, refreshPendingState, stageId, syncNow, userId]
+    [
+      advanceRoundFormRevisions,
+      connectivityState,
+      discardPendingAnnotation,
+      onRoundChange,
+      refreshPendingState,
+      stageId,
+      userId,
+    ]
   );
 
   const beginClose = useCallback(() => {

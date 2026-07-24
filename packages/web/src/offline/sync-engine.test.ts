@@ -304,6 +304,70 @@ describe("sync engine revision chaining", () => {
     });
   });
 
+  it("reaplica una nota sobre la revisión actual cuando el servidor lo permite", async () => {
+    connectivityMock.mockResolvedValue(true);
+
+    await queueOfflineMutation({
+      deduplicationKey: `ROUND_NOTE:${ROUND_ID}:${FORM_ID}:${PARTICIPANT_ID}`,
+      userId: USER_ID,
+      stageId: STAGE_ID,
+      aggregateType: "ROUND_NOTE",
+      aggregateId: `${FORM_ID}:${PARTICIPANT_ID}`,
+      operationType: "UPDATE_ROUND_NOTE",
+      baseRevision: 4,
+      payload: {
+        roundId: ROUND_ID,
+        tieBlockIdentity: "STANDARD",
+        participantId: PARTICIPANT_ID,
+        note: "Nota persistente",
+      },
+    });
+
+    updateRoundEntryNoteMock
+      .mockRejectedValueOnce(
+        new ApiError("Conflicto de revisión", {
+          status: 409,
+          code: "REVISION_CONFLICT",
+          details: {
+            currentRevision: 9,
+            resolution: "CAN_REAPPLY_LOCAL_DRAFT",
+          },
+        })
+      )
+      .mockResolvedValueOnce({
+        data: {
+          round: { id: ROUND_ID, tieBlockIdentity: "STANDARD" },
+          form: { id: FORM_ID, revision: 10 },
+          participants: [],
+          availableReminders: [],
+        },
+        sync: {
+          operationId: "op-note",
+          applied: true,
+          duplicate: false,
+          revision: 10,
+          serverUpdatedAt: new Date().toISOString(),
+        },
+      } as never);
+
+    const result = await syncRoundStage(USER_ID, STAGE_ID);
+
+    expect(result).toMatchObject({ synced: 1, conflicts: 0, failed: 0 });
+    expect(updateRoundEntryNoteMock).toHaveBeenNthCalledWith(
+      1,
+      STAGE_ID,
+      PARTICIPANT_ID,
+      expect.objectContaining({ baseRevision: 4 })
+    );
+    expect(updateRoundEntryNoteMock).toHaveBeenNthCalledWith(
+      2,
+      STAGE_ID,
+      PARTICIPANT_ID,
+      expect.objectContaining({ baseRevision: 9 })
+    );
+    await expect(listMutationsForUser(USER_ID)).resolves.toHaveLength(0);
+  });
+
   it("marca CONFLICT si el servidor rechaza la revisión sin encadenar", async () => {
     connectivityMock.mockResolvedValue(true);
 

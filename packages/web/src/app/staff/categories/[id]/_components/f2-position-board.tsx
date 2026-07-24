@@ -66,8 +66,9 @@ export function F2PositionBoard({
       if (response.data) {
         onLocalUpdate(response.data);
       }
-    } catch {
+    } catch (error) {
       handleAnnotationError();
+      throw error;
     } finally {
       setAnnotationBusy(false);
     }
@@ -84,8 +85,9 @@ export function F2PositionBoard({
       if (response.data) {
         onLocalUpdate(response.data);
       }
-    } catch {
+    } catch (error) {
       handleAnnotationError();
+      throw error;
     } finally {
       setAnnotationBusy(false);
     }

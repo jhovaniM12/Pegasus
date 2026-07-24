@@ -75,8 +75,9 @@ export function F1SelectionBoard({
       if (response.data) {
         onLocalUpdate(response.data);
       }
-    } catch {
+    } catch (error) {
       handleAnnotationError();
+      throw error;
     } finally {
       setAnnotationBusy(false);
     }
@@ -93,8 +94,9 @@ export function F1SelectionBoard({
       if (response.data) {
         onLocalUpdate(response.data);
       }
-    } catch {
+    } catch (error) {
       handleAnnotationError();
+      throw error;
     } finally {
       setAnnotationBusy(false);
     }

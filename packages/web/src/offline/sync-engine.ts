@@ -740,6 +740,32 @@ export async function syncRoundStage(userId: string, stageId: string): Promise<S
         synced += 1;
         await chainPendingRevisionsAfterSuccess(mutation, revision, chainedByScope);
       } catch (error) {
+        const apiError = error instanceof ApiError ? error : null;
+        const details = apiError?.details as RevisionConflictDetails | undefined;
+        const canReapplyAnnotation =
+          apiError?.code === "REVISION_CONFLICT" &&
+          details?.resolution === "CAN_REAPPLY_LOCAL_DRAFT" &&
+          typeof details.currentRevision === "number" &&
+          details.currentRevision !== baseRevision &&
+          (mutation.aggregateType === "ROUND_NOTE" ||
+            mutation.aggregateType === "ROUND_REMINDERS");
+
+        if (canReapplyAnnotation) {
+          await markMutationStatus(mutation.operationId, {
+            status: "PENDING",
+            baseRevision: details.currentRevision,
+            nextRetryAt: null,
+            lastErrorCode: null,
+            lastErrorMessage: null,
+            lastErrorDetails: null,
+          });
+          chainedByScope.set(
+            mutationRevisionScopeKey(mutation),
+            details.currentRevision
+          );
+          continue;
+        }
+
         const outcome = await handleSyncError(
           withBaseRevision(mutation, baseRevision),
           error
