@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { peopleService } from "@/services/people.service";
 import type { Person } from "@/types/people";
@@ -11,6 +11,11 @@ export function usePeople(params: UsePeopleParams = {}) {
   const requestKey = params.fairId ?? "all";
   const [people, setPeople] = useState<Person[]>([]);
   const [loadedKey, setLoadedKey] = useState("");
+  const [reloadToken, setReloadToken] = useState(0);
+
+  const reload = useCallback(() => {
+    setReloadToken((current) => current + 1);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -27,7 +32,7 @@ export function usePeople(params: UsePeopleParams = {}) {
     return () => {
       cancelled = true;
     };
-  }, [params.fairId, requestKey]);
+  }, [params.fairId, requestKey, reloadToken]);
 
-  return { people, loading: loadedKey !== requestKey };
+  return { people, loading: loadedKey !== requestKey, reload };
 }

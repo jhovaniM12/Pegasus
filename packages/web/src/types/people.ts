@@ -7,4 +7,5 @@ export type Person = {
   documentNumber?: string | null;
   accessRole: string | null;
   accessRoleLabel: string | null;
+  accessCode: string | null;
 };

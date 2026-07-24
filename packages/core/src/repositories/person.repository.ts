@@ -1,4 +1,5 @@
-import type { DataSource } from "typeorm";
+import type { DataSource, FindOptionsWhere } from "typeorm";
+import { ILike, In } from "typeorm";
 import { Person } from "../entities/person.entity.js";
 import { FairStaff } from "../entities/fair-staff.js";
 import type { PaginatedResult, PaginationParams } from "./types.js";
@@ -8,31 +9,40 @@ export async function findPeoplePaginated(
   params: PaginationParams & { search?: string; fairId?: string }
 ): Promise<PaginatedResult<Person>> {
   const query = params.search?.trim();
-  const qb = dataSource.getRepository(Person).createQueryBuilder("person");
+  const searchWhere: Array<FindOptionsWhere<Person>> | undefined = query
+    ? [
+        { name: ILike(`%${query}%`) },
+        { lastName: ILike(`%${query}%`) },
+        { email: ILike(`%${query}%`) }
+      ]
+    : undefined;
+
+  let personIds: string[] | undefined;
 
   if (params.fairId) {
-    qb.innerJoin(
-      FairStaff,
-      "staff",
-      "staff.person_id = person.id AND staff.fair_id = :fairId",
-      { fairId: params.fairId }
-    );
+    const staffRows = await dataSource.getRepository(FairStaff).find({
+      where: { fairId: params.fairId },
+      select: { personId: true }
+    });
+    personIds = [...new Set(staffRows.map((row) => row.personId))];
+
+    if (personIds.length === 0) {
+      return { items: [], total: 0, page: params.page, limit: params.limit };
+    }
   }
 
-  if (query) {
-    qb.andWhere(
-      "(person.name ILIKE :search OR person.last_name ILIKE :search OR person.email ILIKE :search)",
-      { search: `%${query}%` }
-    );
-  }
+  const where: FindOptionsWhere<Person> | Array<FindOptionsWhere<Person>> | undefined = personIds
+    ? searchWhere
+      ? searchWhere.map((entry) => ({ ...entry, id: In(personIds) }))
+      : { id: In(personIds) }
+    : searchWhere;
 
-  qb.distinct(true)
-    .orderBy("person.last_name", "ASC")
-    .addOrderBy("person.name", "ASC")
-    .skip((params.page - 1) * params.limit)
-    .take(params.limit);
-
-  const [items, total] = await qb.getManyAndCount();
+  const [items, total] = await dataSource.getRepository(Person).findAndCount({
+    where,
+    order: { lastName: "ASC", name: "ASC" },
+    skip: (params.page - 1) * params.limit,
+    take: params.limit
+  });
 
   return { items, total, page: params.page, limit: params.limit };
 }

@@ -12,3 +12,12 @@ export const assignAccessCodeSchema = z.object({
     .length(6, "El código de acceso debe tener 6 caracteres.")
     .regex(/^[a-zA-Z0-9]+$/, "El código de acceso solo puede contener letras y números.")
 });
+
+export const checkAccessCodeQuerySchema = z.object({
+  accessCode: z
+    .string()
+    .trim()
+    .length(6, "El código de acceso debe tener 6 caracteres.")
+    .regex(/^[a-zA-Z0-9]+$/, "El código de acceso solo puede contener letras y números."),
+  personId: z.string().uuid("El identificador de persona debe ser un UUID válido.").optional()
+});

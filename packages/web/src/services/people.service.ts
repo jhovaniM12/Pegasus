@@ -4,6 +4,18 @@ import type { Person } from "@/types/people";
 
 export type ListPeopleParams = {
   fairId?: string;
+  limit?: number;
+};
+
+export type AccessCodeAvailability = {
+  accessCode: string;
+  available: boolean;
+  message: string;
+};
+
+export type AccessCodeAssignment = {
+  role: string;
+  accessCode: string | null;
 };
 
 export class PeopleService extends ApiService {
@@ -14,14 +26,39 @@ export class PeopleService extends ApiService {
       query.set("fairId", params.fairId);
     }
 
-    const suffix = query.toString() ? `?${query.toString()}` : "";
-    return this.get<PaginatedResponse<Person>>(`/api/people${suffix}`);
+    query.set("limit", String(params.limit ?? 100));
+
+    return this.get<PaginatedResponse<Person>>(`/api/people?${query.toString()}`);
   }
 
-  async assignAccessCode(personId: string, accessCode: string): Promise<ApiResponse<{ role: string }>> {
-    return this.patch<ApiResponse<{ role: string }>>(`/api/people/${personId}/access-code`, {
+  async checkAccessCode(
+    accessCode: string,
+    personId?: string
+  ): Promise<ApiResponse<AccessCodeAvailability>> {
+    const query = new URLSearchParams({ accessCode });
+
+    if (personId) {
+      query.set("personId", personId);
+    }
+
+    return this.get<ApiResponse<AccessCodeAvailability>>(
+      `/api/people/access-code/check?${query.toString()}`
+    );
+  }
+
+  async assignAccessCode(
+    personId: string,
+    accessCode: string
+  ): Promise<ApiResponse<AccessCodeAssignment>> {
+    return this.patch<ApiResponse<AccessCodeAssignment>>(`/api/people/${personId}/access-code`, {
       accessCode,
     });
+  }
+
+  async generateAccessCode(personId: string): Promise<ApiResponse<AccessCodeAssignment>> {
+    return this.post<ApiResponse<AccessCodeAssignment>>(
+      `/api/people/${personId}/access-code/generate`
+    );
   }
 }
 

@@ -65,6 +65,7 @@ import {
   AddTieBreakIdentity1717430400028,
   AddOfflineMutationFoundation1717430400029,
   ExpandFairEntryImportIdentity1717430400030,
+  AddUserAccessCodePlaintext1717430400031,
   CreateFairEntriesTable1717430400004,
   CreateFairResultsTable1717430400008,
   CreateFairStaffTable1717430400007,
@@ -174,7 +175,8 @@ export const AppDataSource = new DataSource({
     CreateFaRepeatTrackRequests1717430400027,
     AddTieBreakIdentity1717430400028,
     AddOfflineMutationFoundation1717430400029,
-    ExpandFairEntryImportIdentity1717430400030
+    ExpandFairEntryImportIdentity1717430400030,
+    AddUserAccessCodePlaintext1717430400031
   ]
 });
 

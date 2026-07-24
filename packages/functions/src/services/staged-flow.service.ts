@@ -24,6 +24,7 @@ import {
   WorkflowEvent
 } from "@pegasus/core";
 import type { DataSource, EntityManager } from "typeorm";
+import { Brackets, In } from "typeorm";
 import { BadRequestError, ForbiddenError, FormClosedError, NotFoundError, StageAdvancedError } from "../lib/errors.js";
 import {
   assertExpectedRevision,
@@ -122,88 +123,121 @@ async function ensureVeterinaryChecks(manager: EntityManager, stage: FairCategor
   }
 }
 
-async function getOrCreateStage(
-  manager: EntityManager,
-  fairId: string,
-  categoryId: string
-): Promise<FairCategoryStage> {
-  let stage = await manager.getRepository(FairCategoryStage).findOne({
-    where: { fairId, categoryId },
-    relations: { fair: true, category: { gait: true } }
-  });
-
-  if (stage) {
-    return stage;
-  }
-
-  stage = await manager.getRepository(FairCategoryStage).save(
-    manager.getRepository(FairCategoryStage).create({
-      fairId,
-      categoryId,
-      status: "NOT_STARTED",
-      preRingStartedAt: null,
-      preRingStartedByUserId: null,
-      preRingClosedAt: null,
-      preRingClosedByUserId: null,
-      judgingStartedAt: null,
-      judgingStartedByUserId: null,
-      faConsolidatedAt: null,
-      faConsolidatedByUserId: null,
-      judgingClosedAt: null,
-      judgingClosedByUserId: null,
-      desertedAt: null,
-      desertedByUserId: null,
-      desertedReason: null
-    })
-  );
-
-  return getStageOrThrow(manager, stage.id);
+export async function buildStageSummary(manager: EntityManager, stage: FairCategoryStage): Promise<StagedCategoryDto> {
+  const [summary] = await buildStageSummaries(manager, [stage]);
+  return summary;
 }
 
-export async function buildStageSummary(manager: EntityManager, stage: FairCategoryStage): Promise<StagedCategoryDto> {
-  const [totalEntries, checks, forms, decisions] = await Promise.all([
-    manager.getRepository(FairEntry).count({
-      where: { fairId: stage.fairId, categoryId: stage.categoryId }
-    }),
-    manager.getRepository(VeterinaryCheck).find({ where: { fairCategoryStageId: stage.id } }),
-    manager.getRepository(FaJudgeForm).find({ where: { fairCategoryStageId: stage.id } }),
-    manager.getRepository(FaJudgeEntryDecision).find({
-      where: { faJudgeForm: { fairCategoryStageId: stage.id } },
-      relations: { faJudgeForm: true }
-    })
-  ]);
-  const judges = await getUsersByFairRole(manager, stage.fairId, "2");
+async function buildStageSummaries(
+  manager: EntityManager,
+  stages: FairCategoryStage[]
+): Promise<StagedCategoryDto[]> {
+  if (stages.length === 0) {
+    return [];
+  }
 
-  return {
-    stageId: stage.id,
-    revision: stage.revision,
-    status: stage.status,
-    fair: { id: stage.fair.id, name: stage.fair.name },
-    category: {
-      id: stage.category.id,
-      name: stage.category.name,
-      minAgeMonths: Number(stage.category.minAgeMonths),
-      maxAgeMonths: Number(stage.category.maxAgeMonths)
-    },
-    gait: {
-      id: stage.category.gait.id,
-      name: stage.category.gait.name
-    },
-    totalEntries,
-    veterinary: {
-      pending: checks.filter((check) => check.status === "PENDING").length,
-      approved: checks.filter((check) => check.status === "APPROVED").length,
-      rejected: checks.filter((check) => check.status === "REJECTED").length,
-      absent: checks.filter((check) => check.status === "ABSENT").length
-    },
-    judging: {
-      totalJudges: judges.length,
-      closedForms: forms.filter((form) => form.status === "CLOSED").length,
-      selected: decisions.filter((decision) => decision.decision === "SELECTED").length,
-      discarded: decisions.filter((decision) => decision.decision === "DISCARDED").length,
-      disqualified: decisions.filter((decision) => decision.decision === "DISQUALIFIED").length
-    }
-  };
+  const stageIds = stages.map((stage) => stage.id);
+  const fairIds = [...new Set(stages.map((stage) => stage.fairId))];
+
+  const entryCountRows = await manager
+    .getRepository(FairEntry)
+    .createQueryBuilder("entry")
+    .select("entry.fair_id", "fairId")
+    .addSelect("entry.category_id", "categoryId")
+    .addSelect("COUNT(entry.id)", "total")
+    .where(
+      new Brackets((qb) => {
+        for (const [index, stage] of stages.entries()) {
+          qb.orWhere(
+            `(entry.fair_id = :fairId${index} AND entry.category_id = :categoryId${index})`,
+            {
+              [`fairId${index}`]: stage.fairId,
+              [`categoryId${index}`]: stage.categoryId
+            }
+          );
+        }
+      })
+    )
+    .groupBy("entry.fair_id")
+    .addGroupBy("entry.category_id")
+    .getRawMany<{ fairId: string; categoryId: string; total: string }>();
+
+  const checks = await manager.getRepository(VeterinaryCheck).find({
+    where: { fairCategoryStageId: In(stageIds) }
+  });
+  const forms = await manager.getRepository(FaJudgeForm).find({
+    where: { fairCategoryStageId: In(stageIds) }
+  });
+  const decisions = await manager.getRepository(FaJudgeEntryDecision).find({
+    where: { faJudgeForm: { fairCategoryStageId: In(stageIds) } },
+    relations: { faJudgeForm: true }
+  });
+
+  const judgeCountByFairId = new Map<string, number>();
+  for (const fairId of fairIds) {
+    const judges = await getUsersByFairRole(manager, fairId, "2");
+    judgeCountByFairId.set(fairId, judges.length);
+  }
+
+  const entryCountByPair = new Map(
+    entryCountRows.map((row) => [`${row.fairId}:${row.categoryId}`, Number(row.total)])
+  );
+  const checksByStageId = new Map<string, VeterinaryCheck[]>();
+  for (const check of checks) {
+    const current = checksByStageId.get(check.fairCategoryStageId) ?? [];
+    current.push(check);
+    checksByStageId.set(check.fairCategoryStageId, current);
+  }
+  const formsByStageId = new Map<string, FaJudgeForm[]>();
+  for (const form of forms) {
+    const current = formsByStageId.get(form.fairCategoryStageId) ?? [];
+    current.push(form);
+    formsByStageId.set(form.fairCategoryStageId, current);
+  }
+  const decisionsByStageId = new Map<string, FaJudgeEntryDecision[]>();
+  for (const decision of decisions) {
+    const stageId = decision.faJudgeForm.fairCategoryStageId;
+    const current = decisionsByStageId.get(stageId) ?? [];
+    current.push(decision);
+    decisionsByStageId.set(stageId, current);
+  }
+
+  return stages.map((stage) => {
+    const stageChecks = checksByStageId.get(stage.id) ?? [];
+    const stageForms = formsByStageId.get(stage.id) ?? [];
+    const stageDecisions = decisionsByStageId.get(stage.id) ?? [];
+
+    return {
+      stageId: stage.id,
+      revision: stage.revision,
+      status: stage.status,
+      fair: { id: stage.fair.id, name: stage.fair.name },
+      category: {
+        id: stage.category.id,
+        name: stage.category.name,
+        minAgeMonths: Number(stage.category.minAgeMonths),
+        maxAgeMonths: Number(stage.category.maxAgeMonths)
+      },
+      gait: {
+        id: stage.category.gait.id,
+        name: stage.category.gait.name
+      },
+      totalEntries: entryCountByPair.get(`${stage.fairId}:${stage.categoryId}`) ?? 0,
+      veterinary: {
+        pending: stageChecks.filter((check) => check.status === "PENDING").length,
+        approved: stageChecks.filter((check) => check.status === "APPROVED").length,
+        rejected: stageChecks.filter((check) => check.status === "REJECTED").length,
+        absent: stageChecks.filter((check) => check.status === "ABSENT").length
+      },
+      judging: {
+        totalJudges: judgeCountByFairId.get(stage.fairId) ?? 0,
+        closedForms: stageForms.filter((form) => form.status === "CLOSED").length,
+        selected: stageDecisions.filter((decision) => decision.decision === "SELECTED").length,
+        discarded: stageDecisions.filter((decision) => decision.decision === "DISCARDED").length,
+        disqualified: stageDecisions.filter((decision) => decision.decision === "DISQUALIFIED").length
+      }
+    };
+  });
 }
 
 const ROLES_SEE_ONLY_STARTED_STAGES: UserRole[] = ["JUDGE", "VETERINARIAN"];
@@ -233,12 +267,50 @@ export async function listStagesFromFairEntries(
     .addOrderBy("category.id", "ASC")
     .getRawMany<{ fairId: string; categoryId: string }>();
 
-  const stages: FairCategoryStage[] = [];
-  for (const row of rows) {
-    stages.push(await getOrCreateStage(manager, row.fairId, row.categoryId));
+  if (rows.length === 0) {
+    return [];
   }
 
-  return stages;
+  const existing = await manager.getRepository(FairCategoryStage).find({
+    where: rows.map((row) => ({ fairId: row.fairId, categoryId: row.categoryId })),
+    relations: { fair: true, category: { gait: true } }
+  });
+  const existingKeys = new Set(existing.map((stage) => `${stage.fairId}:${stage.categoryId}`));
+  const missing = rows.filter((row) => !existingKeys.has(`${row.fairId}:${row.categoryId}`));
+
+  if (missing.length > 0) {
+    await manager.getRepository(FairCategoryStage).save(
+      missing.map((row) =>
+        manager.getRepository(FairCategoryStage).create({
+          fairId: row.fairId,
+          categoryId: row.categoryId,
+          status: "NOT_STARTED",
+          preRingStartedAt: null,
+          preRingStartedByUserId: null,
+          preRingClosedAt: null,
+          preRingClosedByUserId: null,
+          judgingStartedAt: null,
+          judgingStartedByUserId: null,
+          faConsolidatedAt: null,
+          faConsolidatedByUserId: null,
+          judgingClosedAt: null,
+          judgingClosedByUserId: null,
+          desertedAt: null,
+          desertedByUserId: null,
+          desertedReason: null
+        })
+      )
+    );
+  }
+
+  const stages = await manager.getRepository(FairCategoryStage).find({
+    where: rows.map((row) => ({ fairId: row.fairId, categoryId: row.categoryId })),
+    relations: { fair: true, category: { gait: true } }
+  });
+  const byKey = new Map(stages.map((stage) => [`${stage.fairId}:${stage.categoryId}`, stage]));
+  return rows
+    .map((row) => byKey.get(`${row.fairId}:${row.categoryId}`))
+    .filter((stage): stage is FairCategoryStage => Boolean(stage));
 }
 
 export async function listStagesForAssignedStaff(
@@ -356,48 +428,69 @@ async function enrichForJudge(
   items: StagedCategoryDto[],
   userId: string
 ): Promise<StagedCategoryDto[]> {
-  return Promise.all(
-    items.map(async (item) => {
-      const [faForm, activeRound, f1Format, f2Format, tieBreakFormat] = await Promise.all([
-        manager.getRepository(FaJudgeForm).findOne({
-          where: { fairCategoryStageId: item.stageId, judgeUserId: userId },
-          select: { status: true }
-        }),
-        manager.getRepository(JudgingRound).findOne({
-          where: { fairCategoryStageId: item.stageId, status: "OPEN" },
-          order: { createdAt: "DESC" },
-          select: { id: true, roundType: true }
-        }),
-        buildRoundFormatDto(manager, item.stageId, userId, "F1", item.status),
-        buildRoundFormatDto(manager, item.stageId, userId, "F2", item.status),
-        buildRoundFormatDto(manager, item.stageId, userId, "TIE_BREAK", item.status)
-      ]);
+  if (items.length === 0) {
+    return [];
+  }
 
-      let roundForm: Pick<JudgingRoundForm, "status"> | null = null;
-      if (activeRound) {
-        roundForm = await manager.getRepository(JudgingRoundForm).findOne({
-          where: { roundId: activeRound.id, judgeUserId: userId },
-          select: { status: true }
-        });
+  const stageIds = items.map((item) => item.stageId);
+  const faForms = await manager.getRepository(FaJudgeForm).find({
+    where: { fairCategoryStageId: In(stageIds), judgeUserId: userId },
+    select: { fairCategoryStageId: true, status: true }
+  });
+  const activeRounds = await manager.getRepository(JudgingRound).find({
+    where: { fairCategoryStageId: In(stageIds), status: "OPEN" },
+    order: { createdAt: "DESC" },
+    select: { id: true, roundType: true, fairCategoryStageId: true, createdAt: true }
+  });
+
+  const faFormByStageId = new Map(faForms.map((form) => [form.fairCategoryStageId, form]));
+  const activeRoundByStageId = new Map<string, (typeof activeRounds)[number]>();
+  for (const round of activeRounds) {
+    if (!activeRoundByStageId.has(round.fairCategoryStageId)) {
+      activeRoundByStageId.set(round.fairCategoryStageId, round);
+    }
+  }
+
+  const enriched: StagedCategoryDto[] = [];
+  for (const item of items) {
+    const faForm = faFormByStageId.get(item.stageId) ?? null;
+    const activeRound = activeRoundByStageId.get(item.stageId) ?? null;
+    const f1Format = await buildRoundFormatDto(manager, item.stageId, userId, "F1", item.status);
+    const f2Format = await buildRoundFormatDto(manager, item.stageId, userId, "F2", item.status);
+    const tieBreakFormat = await buildRoundFormatDto(
+      manager,
+      item.stageId,
+      userId,
+      "TIE_BREAK",
+      item.status
+    );
+
+    let roundForm: Pick<JudgingRoundForm, "status"> | null = null;
+    if (activeRound) {
+      roundForm = await manager.getRepository(JudgingRoundForm).findOne({
+        where: { roundId: activeRound.id, judgeUserId: userId },
+        select: { status: true }
+      });
+    }
+
+    const faFormat = buildFaFormatDto(item.status, faForm);
+    const formats: JudgeFormatDto[] = [faFormat, f1Format, f2Format];
+    if (tieBreakFormat.formStatus !== "NOT_AVAILABLE") {
+      formats.push(tieBreakFormat);
+    }
+
+    enriched.push({
+      ...item,
+      judge: {
+        faFormStatus: faForm?.status ?? null,
+        roundFormStatus: roundForm?.status ?? null,
+        currentRoundType: activeRound?.roundType ?? null,
+        formats
       }
+    });
+  }
 
-      const faFormat = buildFaFormatDto(item.status, faForm);
-      const formats: JudgeFormatDto[] = [faFormat, f1Format, f2Format];
-      if (tieBreakFormat.formStatus !== "NOT_AVAILABLE") {
-        formats.push(tieBreakFormat);
-      }
-
-      return {
-        ...item,
-        judge: {
-          faFormStatus: faForm?.status ?? null,
-          roundFormStatus: roundForm?.status ?? null,
-          currentRoundType: activeRound?.roundType ?? null,
-          formats
-        }
-      };
-    })
-  );
+  return enriched;
 }
 
 export async function listStagedCategories(user: User): Promise<StagedCategoryDto[]> {
@@ -413,7 +506,7 @@ export async function listStagedCategories(user: User): Promise<StagedCategoryDt
       ? await listStagesForAssignedStaff(manager, user.personId, roleExternalId, "ANY_STARTED")
       : await listStagesFromFairEntries(manager, user.personId, roleExternalId);
 
-    const summaries = await Promise.all(stages.map((stage) => buildStageSummary(manager, stage)));
+    const summaries = await buildStageSummaries(manager, stages);
 
     if (user.role === "JUDGE") {
       return enrichForJudge(manager, summaries, user.id);

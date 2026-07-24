@@ -29,6 +29,9 @@ export class User extends PegasusBaseEntity {
   @Column({ name: "access_code_hash", type: "varchar", nullable: true })
   accessCodeHash!: string | null;
 
+  @Column({ name: "access_code", type: "varchar", nullable: true })
+  accessCode!: string | null;
+
   @Column({ name: "role", type: "varchar" })
   role!: UserRole;
 

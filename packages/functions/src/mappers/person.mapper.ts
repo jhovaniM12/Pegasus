@@ -14,10 +14,12 @@ export type PersonDto = SyncableDto & {
   email: string | null;
   accessRole: string | null;
   accessRoleLabel: string | null;
+  accessCode: string | null;
 };
 
 export function toPersonDto(person: Person | PersonWithAccessRole): PersonDto {
   const accessRole = "accessRole" in person ? person.accessRole : null;
+  const accessCode = "accessCode" in person ? person.accessCode : null;
 
   return {
     ...toSyncableDto(person),
@@ -31,6 +33,7 @@ export function toPersonDto(person: Person | PersonWithAccessRole): PersonDto {
     avantelPhone: person.avantelPhone,
     email: person.email,
     accessRole: accessRole?.role ?? null,
-    accessRoleLabel: accessRole?.label ?? null
+    accessRoleLabel: accessRole?.label ?? null,
+    accessCode: accessCode ?? null
   };
 }

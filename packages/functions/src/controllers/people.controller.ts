@@ -4,8 +4,18 @@ import { parsePaginationQuery } from "../lib/pagination.js";
 import { toPersonDto } from "../mappers/person.mapper.js";
 import { toUserDto } from "../mappers/user.mapper.js";
 import { uuidParamSchema } from "../schemas/common.schema.js";
-import { assignAccessCodeSchema, peopleQuerySchema } from "../schemas/people.schema.js";
-import { assignPersonAccessCode, getPersonById, listPeople } from "../services/people.service.js";
+import {
+  assignAccessCodeSchema,
+  checkAccessCodeQuerySchema,
+  peopleQuerySchema
+} from "../schemas/people.schema.js";
+import {
+  assignPersonAccessCode,
+  checkAccessCodeAvailability,
+  generatePersonAccessCode,
+  getPersonById,
+  listPeople
+} from "../services/people.service.js";
 
 export async function listPeopleController(c: Context) {
   const pagination = parsePaginationQuery(c.req.query());
@@ -31,10 +41,34 @@ export async function getPersonController(c: Context) {
   return c.json(success(toPersonDto(person)));
 }
 
+export async function checkAccessCodeController(c: Context) {
+  const query = checkAccessCodeQuerySchema.parse(c.req.query());
+  const result = await checkAccessCodeAvailability(query.accessCode, query.personId);
+
+  return c.json(success(result));
+}
+
 export async function assignPersonAccessCodeController(c: Context) {
   const { id } = uuidParamSchema.parse(c.req.param());
   const body = assignAccessCodeSchema.parse(await c.req.json());
   const user = await assignPersonAccessCode(id, body.accessCode);
 
-  return c.json(success(toUserDto(user)));
+  return c.json(
+    success({
+      ...toUserDto(user),
+      accessCode: user.accessCode
+    })
+  );
+}
+
+export async function generatePersonAccessCodeController(c: Context) {
+  const { id } = uuidParamSchema.parse(c.req.param());
+  const user = await generatePersonAccessCode(id);
+
+  return c.json(
+    success({
+      ...toUserDto(user),
+      accessCode: user.accessCode
+    })
+  );
 }
