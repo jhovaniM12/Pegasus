@@ -590,7 +590,7 @@ async function listVeterinaryChecksForStage(manager: EntityManager, stage: FairC
 
   const checks = await manager.getRepository(VeterinaryCheck).find({
     where: { fairCategoryStageId: stage.id },
-    relations: { fairEntry: true },
+    relations: { fairEntry: { horse: true } },
     order: { fairEntry: { trackPosition: "ASC" } }
   });
 
@@ -599,6 +599,7 @@ async function listVeterinaryChecksForStage(manager: EntityManager, stage: FairC
     revision: check.revision,
     fairEntryId: check.fairEntryId,
     trackPosition: check.fairEntry.trackPosition,
+    horseName: check.fairEntry.horse?.name?.trim() || "",
     riderName: check.fairEntry.riderName,
     registrationNumber: check.fairEntry.registrationNumber,
     status: check.status,
@@ -1542,7 +1543,7 @@ async function getManagementForStage(manager: EntityManager, stage: FairCategory
       buildStageSummary(manager, stage),
       manager.getRepository(VeterinaryCheck).find({
         where: { fairCategoryStageId: stage.id },
-        relations: { fairEntry: true }
+        relations: { fairEntry: { horse: true } }
       }),
       manager.getRepository(FaJudgeForm).find({
         where: { fairCategoryStageId: stage.id },
@@ -1582,6 +1583,7 @@ async function getManagementForStage(manager: EntityManager, stage: FairCategory
         id: check.id,
         revision: check.revision,
         trackPosition: check.fairEntry.trackPosition,
+        horseName: check.fairEntry.horse?.name?.trim() || "",
         riderName: check.fairEntry.riderName,
         registrationNumber: check.fairEntry.registrationNumber,
         status: check.status

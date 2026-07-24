@@ -76,6 +76,7 @@ export type VeterinaryCheck = {
   revision: number;
   fairEntryId: string;
   trackPosition: number;
+  horseName: string;
   riderName: string;
   registrationNumber: string;
   status: VeterinaryCheckStatus;
@@ -141,6 +142,7 @@ export type ManagementVetCheck = {
   id: string;
   revision: number;
   trackPosition: number;
+  horseName: string;
   riderName: string;
   registrationNumber: string;
   status: VeterinaryCheckStatus;

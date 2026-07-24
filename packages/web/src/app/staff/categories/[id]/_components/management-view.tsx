@@ -122,7 +122,9 @@ function VetCheckRow({ check }: { check: ManagementVetCheck }) {
   return (
     <tr className="border-b border-slate-100 last:border-0 text-sm hover:bg-slate-50/40 transition-colors">
       <td className="py-3 pl-4 pr-2 font-semibold text-slate-800 tabular-nums w-12">{check.trackPosition}</td>
-      <td className="py-3 pr-3 font-medium text-slate-900">{check.riderName}</td>
+      <td className="py-3 pr-3 font-medium text-slate-900" title={check.horseName || undefined}>
+        {check.horseName || "Sin nombre"}
+      </td>
       <td className="py-3 pr-3">
         <span className="font-mono text-xs text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200/40">
           {check.registrationNumber}
@@ -310,7 +312,7 @@ function PreRingSection({
             <thead>
               <tr className="border-b border-slate-200/60 bg-slate-50/40 text-xs font-semibold uppercase tracking-wider text-slate-500">
                 <th className="py-2.5 pl-4 pr-2 w-12">#</th>
-                <th className="py-2.5 pr-3">Jinete</th>
+                <th className="py-2.5 pr-3">Ejemplar</th>
                 <th className="py-2.5 pr-3">Registro</th>
                 <th className="py-2.5 pr-4 text-right">Estado</th>
               </tr>

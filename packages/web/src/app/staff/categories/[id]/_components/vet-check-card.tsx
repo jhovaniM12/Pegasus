@@ -67,7 +67,9 @@ export function VetCheckCard({ check, editable, isUpdating, onUpdate }: VetCheck
       <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <p className="text-2xl font-bold tracking-tight text-slate-900">#{check.trackPosition}</p>
-          <p className="mt-0.5 truncate text-sm text-slate-500">{check.riderName}</p>
+          <p className="mt-0.5 truncate text-sm text-slate-500">
+            {check.horseName || `Ejemplar ${check.registrationNumber}`}
+          </p>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-row">
           {VET_STATUSES.map((status) => {

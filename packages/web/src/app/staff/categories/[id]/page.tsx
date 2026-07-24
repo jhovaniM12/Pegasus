@@ -93,13 +93,31 @@ function resolveJudgeView(viewParam: string | null): "FA" | "F1" | "F2" | "TIE_B
 // siendo válida. Si el estado real de la etapa avanzó más allá de esta lista (p. ej. el
 // director técnico abrió F1 mientras un juez seguía en "?view=FA"), la vista quedó
 // obsoleta y el juez debe ser redirigido a la fase vigente en vez de quedar "en el limbo".
+// JUDGING_CLOSED / JUDGING_DESERTED: consulta histórica en solo lectura desde el listado
+// ("Ver Formato FA", "Ver P2", etc.) sin redirigir al resultado oficial.
 const JUDGE_VIEW_VALID_STATUSES: Record<"FA" | "F1" | "F2" | "TIE_BREAK", StagedCategory["status"][]> = {
   // FA solo mientras el juez está en FA o esperando que el DT habilite P1/P2.
   // Cuando arranca F1/F2 la vista FA queda obsoleta y se redirige a la ronda activa.
-  FA: ["JUDGING_STARTED", "FA_CONSOLIDATED"],
-  F1: ["FA_CONSOLIDATED", "F1_IN_PROGRESS", "F1_CONSOLIDATED"],
-  F2: ["F1_CONSOLIDATED", "F2_IN_PROGRESS"],
-  TIE_BREAK: ["F2_IN_PROGRESS", "TIE_BREAK_IN_PROGRESS"],
+  FA: ["JUDGING_STARTED", "FA_CONSOLIDATED", "JUDGING_CLOSED", "JUDGING_DESERTED"],
+  F1: [
+    "FA_CONSOLIDATED",
+    "F1_IN_PROGRESS",
+    "F1_CONSOLIDATED",
+    "JUDGING_CLOSED",
+    "JUDGING_DESERTED",
+  ],
+  F2: [
+    "F1_CONSOLIDATED",
+    "F2_IN_PROGRESS",
+    "JUDGING_CLOSED",
+    "JUDGING_DESERTED",
+  ],
+  TIE_BREAK: [
+    "F2_IN_PROGRESS",
+    "TIE_BREAK_IN_PROGRESS",
+    "JUDGING_CLOSED",
+    "JUDGING_DESERTED",
+  ],
 };
 
 function isJudgeViewStale(view: "FA" | "F1" | "F2" | "TIE_BREAK", status: StagedCategory["status"]): boolean {
@@ -1221,7 +1239,10 @@ export default function StaffCategoryPage() {
           </section>
         )}
 
-        {currentUser?.role === "JUDGE" && summary.status === "JUDGING_DESERTED" && (
+        {currentUser?.role === "JUDGE" &&
+          summary.status === "JUDGING_DESERTED" &&
+          !fa &&
+          !round && (
           <section className="mt-4 rounded-lg border border-slate-300 bg-white px-6 py-8 text-center">
             <p className="text-base font-semibold text-slate-900">Competencia desierta</p>
             <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
