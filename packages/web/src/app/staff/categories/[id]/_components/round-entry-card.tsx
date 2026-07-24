@@ -302,7 +302,20 @@ export function RoundEntryCard(props: RoundEntryCardProps) {
         </span>
         <span
           className={cn(
-            "mt-2.5 text-xs font-bold uppercase tracking-[0.2em]",
+            "mt-2 max-w-full truncate px-1 text-center text-xs font-semibold",
+            disqualified
+              ? "text-slate-400"
+              : selected
+                ? "text-white/85"
+                : "text-slate-500"
+          )}
+          title={participant.horseName || undefined}
+        >
+          {participant.horseName || "Sin nombre"}
+        </span>
+        <span
+          className={cn(
+            "mt-1.5 text-xs font-bold uppercase tracking-[0.2em]",
             disqualified ? "text-slate-500" : isF1 && selected ? "text-white" : "text-slate-400"
           )}
         >
