@@ -29,8 +29,14 @@ export class Horse extends SyncableEntity {
   @Column({ name: "father_registration_number", type: "varchar", nullable: true })
   fatherRegistrationNumber!: string | null;
 
+  @Column({ name: "father_name", type: "varchar", nullable: true })
+  fatherName!: string | null;
+
   @Column({ name: "mother_registration_number", type: "varchar", nullable: true })
   motherRegistrationNumber!: string | null;
+
+  @Column({ name: "mother_name", type: "varchar", nullable: true })
+  motherName!: string | null;
 
   @OneToMany(() => FairEntry, (fairEntry) => fairEntry.horse)
   fairEntries!: FairEntry[];

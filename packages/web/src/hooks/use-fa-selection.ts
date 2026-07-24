@@ -87,6 +87,7 @@ export function useFaSelection({
 
   useEffect(() => {
     if (!fa) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- limpia selección local al cerrar FA
       adoptSelection([]);
       isClosingFaRef.current = false;
       return;

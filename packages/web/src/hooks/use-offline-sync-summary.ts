@@ -36,6 +36,7 @@ export function useOfflineSyncSummary(pollMs = 8_000) {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sincroniza métricas offline al montar/cambiar contexto
     void refresh();
     const onFocus = () => void refresh();
     const onMutationsChanged = () => void refresh();

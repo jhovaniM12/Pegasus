@@ -2,9 +2,20 @@ import { ApiService } from "@/services/api.service";
 import type { ApiResponse, PaginatedResponse } from "@/types/common";
 import type { Person } from "@/types/people";
 
+export type ListPeopleParams = {
+  fairId?: string;
+};
+
 export class PeopleService extends ApiService {
-  async listPeople(): Promise<PaginatedResponse<Person>> {
-    return this.get<PaginatedResponse<Person>>("/api/people");
+  async listPeople(params: ListPeopleParams = {}): Promise<PaginatedResponse<Person>> {
+    const query = new URLSearchParams();
+
+    if (params.fairId) {
+      query.set("fairId", params.fairId);
+    }
+
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return this.get<PaginatedResponse<Person>>(`/api/people${suffix}`);
   }
 
   async assignAccessCode(personId: string, accessCode: string): Promise<ApiResponse<{ role: string }>> {

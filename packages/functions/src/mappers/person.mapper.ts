@@ -4,7 +4,7 @@ import type { PersonWithAccessRole } from "../services/people.service.js";
 
 export type PersonDto = SyncableDto & {
   name: string;
-  lastName: string;
+  lastName: string | null;
   fullName: string;
   address: string | null;
   indicative: string | null;
@@ -23,7 +23,7 @@ export function toPersonDto(person: Person | PersonWithAccessRole): PersonDto {
     ...toSyncableDto(person),
     name: person.name,
     lastName: person.lastName,
-    fullName: `${person.name} ${person.lastName}`.trim(),
+    fullName: `${person.name} ${person.lastName ?? ""}`.trim(),
     address: person.address,
     indicative: person.indicative,
     telephone: person.telephone,

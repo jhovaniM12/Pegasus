@@ -58,6 +58,7 @@ export function useRoundForm({
   }, [stageId, userId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- lee pendientes IndexedDB al cambiar revisión
     void refreshPendingState();
   }, [refreshPendingState, round.form?.revision]);
 

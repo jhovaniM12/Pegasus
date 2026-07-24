@@ -1,5 +1,5 @@
 import "fake-indexeddb/auto";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { closeOfflineDatabase, getOfflineDatabase } from "./db";
 import {
   confirmOfflineMutation,

@@ -117,6 +117,7 @@ export function OfflineMutationCenter({ userId, stageId, onSync }: Props) {
   }, [stageId, userId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sincroniza cola offline al montar/cambiar contexto
     void refresh();
     const timer = window.setInterval(() => void refresh(), 2_000);
     const onChanged = () => void refresh();

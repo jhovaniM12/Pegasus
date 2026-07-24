@@ -2,18 +2,18 @@
 
 import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
 import { cn } from "@/lib/utils";
 
+function subscribeToNothing() {
+  return () => undefined;
+}
+
 export function ThemeToggle({ className = "" }: { className?: string }) {
-  const [mounted, setMounted] = useState(false);
+  const mounted = useSyncExternalStore(subscribeToNothing, () => true, () => false);
   const { resolvedTheme, setTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const label = mounted && isDark ? "Activar modo claro" : "Activar modo oscuro";
 

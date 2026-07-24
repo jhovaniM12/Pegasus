@@ -28,3 +28,4 @@ export { SimplifyNotificationOutboxDelivery1717430400026 } from "./1717430400026
 export { CreateFaRepeatTrackRequests1717430400027 } from "./1717430400027-CreateFaRepeatTrackRequests.js";
 export { AddTieBreakIdentity1717430400028 } from "./1717430400028-AddTieBreakIdentity.js";
 export { AddOfflineMutationFoundation1717430400029 } from "./1717430400029-AddOfflineMutationFoundation.js";
+export { ExpandFairEntryImportIdentity1717430400030 } from "./1717430400030-ExpandFairEntryImportIdentity.js";

@@ -41,12 +41,15 @@ const SYNC_CLEANUP_TABLES = [
   "fair_results",
   "fair_entries",
   "horses",
+  "fair_staff",
+  "fairs",
   "sync_errors",
   "sync_mappings",
   "sync_batches"
 ] as const;
-const FILTERED_SYNC_CLEANUP_TABLES = ["people"] as const;
-const PRESERVED_OPERATIONAL_TABLES = ["fair_staff", "users", "fairs"] as const;
+const FILTERED_SYNC_CLEANUP_TABLES = ["people", "users"] as const;
+const PRESERVED_OPERATIONAL_TABLES = ["users"] as const;
+const PRESERVED_USER_ROLES = ["ROOT", "ADMIN"] as const;
 const PRESERVED_CATALOG_TABLES = [
   "cities",
   "roles",
@@ -949,21 +952,19 @@ export async function cleanupDevelopmentSyncData(createdBy: string): Promise<Syn
       RESTART IDENTITY CASCADE`);
     await manager.query(
       `
-        DELETE FROM "people" "person"
-        WHERE "person"."source_system" = $1
-          AND NOT EXISTS (
-            SELECT 1
-            FROM "users" "user"
-            WHERE "user"."person_id" = "person"."id"
-          )
-          AND NOT EXISTS (
-            SELECT 1
-            FROM "fair_staff" "staff"
-            WHERE "staff"."person_id" = "person"."id"
-          )
+        DELETE FROM "users" "user"
+        WHERE "user"."role" NOT IN (${PRESERVED_USER_ROLES.map((_, index) => `$${index + 1}`).join(", ")})
       `,
-      [SOURCE_SYSTEM]
+      [...PRESERVED_USER_ROLES]
     );
+    await manager.query(`
+      DELETE FROM "people" "person"
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM "users" "user"
+        WHERE "user"."person_id" = "person"."id"
+      )
+    `);
   });
 
   console.info("Sync development cleanup executed", {

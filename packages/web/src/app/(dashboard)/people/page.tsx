@@ -11,16 +11,34 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
 import { TableRowsSkeleton } from "@/components/loaders";
+import { useFairs } from "@/hooks/use-fairs";
 import { usePeople } from "@/hooks/use-people";
 import { peopleService } from "@/services/people.service";
 
+const ALL_FAIRS_VALUE = "all";
+
 export default function PeoplePage() {
-  const { people, loading } = usePeople();
+  const [selectedFairId, setSelectedFairId] = useState(ALL_FAIRS_VALUE);
+  const { fairs, loading: fairsLoading } = useFairs();
+  const { people, loading } = usePeople({
+    fairId: selectedFairId === ALL_FAIRS_VALUE ? undefined : selectedFairId,
+  });
   const { toast } = useToast();
   const [codes, setCodes] = useState<Record<string, string>>({});
   const [savingPersonId, setSavingPersonId] = useState<string | null>(null);
+
+  const selectedFairName =
+    selectedFairId === ALL_FAIRS_VALUE
+      ? "Todas las ferias"
+      : fairs.find((fair) => fair.id === selectedFairId)?.name || "Feria";
 
   const assignAccessCode = async (personId: string) => {
     const accessCode = codes[personId]?.trim().toUpperCase() ?? "";
@@ -57,12 +75,32 @@ export default function PeoplePage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Personas</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Asigna códigos de 6 caracteres a jueces, veterinarios autorizados y directores técnicos.
           </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-slate-600">Feria</span>
+          <Select
+            value={selectedFairId}
+            onValueChange={(value) => setSelectedFairId(value ?? ALL_FAIRS_VALUE)}
+            disabled={fairsLoading}
+          >
+            <SelectTrigger className="h-9 w-[280px] bg-white">
+              <span className="truncate text-left">{selectedFairName}</span>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL_FAIRS_VALUE}>Todas las ferias</SelectItem>
+              {fairs.map((fair) => (
+                <SelectItem key={fair.id} value={fair.id}>
+                  {fair.name || "Sin nombre"}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
       <div className="rounded-md border bg-card">
@@ -81,7 +119,11 @@ export default function PeoplePage() {
               <TableRowsSkeleton columns={5} />
             ) : people.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center">No hay personas registradas</TableCell>
+                <TableCell colSpan={5} className="text-center">
+                  {selectedFairId === ALL_FAIRS_VALUE
+                    ? "No hay personas registradas"
+                    : "No hay personal asignado a esta feria"}
+                </TableCell>
               </TableRow>
             ) : (
               people.map((person) => (

@@ -10,7 +10,9 @@ export type HorseDto = SyncableDto & {
   associationCode: string | null;
   birthCityCode: string | null;
   fatherRegistrationNumber: string | null;
+  fatherName: string | null;
   motherRegistrationNumber: string | null;
+  motherName: string | null;
 };
 
 export function toHorseDto(horse: Horse): HorseDto {
@@ -24,6 +26,8 @@ export function toHorseDto(horse: Horse): HorseDto {
     associationCode: horse.associationCode,
     birthCityCode: horse.birthCityCode,
     fatherRegistrationNumber: horse.fatherRegistrationNumber,
-    motherRegistrationNumber: horse.motherRegistrationNumber
+    fatherName: horse.fatherName,
+    motherRegistrationNumber: horse.motherRegistrationNumber,
+    motherName: horse.motherName
   };
 }

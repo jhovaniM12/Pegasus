@@ -1,6 +1,16 @@
 import { ApiService } from "@/services/api.service";
 import type { ApiResponse, PaginatedResponse } from "@/types/common";
-import type { SyncBatch, SyncBatchStatus, SyncEntityName, SyncError, SyncSummary } from "@/types/sync";
+import type {
+  FedequinasApplyResult,
+  FedequinasFairStatus,
+  FedequinasFileKind,
+  FedequinasPreview,
+  SyncBatch,
+  SyncBatchStatus,
+  SyncEntityName,
+  SyncError,
+  SyncSummary,
+} from "@/types/sync";
 
 type BatchParams = {
   page: number;
@@ -24,6 +34,44 @@ export class SyncService extends ApiService {
     formData.set("file", file);
 
     return this.post<ApiResponse<SyncBatch>>(`/api/sync/${entityName}/run`, formData);
+  }
+
+  async previewFedequinas(
+    fileKind: FedequinasFileKind,
+    file: File
+  ): Promise<ApiResponse<FedequinasPreview>> {
+    const formData = new FormData();
+    formData.set("file", file);
+
+    return this.post<ApiResponse<FedequinasPreview>>(
+      `/api/sync/fedequinas/${fileKind}/preview`,
+      formData
+    );
+  }
+
+  async applyFedequinas(
+    fileKind: FedequinasFileKind,
+    file: File,
+    previewToken: string,
+    checksum: string
+  ): Promise<ApiResponse<FedequinasApplyResult>> {
+    const formData = new FormData();
+    formData.set("file", file);
+    formData.set("previewToken", previewToken);
+    formData.set("checksum", checksum);
+
+    return this.post<ApiResponse<FedequinasApplyResult>>(
+      `/api/sync/fedequinas/${fileKind}/apply`,
+      formData
+    );
+  }
+
+  async getFedequinasFairStatus(
+    fairExternalId: string
+  ): Promise<ApiResponse<FedequinasFairStatus>> {
+    return this.get<ApiResponse<FedequinasFairStatus>>(
+      `/api/sync/fedequinas/fairs/${encodeURIComponent(fairExternalId)}/status`
+    );
   }
 
   async listBatches(params: BatchParams): Promise<PaginatedResponse<SyncBatch>> {

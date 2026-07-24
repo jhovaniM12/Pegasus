@@ -6,8 +6,8 @@ export class Person extends SyncableEntity {
   @Column({ name: "name", type: "varchar" })
   name!: string;
 
-  @Column({ name: "last_name", type: "varchar" })
-  lastName!: string;
+  @Column({ name: "last_name", type: "varchar", nullable: true })
+  lastName!: string | null;
 
   @Column({ name: "address", type: "varchar", nullable: true })
   address!: string | null;

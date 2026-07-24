@@ -236,7 +236,7 @@ export function JudgeRoundWorkspace({
   }, [round]);
 
   useEffect(() => {
-    void rememberServerRound(round);
+    void rememberServerRound(latestConfirmedRoundRef.current);
   }, [rememberServerRound, round.round.id, round.form?.id]);
 
   const toggleSelect = (participantId: string) => {

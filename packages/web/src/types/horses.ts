@@ -10,5 +10,7 @@ export type Horse = {
   associationCode: string | null;
   birthCityCode: string | null;
   fatherRegistrationNumber: string | null;
+  fatherName: string | null;
   motherRegistrationNumber: string | null;
+  motherName: string | null;
 };

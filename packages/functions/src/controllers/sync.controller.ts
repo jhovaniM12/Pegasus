@@ -6,6 +6,12 @@ import { getSessionFromCookie } from "../lib/session.js";
 import { parsePaginationQuery } from "../lib/pagination.js";
 import { uuidParamSchema } from "../schemas/common.schema.js";
 import {
+  fedequinasChecksumSchema,
+  fedequinasFairStatusParamSchema,
+  fedequinasFileKindParamSchema,
+  fedequinasPreviewTokenSchema
+} from "../schemas/fedequinas-sync.schema.js";
+import {
   toSyncBatchDto,
   toSyncErrorDto,
   toSyncSummaryDto
@@ -19,6 +25,11 @@ import {
   syncEntityFromCsv,
   type SyncRunFile
 } from "../services/sync.service.js";
+import {
+  applyFedequinasImport,
+  getFedequinasFairStatus,
+  previewFedequinasImport
+} from "../services/fedequinas-sync.service.js";
 
 const entityParamSchema = z.object({
   entity: z.enum(["people", "horses", "fair_staff", "fair_entries"])
@@ -47,6 +58,29 @@ async function readMultipartFile(c: Context): Promise<SyncRunFile> {
     type: file.type,
     size: file.size,
     buffer
+  };
+}
+
+async function readFedequinasMultipart(c: Context): Promise<{
+  file: SyncRunFile;
+  previewToken?: string;
+  checksum?: string;
+}> {
+  const body = await c.req.parseBody();
+  const file = body.file;
+  if (!(file instanceof File)) {
+    throw new BadRequestError("Debe adjuntar un archivo XLSX en el campo file.");
+  }
+
+  return {
+    file: {
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      buffer: Buffer.from(await file.arrayBuffer())
+    },
+    previewToken: typeof body.previewToken === "string" ? body.previewToken : undefined,
+    checksum: typeof body.checksum === "string" ? body.checksum : undefined
   };
 }
 
@@ -114,4 +148,37 @@ export async function cleanupSyncDevelopmentController(c: Context) {
   const result = await cleanupDevelopmentSyncData(session.userId);
 
   return c.json(success({ ...result, confirm: body.confirm }));
+}
+
+export async function previewFedequinasController(c: Context) {
+  const { fileKind } = fedequinasFileKindParamSchema.parse(c.req.param());
+  const { file } = await readFedequinasMultipart(c);
+  const preview = await previewFedequinasImport(fileKind, file);
+
+  return c.json(success(preview));
+}
+
+export async function applyFedequinasController(c: Context) {
+  const { fileKind } = fedequinasFileKindParamSchema.parse(c.req.param());
+  const session = getSessionFromCookie(c);
+  const { file, previewToken, checksum } = await readFedequinasMultipart(c);
+  const validPreviewToken = fedequinasPreviewTokenSchema.parse(previewToken);
+  const validChecksum = fedequinasChecksumSchema.parse(checksum);
+  const result = await applyFedequinasImport(
+    fileKind,
+    file,
+    validPreviewToken,
+    session.userId,
+    undefined,
+    validChecksum
+  );
+
+  return c.json(success(result));
+}
+
+export async function getFedequinasFairStatusController(c: Context) {
+  const { fairExternalId } = fedequinasFairStatusParamSchema.parse(c.req.param());
+  const status = await getFedequinasFairStatus(fairExternalId);
+
+  return c.json(success(status));
 }

@@ -89,15 +89,17 @@ function mapInscripcionRow(
   const categoryExternalId = row.CODIGO_CATEGORIA.trim();
   const registrationNumber = row.NUMERO_REGISTRO.trim();
   const horseId = horseLookup.get(registrationNumber) ?? null;
+  const stableExternalId = `${fairExternalId}:${inscriptionNumber}:${registrationNumber}`;
 
   if (!horseId) {
     unresolvedRegistrations.add(registrationNumber || `(vacío en inscripción ${inscriptionNumber})`);
   }
 
   return {
-    externalId: inscriptionNumber,
+    externalId: stableExternalId,
     sourceSystem: SOURCE_SYSTEM,
     fairId: resolveInternalId(fairLookup, fairExternalId, "feria", inscriptionNumber),
+    inscriptionNumber,
     registrationNumber,
     horseId,
     categoryId: resolveInternalId(

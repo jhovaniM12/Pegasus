@@ -116,6 +116,7 @@ export function useVeterinaryChecks({
   }, [onSyncNotice, refreshPendingState, stageId, userId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- lee pendientes IndexedDB al actualizar checks
     void refreshPendingState();
   }, [refreshPendingState, checks]);
 

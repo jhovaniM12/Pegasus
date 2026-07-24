@@ -23,7 +23,9 @@ type HorseJsonRow = {
   CODIGO_ASOCIACION?: string | null;
   CODIGO_CIUDAD_NACIMIENTO?: string | null;
   NUMERO_REGISTRO_PADRE?: string | null;
+  NOMBRE_PADRE?: string | null;
   NUMERO_REGISTRO_MADRE?: string | null;
+  NOMBRE_MADRE?: string | null;
 };
 
 function loadHorses(): HorseJsonRow[] {
@@ -101,7 +103,9 @@ function mapHorseRow(row: HorseJsonRow) {
     associationCode: clean(row.CODIGO_ASOCIACION),
     birthCityCode: clean(row.CODIGO_CIUDAD_NACIMIENTO),
     fatherRegistrationNumber: clean(row.NUMERO_REGISTRO_PADRE),
-    motherRegistrationNumber: clean(row.NUMERO_REGISTRO_MADRE)
+    fatherName: clean(row.NOMBRE_PADRE),
+    motherRegistrationNumber: clean(row.NUMERO_REGISTRO_MADRE),
+    motherName: clean(row.NOMBRE_MADRE)
   };
 }
 

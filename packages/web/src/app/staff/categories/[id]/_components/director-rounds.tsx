@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { stagedFlowService } from "@/services/staged-flow.service";
 import type {
   RoundManagementItem,
-  RoundResult,
   StagedCategory,
   TieBreakTestType,
 } from "@/types/staged-flow";

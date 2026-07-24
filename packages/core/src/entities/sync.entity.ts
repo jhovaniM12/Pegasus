@@ -1,4 +1,4 @@
-import { Column, Entity, JoinColumn, ManyToOne, Unique } from "typeorm";
+import { Column, Entity, Index, JoinColumn, ManyToOne, Unique } from "typeorm";
 import { PegasusBaseEntity } from "./base.entity.js";
 import { User } from "./user.entity.js";
 
@@ -9,12 +9,19 @@ export type SyncBatchStatus =
   | "FAILED";
 
 @Entity({ name: "sync_batches" })
+@Index("IDX_sync_batches_fair_file_kind", ["fairExternalId", "fileKind"])
 export class SyncBatch extends PegasusBaseEntity {
   @Column({ name: "source_system", type: "varchar" })
   sourceSystem!: string;
 
   @Column({ name: "entity_name", type: "varchar" })
   entityName!: string;
+
+  @Column({ name: "file_kind", type: "varchar", nullable: true })
+  fileKind!: string | null;
+
+  @Column({ name: "fair_external_id", type: "varchar", nullable: true })
+  fairExternalId!: string | null;
 
   @Column({ name: "file_name", type: "varchar" })
   fileName!: string;
@@ -42,6 +49,9 @@ export class SyncBatch extends PegasusBaseEntity {
 
   @Column({ name: "failed_rows", type: "integer", default: 0 })
   failedRows!: number;
+
+  @Column({ name: "warning_rows", type: "integer", default: 0 })
+  warningRows!: number;
 
   @Column({ name: "started_at", type: "timestamp" })
   startedAt!: Date;

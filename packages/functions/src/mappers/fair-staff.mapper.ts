@@ -4,7 +4,7 @@ import { toSyncableDto, type SyncableDto } from "./syncable.mapper.js";
 
 export type PersonSummaryDto = SyncableDto & {
   name: string;
-  lastName: string;
+  lastName: string | null;
   telephone: string | null;
   phone: string | null;
   email: string | null;

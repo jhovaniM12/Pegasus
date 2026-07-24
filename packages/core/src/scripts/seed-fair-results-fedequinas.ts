@@ -78,6 +78,7 @@ function mapResultadoRow(
   titleLookup: LookupMap
 ) {
   const inscriptionNumber = row.NUMERO_INSCRIPCION;
+  const fairEntryExternalId = `${row.ID_FERIA}:${inscriptionNumber}:${row.NUMERO_REGISTRO}`;
 
   return {
     externalId: null,
@@ -85,7 +86,7 @@ function mapResultadoRow(
     fairId: resolveInternalId(fairLookup, row.ID_FERIA, "feria", inscriptionNumber),
     fairEntryId: resolveInternalId(
       fairEntryLookup,
-      inscriptionNumber,
+      fairEntryExternalId,
       "inscripción",
       inscriptionNumber
     ),

@@ -36,17 +36,22 @@ export async function findFairStaffByPersonId(
 
 export async function findFairStaffByPersonIds(
   dataSource: DataSource,
-  personIds: string[]
+  personIds: string[],
+  options?: { fairId?: string }
 ): Promise<FairStaff[]> {
   if (personIds.length === 0) {
     return [];
   }
 
-  return dataSource
+  const qb = dataSource
     .getRepository(FairStaff)
     .createQueryBuilder("staff")
     .innerJoinAndSelect("staff.role", "role")
-    .where("staff.person_id IN (:...personIds)", { personIds })
-    .orderBy("staff.created_at", "ASC")
-    .getMany();
+    .where("staff.person_id IN (:...personIds)", { personIds });
+
+  if (options?.fairId) {
+    qb.andWhere("staff.fair_id = :fairId", { fairId: options.fairId });
+  }
+
+  return qb.orderBy("staff.created_at", "ASC").getMany();
 }

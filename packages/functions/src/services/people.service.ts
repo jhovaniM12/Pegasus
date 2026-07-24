@@ -36,13 +36,14 @@ function resolveAccessRole(staffRoles: string[]): PersonAccessRole | null {
 }
 
 export async function listPeople(
-  params: PaginationParams & { search?: string }
+  params: PaginationParams & { search?: string; fairId?: string }
 ): Promise<PaginatedResult<PersonWithAccessRole>> {
   const dataSource = await getDataSource();
   const result = await findPeoplePaginated(dataSource, params);
   const staffEntries = await findFairStaffByPersonIds(
     dataSource,
-    result.items.map((person) => person.id)
+    result.items.map((person) => person.id),
+    { fairId: params.fairId }
   );
   const rolesByPersonId = new Map<string, string[]>();
 

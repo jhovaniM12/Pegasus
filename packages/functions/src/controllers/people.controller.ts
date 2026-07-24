@@ -10,7 +10,11 @@ import { assignPersonAccessCode, getPersonById, listPeople } from "../services/p
 export async function listPeopleController(c: Context) {
   const pagination = parsePaginationQuery(c.req.query());
   const query = peopleQuerySchema.parse(c.req.query());
-  const result = await listPeople({ ...pagination, search: query.search });
+  const result = await listPeople({
+    ...pagination,
+    search: query.search,
+    fairId: query.fairId
+  });
 
   return c.json(
     success(

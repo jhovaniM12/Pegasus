@@ -5,6 +5,8 @@ export type SyncBatchDto = {
   id: string;
   sourceSystem: string;
   entityName: string;
+  fileKind: string | null;
+  fairExternalId: string | null;
   fileName: string;
   fileSize: number;
   fileChecksum: string;
@@ -14,6 +16,7 @@ export type SyncBatchDto = {
   updatedRows: number;
   skippedRows: number;
   failedRows: number;
+  warningRows: number;
   startedAt: string;
   finishedAt: string | null;
   errorMessage: string | null;
@@ -42,6 +45,8 @@ export function toSyncBatchDto(batch: SyncBatch): SyncBatchDto {
     id: batch.id,
     sourceSystem: batch.sourceSystem,
     entityName: batch.entityName,
+    fileKind: batch.fileKind,
+    fairExternalId: batch.fairExternalId,
     fileName: batch.fileName,
     fileSize: batch.fileSize,
     fileChecksum: batch.fileChecksum,
@@ -51,6 +56,7 @@ export function toSyncBatchDto(batch: SyncBatch): SyncBatchDto {
     updatedRows: batch.updatedRows,
     skippedRows: batch.skippedRows,
     failedRows: batch.failedRows,
+    warningRows: batch.warningRows,
     startedAt: batch.startedAt.toISOString(),
     finishedAt: batch.finishedAt?.toISOString() ?? null,
     errorMessage: batch.errorMessage,

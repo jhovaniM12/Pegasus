@@ -1,7 +1,8 @@
 import { z } from "zod";
 
 export const peopleQuerySchema = z.object({
-  search: z.string().trim().min(1).optional()
+  search: z.string().trim().min(1).optional(),
+  fairId: z.string().uuid("El identificador de feria debe ser un UUID válido.").optional()
 });
 
 export const assignAccessCodeSchema = z.object({

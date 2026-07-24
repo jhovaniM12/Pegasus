@@ -9,6 +9,7 @@ import {
 } from "@pegasus/core";
 import type { EntityManager } from "typeorm";
 import { ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import { assertIndividualJudgingCategory } from "./category-flow-rules.js";
 
 /**
  * Helpers compartidos del flujo de juzgamiento (prepista, FA y rondas F1/F2/desempate).
@@ -78,6 +79,7 @@ export async function getStageOrThrow(manager: EntityManager, stageId: string): 
     throw new NotFoundError(`No se encontro la etapa con id "${stageId}".`);
   }
 
+  assertIndividualJudgingCategory(stage.category);
   return stage;
 }
 

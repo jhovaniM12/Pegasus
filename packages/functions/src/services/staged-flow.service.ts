@@ -43,6 +43,7 @@ import {
   stageNotificationContext,
   toDisqualifiedByDto
 } from "./judging/shared.js";
+import { filterIndividualJudgingCategories } from "./judging/category-flow-rules.js";
 
 export type JudgeFormatKey = "FA" | "F1" | "F2" | "TIE_BREAK";
 export type JudgeFormatStatus = "NOT_AVAILABLE" | "PENDING" | "STARTED" | "CLOSED";
@@ -207,12 +208,12 @@ export async function buildStageSummary(manager: EntityManager, stage: FairCateg
 
 const ROLES_SEE_ONLY_STARTED_STAGES: UserRole[] = ["JUDGE", "VETERINARIAN"];
 
-async function listStagesFromFairEntries(
+export async function listStagesFromFairEntries(
   manager: EntityManager,
   personId: string,
   roleExternalId: string
 ): Promise<FairCategoryStage[]> {
-  const rows = await manager
+  const query = manager
     .getRepository(FairEntry)
     .createQueryBuilder("entry")
     .innerJoin("entry.fair", "fair")
@@ -223,7 +224,9 @@ async function listStagesFromFairEntries(
     .select("fair.id", "fairId")
     .addSelect("category.id", "categoryId")
     .where("staff.person_id = :personId", { personId })
-    .andWhere("role.external_id = :roleExternalId", { roleExternalId })
+    .andWhere("role.external_id = :roleExternalId", { roleExternalId });
+  filterIndividualJudgingCategories(query);
+  const rows = await query
     .groupBy("fair.id")
     .addGroupBy("category.id")
     .orderBy("fair.id", "ASC")
@@ -238,7 +241,7 @@ async function listStagesFromFairEntries(
   return stages;
 }
 
-async function listStagesForAssignedStaff(
+export async function listStagesForAssignedStaff(
   manager: EntityManager,
   personId: string,
   roleExternalId: string,
@@ -254,6 +257,7 @@ async function listStagesForAssignedStaff(
     .innerJoin(Role, "role", "role.id = staff.role_id")
     .where("staff.person_id = :personId", { personId })
     .andWhere("role.external_id = :roleExternalId", { roleExternalId });
+  filterIndividualJudgingCategories(query);
 
   if (visibleStatuses === "ANY_STARTED") {
     query.andWhere("stage.status != :notStarted", { notStarted: "NOT_STARTED" });

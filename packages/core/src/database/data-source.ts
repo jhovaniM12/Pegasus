@@ -64,6 +64,7 @@ import {
   CreateFaRepeatTrackRequests1717430400027,
   AddTieBreakIdentity1717430400028,
   AddOfflineMutationFoundation1717430400029,
+  ExpandFairEntryImportIdentity1717430400030,
   CreateFairEntriesTable1717430400004,
   CreateFairResultsTable1717430400008,
   CreateFairStaffTable1717430400007,
@@ -172,7 +173,8 @@ export const AppDataSource = new DataSource({
     SimplifyNotificationOutboxDelivery1717430400026,
     CreateFaRepeatTrackRequests1717430400027,
     AddTieBreakIdentity1717430400028,
-    AddOfflineMutationFoundation1717430400029
+    AddOfflineMutationFoundation1717430400029,
+    ExpandFairEntryImportIdentity1717430400030
   ]
 });
 

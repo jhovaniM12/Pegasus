@@ -4,15 +4,16 @@ import { toSyncableDto, type SyncableDto } from "./syncable.mapper.js";
 
 export type FairEntryDto = SyncableDto & {
   fairId: string;
+  inscriptionNumber: string | null;
   registrationNumber: string;
   horseId: string | null;
   trackPosition: number;
   riderName: string;
-  riderDocumentNumber: string;
-  receipt: string;
+  riderDocumentNumber: string | null;
+  receipt: string | null;
   participate: boolean;
   fairSequence: number;
-  isChild: boolean;
+  isChild: boolean | null;
   category: CategoryDto;
 };
 
@@ -20,6 +21,7 @@ export function toFairEntryDto(entry: FairEntry): FairEntryDto {
   return {
     ...toSyncableDto(entry),
     fairId: entry.fairId,
+    inscriptionNumber: entry.inscriptionNumber,
     registrationNumber: entry.registrationNumber,
     horseId: entry.horseId,
     trackPosition: entry.trackPosition,

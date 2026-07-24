@@ -11,7 +11,7 @@ import { toSyncableDto, type SyncableDto } from "./syncable.mapper.js";
 export type FairEntrySummaryDto = SyncableDto & {
   registrationNumber: string;
   riderName: string;
-  riderDocumentNumber: string;
+  riderDocumentNumber: string | null;
 };
 
 export type FairResultDto = SyncableDto & {

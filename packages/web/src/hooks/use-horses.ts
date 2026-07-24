@@ -13,22 +13,31 @@ const emptyMeta: PaginationMeta = {
 };
 
 export function useHorses(params: { page: number; limit: number; search?: string }) {
+  const requestKey = [params.page, params.limit, params.search ?? ""].join(":");
   const [horses, setHorses] = useState<Horse[]>([]);
   const [meta, setMeta] = useState<PaginationMeta>({ ...emptyMeta, limit: params.limit });
-  const [loading, setLoading] = useState(true);
+  const [loadedKey, setLoadedKey] = useState("");
 
   useEffect(() => {
-    setLoading(true);
+    let cancelled = false;
+
     horsesService
-      .listHorses(params)
+      .listHorses({
+        page: params.page,
+        limit: params.limit,
+        search: params.search,
+      })
       .then((response) => {
+        if (cancelled) return;
         setHorses(response.data || []);
         setMeta(response.meta || { ...emptyMeta, limit: params.limit });
-      })
-      .finally(() => {
-        setLoading(false);
+        setLoadedKey(requestKey);
       });
-  }, [params.page, params.limit, params.search]);
 
-  return { horses, meta, loading };
+    return () => {
+      cancelled = true;
+    };
+  }, [params.page, params.limit, params.search, requestKey]);
+
+  return { horses, meta, loading: loadedKey !== requestKey };
 }

@@ -3,21 +3,31 @@ import { useEffect, useState } from "react";
 import { peopleService } from "@/services/people.service";
 import type { Person } from "@/types/people";
 
-export function usePeople() {
+type UsePeopleParams = {
+  fairId?: string;
+};
+
+export function usePeople(params: UsePeopleParams = {}) {
+  const requestKey = params.fairId ?? "all";
   const [people, setPeople] = useState<Person[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loadedKey, setLoadedKey] = useState("");
 
   useEffect(() => {
+    let cancelled = false;
+
     peopleService
-      .listPeople()
+      .listPeople({ fairId: params.fairId })
       .then((data) => {
-        setPeople(data.data || []);
-      })
-      .finally(() => {
-        setLoading(false);
+        if (!cancelled) {
+          setPeople(data.data || []);
+          setLoadedKey(requestKey);
+        }
       });
-  }, []);
 
-  return { people, loading };
+    return () => {
+      cancelled = true;
+    };
+  }, [params.fairId, requestKey]);
+
+  return { people, loading: loadedKey !== requestKey };
 }
-
