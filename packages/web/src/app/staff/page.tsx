@@ -423,6 +423,11 @@ export default function StaffPage() {
   const [gaitFilter, setGaitFilter] = useState(ALL_GAIT_VALUE);
   const [activeTab, setActiveTab] = useState<"pending" | "in_progress" | "closed">("pending");
 
+  /** Solo el DT separa “sin iniciar” vs “en flujo”; vet/juez ven todo lo no cerrado en Pendientes. */
+  const showInProgressTab = currentUser?.role === "TECHNICAL_DIRECTOR";
+  const effectiveTab =
+    !showInProgressTab && activeTab === "in_progress" ? "pending" : activeTab;
+
   const isClosedStatus = (status: StagedCategory["status"]) =>
     status === "JUDGING_CLOSED" || status === "JUDGING_DESERTED";
 
@@ -434,33 +439,41 @@ export default function StaffPage() {
     for (const item of categories) {
       if (isClosedStatus(item.status)) {
         closed += 1;
-      } else if (item.status === "NOT_STARTED") {
-        pending += 1;
+        continue;
+      }
+
+      if (showInProgressTab) {
+        if (item.status === "NOT_STARTED") {
+          pending += 1;
+        } else {
+          inProgress += 1;
+        }
       } else {
-        inProgress += 1;
+        pending += 1;
       }
     }
 
     return { pending, inProgress, closed };
-  }, [categories]);
+  }, [categories, showInProgressTab]);
 
   const tabCategories = useMemo(() => {
     return categories.filter((item) => {
       const closed = isClosedStatus(item.status);
-      switch (activeTab) {
+      switch (effectiveTab) {
         case "pending":
-          return item.status === "NOT_STARTED";
+          // DT: solo sin iniciar. Resto: todo lo activo (incluye pre-pista, FA, P1/P2…).
+          return showInProgressTab ? item.status === "NOT_STARTED" : !closed;
         case "in_progress":
           return !closed && item.status !== "NOT_STARTED";
         case "closed":
           return closed;
         default: {
-          const _exhaustive: never = activeTab;
+          const _exhaustive: never = effectiveTab;
           return _exhaustive;
         }
       }
     });
-  }, [categories, activeTab]);
+  }, [categories, effectiveTab, showInProgressTab]);
 
   const filteredCategories = useMemo(() => {
     return tabCategories.filter((item) => {
@@ -476,7 +489,12 @@ export default function StaffPage() {
   };
 
   const handleTabChange = (value: string) => {
-    if (value === "pending" || value === "in_progress" || value === "closed") {
+    if (value === "pending" || value === "closed") {
+      setActiveTab(value);
+      setStatusFilter(ALL_STATUS_VALUE);
+      return;
+    }
+    if (value === "in_progress" && showInProgressTab) {
       setActiveTab(value);
       setStatusFilter(ALL_STATUS_VALUE);
     }
@@ -622,7 +640,7 @@ export default function StaffPage() {
           </div>
         ) : (
           <ContentReveal>
-            <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+            <Tabs value={effectiveTab} onValueChange={handleTabChange} className="w-full">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-slate-200/60 pb-px mb-6">
                 <TabsList variant="line" className="h-10">
                   <TabsTrigger value="pending" className="px-4 py-2 text-sm">
@@ -633,14 +651,16 @@ export default function StaffPage() {
                       </Badge>
                     )}
                   </TabsTrigger>
-                  <TabsTrigger value="in_progress" className="px-4 py-2 text-sm">
-                    En proceso
-                    {!loading && (
-                      <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-xs font-semibold">
-                        {tabCounts.inProgress}
-                      </Badge>
-                    )}
-                  </TabsTrigger>
+                  {showInProgressTab && (
+                    <TabsTrigger value="in_progress" className="px-4 py-2 text-sm">
+                      En proceso
+                      {!loading && (
+                        <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-xs font-semibold">
+                          {tabCounts.inProgress}
+                        </Badge>
+                      )}
+                    </TabsTrigger>
+                  )}
                   <TabsTrigger value="closed" className="px-4 py-2 text-sm">
                     Cerradas
                     {!loading && (
