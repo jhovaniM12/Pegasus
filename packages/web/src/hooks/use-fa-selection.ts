@@ -49,6 +49,7 @@ export function useFaSelection({
   const faRef = useRef<FaState | null>(fa);
   const isClosingFaRef = useRef(false);
   const syncInFlightRef = useRef(false);
+  const syncRequestedRef = useRef(false);
   const selectionVersionRef = useRef(0);
   const syncDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -119,32 +120,55 @@ export function useFaSelection({
   );
 
   const syncNow = useCallback(async () => {
-    if (!userId || syncInFlightRef.current) {
+    if (!userId) {
+      return { synced: 0, conflicts: 0, failed: 0, fa: null as FaState | null };
+    }
+    if (syncInFlightRef.current) {
+      // No perder la selección encolada mientras otra sincronización está terminando.
+      syncRequestedRef.current = true;
       return { synced: 0, conflicts: 0, failed: 0, fa: null as FaState | null };
     }
 
     syncInFlightRef.current = true;
     setIsSyncing(true);
+    let latestResult = {
+      synced: 0,
+      conflicts: 0,
+      failed: 0,
+      fa: null as FaState | null,
+    };
     try {
-      const result = await syncFaStage(userId, stageId);
-      if (result.fa) {
-        faRef.current = result.fa;
-        onFaChange(result.fa);
-        const confirmed = extractSelectedParticipantIds(result.fa);
-        if (!isClosingFaRef.current) {
-          adoptSelection(confirmed);
+      do {
+        syncRequestedRef.current = false;
+        const selectionVersionAtStart = selectionVersionRef.current;
+        latestResult = await syncFaStage(userId, stageId);
+        if (latestResult.fa) {
+          faRef.current = latestResult.fa;
+          onFaChange(latestResult.fa);
+          const confirmed = extractSelectedParticipantIds(latestResult.fa);
+          if (
+            !isClosingFaRef.current &&
+            selectionVersionRef.current === selectionVersionAtStart
+          ) {
+            adoptSelection(confirmed);
+          }
+          await cacheCurrentSnapshot(
+            latestResult.fa,
+            selectionVersionRef.current === selectionVersionAtStart
+              ? confirmed
+              : localSelectionRef.current
+          );
         }
-        await cacheCurrentSnapshot(result.fa, confirmed);
-      }
-      await refreshPendingState();
+        await refreshPendingState();
 
-      if (result.conflicts > 0) {
-        onSyncNotice?.(
-          "Hay conflictos de sincronización en el FA. Revisa la selección antes de cerrar."
-        );
-      }
+        if (latestResult.conflicts > 0) {
+          onSyncNotice?.(
+            "Hay conflictos de sincronización en el FA. Revisa la selección antes de cerrar."
+          );
+        }
+      } while (syncRequestedRef.current);
 
-      return result;
+      return latestResult;
     } finally {
       syncInFlightRef.current = false;
       setIsSyncing(false);

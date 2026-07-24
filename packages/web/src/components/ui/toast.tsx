@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -198,7 +199,11 @@ function SimpleToast({
       <button
         type="button"
         aria-label="Cerrar"
-        onClick={onDismiss}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onDismiss();
+        }}
         className={cn(
           "ml-1 shrink-0 transition-colors",
           message.variant === "success"
@@ -266,7 +271,11 @@ function NotificationToast({
         <button
           type="button"
           aria-label="Cerrar"
-          onClick={onDismiss}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onDismiss();
+          }}
           className={cn("ml-1 mt-0.5 shrink-0 transition-colors", accent.closeColor)}
         >
           <X className="size-4" />
@@ -303,16 +312,24 @@ function NotificationToast({
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [messages, setMessages] = useState<ToastMessage[]>([]);
+  const timeoutsRef = useRef(new Map<number, number>());
+  const nextIdRef = useRef(0);
 
   const removeToast = useCallback((id: number) => {
+    const timeoutId = timeoutsRef.current.get(id);
+    if (timeoutId != null) {
+      window.clearTimeout(timeoutId);
+      timeoutsRef.current.delete(id);
+    }
     setMessages((current) => current.filter((m) => m.id !== id));
   }, []);
 
   const toast = useCallback(
     (input: ToastInput) => {
-      const id = Date.now();
+      const id = ++nextIdRef.current;
       setMessages((current) => [...current, { ...input, id }]);
-      window.setTimeout(() => removeToast(id), DURATION_MS[input.variant]);
+      const timeoutId = window.setTimeout(() => removeToast(id), DURATION_MS[input.variant]);
+      timeoutsRef.current.set(id, timeoutId);
     },
     [removeToast]
   );
@@ -322,20 +339,22 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="fixed right-4 top-4 z-50 flex w-[calc(100vw-2rem)] max-w-sm flex-col gap-3 sm:right-6 sm:top-6">
+      <div className="pointer-events-none fixed right-4 top-4 z-[70] flex w-[calc(100vw-2rem)] max-w-sm flex-col gap-3 sm:right-6 sm:top-6">
         {messages.map((message) =>
           message.variant === "notification" ? (
-            <NotificationToast
-              key={message.id}
-              message={message as ToastMessage & { variant: "notification" }}
-              onDismiss={() => removeToast(message.id)}
-            />
+            <div key={message.id} className="pointer-events-auto">
+              <NotificationToast
+                message={message as ToastMessage & { variant: "notification" }}
+                onDismiss={() => removeToast(message.id)}
+              />
+            </div>
           ) : (
-            <SimpleToast
-              key={message.id}
-              message={message as ToastMessage & { variant: "success" | "error" }}
-              onDismiss={() => removeToast(message.id)}
-            />
+            <div key={message.id} className="pointer-events-auto">
+              <SimpleToast
+                message={message as ToastMessage & { variant: "success" | "error" }}
+                onDismiss={() => removeToast(message.id)}
+              />
+            </div>
           )
         )}
       </div>

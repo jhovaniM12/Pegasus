@@ -88,3 +88,10 @@ export class NotificationToastDeduper {
     }
   }
 }
+
+/**
+ * Instancia compartida: en staff hay dos NotificationInbox montados a la vez
+ * (header desktop + barra móvil) y cada uno escucharía el mismo push.
+ */
+export const sharedNotificationToastDeduper = new NotificationToastDeduper();
+

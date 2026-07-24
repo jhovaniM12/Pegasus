@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useStaffRealtimeRefresh } from "@/hooks/use-staff-realtime-refresh";
 import { useToast } from "@/components/ui/toast";
-import { NotificationToastDeduper } from "@/lib/notification-toast-deduper";
+import { sharedNotificationToastDeduper } from "@/lib/notification-toast-deduper";
 import type { StaffPushMessage } from "@/lib/staff-push-message";
 import { stagedFlowService } from "@/services/staged-flow.service";
 import type { StaffNotification } from "@/types/staged-flow";
@@ -59,7 +59,6 @@ export function NotificationInbox() {
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
   const prevIdsRef = useRef<Set<string>>(new Set());
-  const toastDeduperRef = useRef(new NotificationToastDeduper());
   const hasInitialLoadedRef = useRef(false);
 
   const showNotificationToast = useCallback(
@@ -73,7 +72,7 @@ export function NotificationInbox() {
       gaitName?: string | null;
       deepLink?: string | null;
     }) => {
-      if (!toastDeduperRef.current.shouldShow(input)) {
+      if (!sharedNotificationToastDeduper.shouldShow(input)) {
         return false;
       }
 

@@ -304,6 +304,57 @@ describe("sync engine revision chaining", () => {
     });
   });
 
+  it("reaplica la selección FA sobre la revisión vigente sin crear conflicto", async () => {
+    connectivityMock.mockResolvedValue(true);
+    const mutation = await createFaMutation(["participant-1", "participant-2"], 4);
+
+    updateFaDecisionsMock
+      .mockRejectedValueOnce(
+        new ApiError("Conflicto de revisión", {
+          status: 409,
+          code: "REVISION_CONFLICT",
+          details: {
+            currentRevision: 9,
+            resolution: "CAN_REAPPLY_LOCAL_DRAFT",
+          },
+        })
+      )
+      .mockResolvedValueOnce({
+        data: {
+          form: { id: FORM_ID, revision: 10 },
+          participants: [],
+        },
+        sync: {
+          operationId: mutation.operationId,
+          applied: true,
+          duplicate: false,
+          revision: 10,
+          serverUpdatedAt: new Date().toISOString(),
+        },
+      } as never);
+
+    const result = await syncFaStage(USER_ID, STAGE_ID);
+
+    expect(result).toMatchObject({ synced: 1, conflicts: 0, failed: 0 });
+    expect(updateFaDecisionsMock).toHaveBeenNthCalledWith(
+      1,
+      STAGE_ID,
+      expect.objectContaining({
+        baseRevision: 4,
+        payload: { selectedParticipantIds: ["participant-1", "participant-2"] },
+      })
+    );
+    expect(updateFaDecisionsMock).toHaveBeenNthCalledWith(
+      2,
+      STAGE_ID,
+      expect.objectContaining({
+        baseRevision: 9,
+        payload: { selectedParticipantIds: ["participant-1", "participant-2"] },
+      })
+    );
+    await expect(listMutationsForUser(USER_ID)).resolves.toHaveLength(0);
+  });
+
   it("reaplica una nota sobre la revisión actual cuando el servidor lo permite", async () => {
     connectivityMock.mockResolvedValue(true);
 

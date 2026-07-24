@@ -475,6 +475,31 @@ export async function syncFaStage(userId: string, stageId: string): Promise<Sync
           chainedByScope
         );
       } catch (error) {
+        const apiError = error instanceof ApiError ? error : null;
+        const details = apiError?.details as RevisionConflictDetails | undefined;
+        const currentRevision = details?.currentRevision;
+        const canReapplySelection =
+          apiError?.code === "REVISION_CONFLICT" &&
+          details?.resolution === "CAN_REAPPLY_LOCAL_DRAFT" &&
+          typeof currentRevision === "number" &&
+          currentRevision !== effectiveMutation.baseRevision;
+
+        if (canReapplySelection && typeof currentRevision === "number") {
+          await markMutationStatus(effectiveMutation.operationId, {
+            status: "PENDING",
+            baseRevision: currentRevision,
+            nextRetryAt: null,
+            lastErrorCode: null,
+            lastErrorMessage: null,
+            lastErrorDetails: null,
+          });
+          chainedByScope.set(
+            mutationRevisionScopeKey(effectiveMutation),
+            currentRevision
+          );
+          continue;
+        }
+
         const outcome = await handleSyncError(effectiveMutation, error);
         if (outcome === "conflict") conflicts += 1;
         else failed += 1;
