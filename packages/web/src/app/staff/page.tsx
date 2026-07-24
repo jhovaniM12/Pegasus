@@ -8,7 +8,6 @@ import {
   ChevronDown,
   ClipboardList,
   Eye,
-  Gauge,
   Gavel,
   LayoutDashboard,
   ListFilter,
@@ -16,7 +15,6 @@ import {
   Play,
   Stethoscope,
   UserCircle,
-  Users,
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -136,10 +134,6 @@ function actionButtonClass(color: CardColor): string {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatAgeRange(min: number, max: number): string {
-  return `${min} - ${max} meses`;
-}
 
 /**
  * Determines whether the bottom card button is a navigation link or a
@@ -664,39 +658,24 @@ export default function StaffPage() {
                       </Badge>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-3">
-                        <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
-                          <Gauge className="size-3.5" />
-                          Edad
-                        </div>
-                        <p className="mt-1 text-sm font-semibold text-slate-950">
-                          {formatAgeRange(item.category.minAgeMonths, item.category.maxAgeMonths)}
-                        </p>
+                    <div className="grid grid-cols-4 gap-2 text-center">
+                      <div className="rounded-md border border-slate-200/60 bg-slate-50/50 p-2 dark:bg-slate-900/10 dark:border-slate-800">
+                        <span className="block text-base font-bold text-slate-950 dark:text-slate-100">{item.totalEntries}</span>
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Inscritos</span>
                       </div>
-                      <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-3">
-                        <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
-                          <Users className="size-3.5" />
-                          Inscritos
-                        </div>
-                        <p className="mt-1 text-sm font-semibold text-slate-950">{item.totalEntries}</p>
+                      <div className="rounded-md border border-emerald-200/60 bg-emerald-50/40 p-2 dark:bg-emerald-950/10 dark:border-emerald-900/20">
+                        <span className="block text-base font-bold text-emerald-950 dark:text-emerald-100">{item.veterinary.approved}</span>
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-600">Aprobados</span>
                       </div>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-2 text-center">
-                      <div className="rounded-md bg-emerald-50 px-2 py-2 text-xs text-emerald-700">
-                        <span className="block text-sm font-semibold">{item.veterinary.approved}</span>
-                        Aprobados
+                      <div className="rounded-md border border-amber-200/60 bg-amber-50/40 p-2 dark:bg-amber-950/10 dark:border-amber-900/20">
+                        <span className="block text-base font-bold text-amber-950 dark:text-amber-100">{item.veterinary.pending}</span>
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-600">Pendientes</span>
                       </div>
-                      <div className="rounded-md bg-slate-100 px-2 py-2 text-xs text-slate-600">
-                        <span className="block text-sm font-semibold">{item.veterinary.pending}</span>
-                        Pendientes
-                      </div>
-                      <div className="rounded-md bg-blue-50 px-2 py-2 text-xs text-blue-700">
-                        <span className="block text-sm font-semibold">
+                      <div className="rounded-md border border-blue-200/60 bg-blue-50/40 p-2 dark:bg-blue-950/10 dark:border-blue-900/20">
+                        <span className="block text-base font-bold text-blue-950 dark:text-blue-100">
                           {item.judging.closedForms}/{item.judging.totalJudges}
                         </span>
-                        FA cerrados
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-blue-600">FA Cerrados</span>
                       </div>
                     </div>
                   </div>
