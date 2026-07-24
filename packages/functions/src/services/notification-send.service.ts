@@ -52,54 +52,76 @@ function toBeamsDeepLink(notification: Pick<NotificationOutbox, "payload">): str
   }
 }
 
-function buildBeamsPayload(notification: Pick<NotificationOutbox, "id" | "title" | "body" | "payload">) {
+function relativeDeepLink(notification: Pick<NotificationOutbox, "payload">): string {
+  const deepLink = typeof notification.payload?.deepLink === "string" ? notification.payload.deepLink : "/staff";
+  try {
+    return new URL(deepLink).pathname + new URL(deepLink).search + new URL(deepLink).hash;
+  } catch {
+    return deepLink.startsWith("/") ? deepLink : `/${deepLink}`;
+  }
+}
+
+export function buildBeamsPayload(
+  notification: Pick<NotificationOutbox, "id" | "type" | "title" | "body" | "payload">
+) {
   const webNotification: WebNotificationPayload = {
     title: notification.title,
     body: notification.body,
     tag: notification.id
   };
 
-  const deepLink = toBeamsDeepLink(notification);
-  if (deepLink) {
-    webNotification.deep_link = deepLink;
+  const absoluteDeepLink = toBeamsDeepLink(notification);
+  if (absoluteDeepLink) {
+    webNotification.deep_link = absoluteDeepLink;
   }
+
+  const payload = notification.payload ?? {};
 
   return {
     web: {
       notification: webNotification,
-      data: { notificationId: notification.id }
+      // Datos para el SW / tabs abiertos: toast in-app sin esperar GET /notifications.
+      data: {
+        kind: "INBOX_NOTIFICATION",
+        notificationId: notification.id,
+        notificationType: notification.type,
+        title: notification.title,
+        body: notification.body,
+        deepLink: relativeDeepLink(notification),
+        fairName: typeof payload.fairName === "string" ? payload.fairName : "",
+        categoryName: typeof payload.categoryName === "string" ? payload.categoryName : "",
+        gaitName: typeof payload.gaitName === "string" ? payload.gaitName : ""
+      }
     }
   };
 }
 
-function groupKey(notification: NotificationOutbox): string {
-  return `${notification.type}::${notification.title}::${notification.body}`;
-}
-
-async function publishGroup(notifications: NotificationOutbox[]): Promise<void> {
-  const [representative] = notifications;
-  if (!representative) return;
-
-  const userIds = Array.from(
-    new Set(notifications.map((notification) => notification.recipientUserId).filter((id): id is string => Boolean(id)))
-  );
-  const ids = notifications.map((notification) => notification.id);
-
-  if (userIds.length === 0) {
+async function publishNotification(notification: NotificationOutbox): Promise<void> {
+  if (!notification.recipientUserId) {
     return;
   }
 
   try {
     await withTimeout(
-      getBeamsClient().publishToUsers(userIds, buildBeamsPayload(representative)),
+      // Cada destinatario debe recibir el ID de su propia fila de inbox. Un payload
+      // compartido impediría deduplicar de forma fiable el push contra GET /notifications.
+      getBeamsClient().publishToUsers(
+        [notification.recipientUserId],
+        buildBeamsPayload(notification)
+      ),
       BEAMS_TIMEOUT_MS,
       `Pusher Beams timeout tras ${BEAMS_TIMEOUT_MS}ms`
     );
 
     const dataSource = await getDataSource();
-    await dataSource.getRepository(NotificationOutbox).update(ids, { sentAt: new Date() });
+    await dataSource
+      .getRepository(NotificationOutbox)
+      .update(notification.id, { sentAt: new Date() });
   } catch (error) {
-    logPushFailure(ids, error instanceof Error ? error.message : "Error desconocido.");
+    logPushFailure(
+      [notification.id],
+      error instanceof Error ? error.message : "Error desconocido."
+    );
   }
 }
 
@@ -121,13 +143,7 @@ export async function sendStageNotifications(fairCategoryStageId: string): Promi
     return;
   }
 
-  const groups = new Map<string, NotificationOutbox[]>();
-  for (const notification of pending) {
-    const key = groupKey(notification);
-    groups.set(key, [...(groups.get(key) ?? []), notification]);
-  }
-
-  await Promise.all(Array.from(groups.values(), publishGroup));
+  await Promise.all(pending.map(publishNotification));
 }
 
 /**
@@ -160,6 +176,7 @@ export async function sendStageRefreshSignal(fairCategoryStageId: string, roleEx
         web: {
           time_to_live: 60,
           data: {
+            kind: "STAFF_REFRESH",
             type: "STAFF_REFRESH",
             fairCategoryStageId
           }

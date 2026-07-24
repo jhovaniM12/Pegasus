@@ -1,6 +1,10 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import {
+  parseStaffPushMessage,
+  type StaffPushMessage,
+} from "@/lib/staff-push-message";
 
 type UseStaffRealtimeRefreshOptions = {
   enabled?: boolean;
@@ -8,6 +12,8 @@ type UseStaffRealtimeRefreshOptions = {
   enableVisibilityRefresh?: boolean;
   refreshWhenHidden?: boolean;
   debounceMs?: number;
+  /** Toast / UI inmediata al recibir el payload del push (sin esperar fetch). */
+  onPushMessage?: (message: StaffPushMessage) => void;
 };
 
 /**
@@ -22,14 +28,20 @@ export function useStaffRealtimeRefresh(
     enableVisibilityRefresh = false,
     refreshWhenHidden = false,
     debounceMs = 300,
+    onPushMessage,
   }: UseStaffRealtimeRefreshOptions = {}
 ) {
   const refreshRef = useRef(onRefresh);
+  const onPushMessageRef = useRef(onPushMessage);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     refreshRef.current = onRefresh;
   }, [onRefresh]);
+
+  useEffect(() => {
+    onPushMessageRef.current = onPushMessage;
+  }, [onPushMessage]);
 
   useEffect(() => {
     return () => {
@@ -64,9 +76,11 @@ export function useStaffRealtimeRefresh(
 
     if ("serviceWorker" in navigator) {
       const handleMessage = (event: MessageEvent) => {
-        if ((event.data as { type?: string } | null)?.type === "PUSH_RECEIVED") {
-          queueRefresh();
-        }
+        const message = parseStaffPushMessage(event.data);
+        if (!message) return;
+
+        onPushMessageRef.current?.(message);
+        queueRefresh();
       };
 
       navigator.serviceWorker.addEventListener("message", handleMessage);

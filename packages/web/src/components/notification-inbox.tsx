@@ -11,6 +11,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useStaffRealtimeRefresh } from "@/hooks/use-staff-realtime-refresh";
 import { useToast } from "@/components/ui/toast";
+import { NotificationToastDeduper } from "@/lib/notification-toast-deduper";
+import type { StaffPushMessage } from "@/lib/staff-push-message";
 import { stagedFlowService } from "@/services/staged-flow.service";
 import type { StaffNotification } from "@/types/staged-flow";
 
@@ -57,7 +59,68 @@ export function NotificationInbox() {
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
   const prevIdsRef = useRef<Set<string>>(new Set());
+  const toastDeduperRef = useRef(new NotificationToastDeduper());
   const hasInitialLoadedRef = useRef(false);
+
+  const showNotificationToast = useCallback(
+    (input: {
+      id?: string | null;
+      type: string;
+      title: string;
+      body: string;
+      fairName?: string | null;
+      categoryName?: string | null;
+      gaitName?: string | null;
+      deepLink?: string | null;
+    }) => {
+      if (!toastDeduperRef.current.shouldShow(input)) {
+        return false;
+      }
+
+      toast({
+        variant: "notification",
+        notificationType: input.type,
+        title: input.title,
+        description: input.body,
+        fairName: input.fairName ?? undefined,
+        categoryName: input.categoryName ?? undefined,
+        gaitName: input.gaitName ?? undefined,
+        deepLink: input.deepLink ?? undefined,
+        actionLabel: getActionLabel(input.type),
+      });
+      return true;
+    },
+    [toast]
+  );
+
+  const handlePushMessage = useCallback(
+    (message: StaffPushMessage) => {
+      if (message.kind !== "INBOX_NOTIFICATION") return;
+      if (!message.title || !message.body) return;
+
+      const shown = showNotificationToast({
+        id: message.notificationId,
+        type: message.notificationType ?? "UNKNOWN",
+        title: message.title,
+        body: message.body,
+        fairName: message.fairName,
+        categoryName: message.categoryName,
+        gaitName: message.gaitName,
+        deepLink: message.deepLink,
+      });
+
+      if (shown) {
+        if (message.notificationId) {
+          prevIdsRef.current.add(message.notificationId);
+        }
+        setState((prev) => ({
+          ...prev,
+          unreadCount: prev.unreadCount + 1,
+        }));
+      }
+    },
+    [showNotificationToast]
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -66,22 +129,19 @@ export function NotificationInbox() {
       const response = await stagedFlowService.listNotifications(20);
       const data = response.data ?? { unreadCount: 0, notifications: [] };
 
-      // Mostrar toast solo después de la carga inicial, para notificaciones nuevas no leídas.
+      // Toast solo para notificaciones nuevas no cubiertas ya por el push inmediato.
       if (hasInitialLoadedRef.current) {
-        const incoming = data.notifications.filter(
-          (n) => !prevIdsRef.current.has(n.id) && !n.readAt
-        );
+        const incoming = data.notifications.filter((n) => !n.readAt && !prevIdsRef.current.has(n.id));
         for (const n of incoming) {
-          toast({
-            variant: "notification",
-            notificationType: n.type,
+          showNotificationToast({
+            id: n.id,
+            type: n.type,
             title: n.title,
-            description: n.body,
+            body: n.body,
             fairName: n.fairName,
             categoryName: n.categoryName,
             gaitName: n.gaitName,
             deepLink: n.deepLink,
-            actionLabel: getActionLabel(n.type),
           });
         }
       }
@@ -94,7 +154,7 @@ export function NotificationInbox() {
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [showNotificationToast]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -106,7 +166,10 @@ export function NotificationInbox() {
     };
   }, [load]);
 
-  useStaffRealtimeRefresh(() => load(), { debounceMs: 400 });
+  useStaffRealtimeRefresh(() => load(), {
+    debounceMs: 400,
+    onPushMessage: handlePushMessage,
+  });
 
   // Polling de respaldo: refresca la bandeja cada 30 segundos en caso de que
   // el service worker no haya podido enviar el mensaje (e.g. tab en segundo plano).
