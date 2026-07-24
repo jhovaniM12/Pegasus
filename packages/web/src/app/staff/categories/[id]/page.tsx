@@ -38,10 +38,12 @@ import { StartFaDialog } from "./_components/start-fa-dialog";
 import { CloseFaDialog } from "./_components/close-fa-dialog";
 import { ConsolidateFaDialog } from "./_components/consolidate-fa-dialog";
 import { ActivateRoundDialog } from "./_components/activate-round-dialog";
+import { StartRoundDialog } from "./_components/start-round-dialog";
 import type { ActivateRoundConfig } from "./_components/activate-round-card";
 import type {
   FaState,
   FaParticipant,
+  JudgeFormat,
   JudgeFormatKey,
   ManagementState,
   RoundState,
@@ -92,7 +94,9 @@ function resolveJudgeView(viewParam: string | null): "FA" | "F1" | "F2" | "TIE_B
 // director técnico abrió F1 mientras un juez seguía en "?view=FA"), la vista quedó
 // obsoleta y el juez debe ser redirigido a la fase vigente en vez de quedar "en el limbo".
 const JUDGE_VIEW_VALID_STATUSES: Record<"FA" | "F1" | "F2" | "TIE_BREAK", StagedCategory["status"][]> = {
-  FA: ["JUDGING_STARTED", ...FA_CONSOLIDATED_STATUSES],
+  // FA solo mientras el juez está en FA o esperando que el DT habilite P1/P2.
+  // Cuando arranca F1/F2 la vista FA queda obsoleta y se redirige a la ronda activa.
+  FA: ["JUDGING_STARTED", "FA_CONSOLIDATED"],
   F1: ["FA_CONSOLIDATED", "F1_IN_PROGRESS", "F1_CONSOLIDATED"],
   F2: ["F1_CONSOLIDATED", "F2_IN_PROGRESS"],
   TIE_BREAK: ["F2_IN_PROGRESS", "TIE_BREAK_IN_PROGRESS"],
@@ -129,10 +133,13 @@ async function loadJudgeWorkspace(
   const view = resolveJudgeView(viewParam);
   const judgeHasClosedFa = current.judge?.faFormStatus === "CLOSED";
 
+  const withJudgeMeta = (summary: StagedCategory): StagedCategory =>
+    summary.judge ? summary : { ...summary, judge: current.judge };
+
   if (view === "FA") {
     const response = await stagedFlowService.getFa(stageId);
     const fa = response.data ?? null;
-    const summary = fa?.stage ?? current;
+    const summary = withJudgeMeta(fa?.stage ?? current);
     const management = FA_CONSOLIDATED_STATUSES.includes(summary.status)
       ? (await stagedFlowService.getManagement(stageId)).data ?? null
       : null;
@@ -142,14 +149,20 @@ async function loadJudgeWorkspace(
   if (view != null) {
     const response = await stagedFlowService.getRoundByType(stageId, view);
     const round = response.data ?? null;
-    return { summary: round?.stage ?? current, fa: null, round, roundsManagement: null, management: null };
+    return {
+      summary: withJudgeMeta(round?.stage ?? current),
+      fa: null,
+      round,
+      roundsManagement: null,
+      management: null,
+    };
   }
 
   if (current.status === "JUDGING_CLOSED") {
     const response = await stagedFlowService.getRoundsManagement(stageId);
     const roundsManagement = response.data ?? null;
     return {
-      summary: roundsManagement?.stage ?? current,
+      summary: withJudgeMeta(roundsManagement?.stage ?? current),
       fa: null,
       round: null,
       roundsManagement,
@@ -160,7 +173,13 @@ async function loadJudgeWorkspace(
   if (current.status === "JUDGING_STARTED") {
     const response = await stagedFlowService.getFa(stageId);
     const fa = response.data ?? null;
-    return { summary: fa?.stage ?? current, fa, round: null, roundsManagement: null, management: null };
+    return {
+      summary: withJudgeMeta(fa?.stage ?? current),
+      fa,
+      round: null,
+      roundsManagement: null,
+      management: null,
+    };
   }
 
   if (judgeHasClosedFa && current.status === "FA_CONSOLIDATED") {
@@ -170,7 +189,7 @@ async function loadJudgeWorkspace(
     ]);
     const fa = faResponse.data ?? null;
     return {
-      summary: fa?.stage ?? current,
+      summary: withJudgeMeta(fa?.stage ?? current),
       fa,
       round: null,
       roundsManagement: null,
@@ -181,13 +200,25 @@ async function loadJudgeWorkspace(
   if (JUDGE_ROUND_STATUSES.includes(current.status)) {
     const response = await stagedFlowService.getRound(stageId);
     const round = response.data ?? null;
-    return { summary: round?.stage ?? current, fa: null, round, roundsManagement: null, management: null };
+    return {
+      summary: withJudgeMeta(round?.stage ?? current),
+      fa: null,
+      round,
+      roundsManagement: null,
+      management: null,
+    };
   }
 
   if (judgeHasClosedFa) {
     const response = await stagedFlowService.getFa(stageId);
     const fa = response.data ?? null;
-    return { summary: fa?.stage ?? current, fa, round: null, roundsManagement: null, management: null };
+    return {
+      summary: withJudgeMeta(fa?.stage ?? current),
+      fa,
+      round: null,
+      roundsManagement: null,
+      management: null,
+    };
   }
 
   return { summary: current, fa: null, round: null, roundsManagement: null, management: null };
@@ -323,6 +354,9 @@ export default function StaffCategoryPage() {
   const [closeFaOpen, setCloseFaOpen] = useState(false);
   const [consolidateFaOpen, setConsolidateFaOpen] = useState(false);
   const [activateRoundTarget, setActivateRoundTarget] = useState<ActivateRoundConfig | null>(null);
+  const [startRoundTarget, setStartRoundTarget] = useState<{
+    format: JudgeFormat & { key: "F1" | "F2" };
+  } | null>(null);
 
   // ─── Data loading ─────────────────────────────────────────────────────────
 
@@ -828,6 +862,28 @@ export default function StaffCategoryPage() {
       summary.status
     );
   const judgeOfficialF2 = roundsManagement ? buildOfficialF2Results(roundsManagement.rounds) : null;
+  const judgeNextRoundFormat =
+    summary?.judge?.formats.find(
+      (format): format is JudgeFormat & { key: "F1" | "F2" } =>
+        (format.key === "F1" || format.key === "F2") &&
+        format.isActive &&
+        (format.formStatus === "PENDING" || format.formStatus === "STARTED")
+    ) ??
+    (summary?.status === "F1_IN_PROGRESS"
+      ? ({
+          key: "F1",
+          formStatus: "PENDING",
+          isActive: true,
+          participantCount: null,
+        } satisfies JudgeFormat & { key: "F1" })
+      : summary?.status === "F2_IN_PROGRESS"
+        ? ({
+            key: "F2",
+            formStatus: "PENDING",
+            isActive: true,
+            participantCount: null,
+          } satisfies JudgeFormat & { key: "F2" })
+        : null);
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -1066,6 +1122,25 @@ export default function StaffCategoryPage() {
                   stageStatus={summary.status}
                   syncUnavailable={sessionExpired}
                   consolidated={fa.consolidated ?? []}
+                  busy={busy}
+                  nextRound={
+                    judgeNextRoundFormat
+                      ? {
+                          roundKey: judgeNextRoundFormat.key,
+                          participantCount: judgeNextRoundFormat.participantCount,
+                          formStatus: judgeNextRoundFormat.formStatus === "STARTED" ? "STARTED" : "PENDING",
+                          onStart: () => {
+                            if (judgeNextRoundFormat.formStatus === "STARTED") {
+                              router.push(
+                                `/staff/categories/${stageId}?view=${judgeNextRoundFormat.key}`
+                              );
+                              return;
+                            }
+                            setStartRoundTarget({ format: judgeNextRoundFormat });
+                          },
+                        }
+                      : null
+                  }
                 />
               </div>
             )}
@@ -1109,10 +1184,40 @@ export default function StaffCategoryPage() {
         {/* ── JUEZ: FA consolidado, esperando ronda ─────────────────────── */}
         {currentUser?.role === "JUDGE" && summary.status === "FA_CONSOLIDATED" && !fa && !round && (
           <section className="mt-4 rounded-lg border border-dashed border-slate-300 bg-white px-6 py-8 text-center">
-            <p className="text-base font-semibold text-slate-900">FA consolidado</p>
-            <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
-              El Director Técnico está por abrir la siguiente ronda (F1 o F2). Espera la notificación.
-            </p>
+            {judgeNextRoundFormat ? (
+              <div className="space-y-4">
+                <p className="text-base font-semibold text-slate-900">
+                  Prueba individual {judgeNextRoundFormat.key === "F1" ? "P1" : "P2"} habilitada
+                </p>
+                <p className="mx-auto max-w-md text-sm text-slate-500">
+                  El Director Técnico ya activó la siguiente prueba. Puedes iniciar tu tarjeta.
+                </p>
+                <Button
+                  className="bg-violet-600 text-white hover:bg-violet-700"
+                  disabled={busy}
+                  onClick={() => {
+                    if (judgeNextRoundFormat.formStatus === "STARTED") {
+                      router.push(`/staff/categories/${stageId}?view=${judgeNextRoundFormat.key}`);
+                      return;
+                    }
+                    setStartRoundTarget({ format: judgeNextRoundFormat });
+                  }}
+                >
+                  <Play className="size-4" />
+                  {judgeNextRoundFormat.formStatus === "STARTED"
+                    ? `Continuar prueba individual ${judgeNextRoundFormat.key === "F1" ? "P1" : "P2"}`
+                    : `Iniciar prueba individual ${judgeNextRoundFormat.key === "F1" ? "P1" : "P2"}`}
+                </Button>
+              </div>
+            ) : (
+              <>
+                <p className="text-base font-semibold text-slate-900">FA consolidado</p>
+                <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
+                  El Director Técnico está por habilitar la prueba individual P1 o P2. Espera la
+                  notificación.
+                </p>
+              </>
+            )}
           </section>
         )}
 
@@ -1238,6 +1343,42 @@ export default function StaffCategoryPage() {
             toast({
               title: "Error",
               description: error instanceof Error ? error.message : "No fue posible activar la ronda.",
+              variant: "error",
+            });
+          } finally {
+            setBusy(false);
+          }
+        }}
+      />
+
+      <StartRoundDialog
+        open={startRoundTarget !== null}
+        onOpenChange={(open) => {
+          if (!open && !busy) setStartRoundTarget(null);
+        }}
+        roundKey={startRoundTarget?.format.key ?? "F2"}
+        gaitLabel={summary?.gait.name ?? "Sin andar"}
+        participantCount={startRoundTarget?.format.participantCount}
+        busy={busy}
+        onConfirm={async () => {
+          if (!startRoundTarget) return;
+          const { format } = startRoundTarget;
+          setBusy(true);
+          try {
+            await stagedFlowService.startRoundForm(stageId);
+            toast({
+              title: `Prueba individual ${format.key === "F1" ? "P1" : "P2"} iniciada`,
+              variant: "success",
+            });
+            setStartRoundTarget(null);
+            router.push(`/staff/categories/${stageId}?view=${format.key}`);
+          } catch (error) {
+            toast({
+              title: "Error",
+              description:
+                error instanceof Error
+                  ? error.message
+                  : `No fue posible iniciar la prueba individual ${format.key === "F1" ? "P1" : "P2"}.`,
               variant: "error",
             });
           } finally {

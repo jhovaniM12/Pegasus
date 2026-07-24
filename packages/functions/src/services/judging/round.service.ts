@@ -96,7 +96,11 @@ async function loadParticipants(manager: EntityManager, participantIds: string[]
   if (participantIds.length === 0) return [];
   return manager.getRepository(JudgingParticipant).find({
     where: participantIds.map((id) => ({ id })),
-    relations: { fairEntry: true, disqualificationReason: true, disqualifiedByUser: { person: true } }
+    relations: {
+      fairEntry: { horse: true },
+      disqualificationReason: true,
+      disqualifiedByUser: { person: true }
+    }
   });
 }
 
@@ -1537,6 +1541,7 @@ export async function desertCompetition(
 type RoundParticipantDto = {
   id: string;
   trackPosition: number;
+  horseName: string;
   riderName: string;
   registrationNumber: string;
   status: JudgingParticipantStatus;
@@ -1585,6 +1590,7 @@ async function getRoundStateForJudge(
       return {
         id: entry.judgingParticipantId,
         trackPosition: participant?.fairEntry.trackPosition ?? 0,
+        horseName: participant?.fairEntry.horse?.name?.trim() || "",
         riderName: participant?.fairEntry.riderName ?? "",
         registrationNumber: participant?.fairEntry.registrationNumber ?? "",
         status: participant?.status ?? "ELIGIBLE",

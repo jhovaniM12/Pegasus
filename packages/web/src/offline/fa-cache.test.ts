@@ -40,6 +40,7 @@ function buildFa(selectedIds: string[]): FaState {
     participants: selectedIds.map((id, index) => ({
       id,
       trackPosition: index + 1,
+      horseName: `Ejemplar ${index + 1}`,
       riderName: `Jinete ${index + 1}`,
       registrationNumber: `REG-${index + 1}`,
       status: "ELIGIBLE",

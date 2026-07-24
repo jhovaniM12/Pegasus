@@ -985,7 +985,7 @@ async function getFaForStage(manager: EntityManager, user: User, stage: FairCate
     await Promise.all([
       manager.getRepository(JudgingParticipant).find({
         where: { fairCategoryStageId: stage.id },
-        relations: { fairEntry: true, disqualificationReason: true, disqualifiedByUser: { person: true } },
+        relations: { fairEntry: { horse: true }, disqualificationReason: true, disqualifiedByUser: { person: true } },
         order: { fairEntry: { trackPosition: "ASC" } }
       }),
       manager.getRepository(FaJudgeEntryDecision).find({
@@ -1059,6 +1059,7 @@ async function getFaForStage(manager: EntityManager, user: User, stage: FairCate
         id: participant.id,
         fairEntryId: participant.fairEntryId,
         trackPosition: participant.fairEntry.trackPosition,
+        horseName: participant.fairEntry.horse?.name?.trim() || "",
         riderName: participant.fairEntry.riderName,
         registrationNumber: participant.fairEntry.registrationNumber,
         status: participant.status,

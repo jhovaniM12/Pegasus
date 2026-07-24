@@ -93,6 +93,7 @@ export type FaParticipant = {
   id: string;
   fairEntryId: string;
   trackPosition: number;
+  horseName: string;
   riderName: string;
   registrationNumber: string;
   status: JudgingParticipantStatus;
@@ -198,6 +199,7 @@ export type ManagementState = {
 export type RoundParticipant = {
   id: string;
   trackPosition: number;
+  horseName: string;
   riderName: string;
   registrationNumber: string;
   status: JudgingParticipantStatus;

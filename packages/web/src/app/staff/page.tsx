@@ -421,12 +421,44 @@ export default function StaffPage() {
   const [startRoundTarget, setStartRoundTarget] = useState<StartRoundTarget | null>(null);
   const [statusFilter, setStatusFilter] = useState(ALL_STATUS_VALUE);
   const [gaitFilter, setGaitFilter] = useState(ALL_GAIT_VALUE);
-  const [activeTab, setActiveTab] = useState<"pending" | "closed">("pending");
+  const [activeTab, setActiveTab] = useState<"pending" | "in_progress" | "closed">("pending");
+
+  const isClosedStatus = (status: StagedCategory["status"]) =>
+    status === "JUDGING_CLOSED" || status === "JUDGING_DESERTED";
+
+  const tabCounts = useMemo(() => {
+    let pending = 0;
+    let inProgress = 0;
+    let closed = 0;
+
+    for (const item of categories) {
+      if (isClosedStatus(item.status)) {
+        closed += 1;
+      } else if (item.status === "NOT_STARTED") {
+        pending += 1;
+      } else {
+        inProgress += 1;
+      }
+    }
+
+    return { pending, inProgress, closed };
+  }, [categories]);
 
   const tabCategories = useMemo(() => {
     return categories.filter((item) => {
-      const isClosed = item.status === "JUDGING_CLOSED" || item.status === "JUDGING_DESERTED";
-      return activeTab === "closed" ? isClosed : !isClosed;
+      const closed = isClosedStatus(item.status);
+      switch (activeTab) {
+        case "pending":
+          return item.status === "NOT_STARTED";
+        case "in_progress":
+          return !closed && item.status !== "NOT_STARTED";
+        case "closed":
+          return closed;
+        default: {
+          const _exhaustive: never = activeTab;
+          return _exhaustive;
+        }
+      }
     });
   }, [categories, activeTab]);
 
@@ -444,8 +476,10 @@ export default function StaffPage() {
   };
 
   const handleTabChange = (value: string) => {
-    setActiveTab(value as "pending" | "closed");
-    setStatusFilter(ALL_STATUS_VALUE);
+    if (value === "pending" || value === "in_progress" || value === "closed") {
+      setActiveTab(value);
+      setStatusFilter(ALL_STATUS_VALUE);
+    }
   };
 
   const reloadCategories = useCallback(
@@ -595,7 +629,15 @@ export default function StaffPage() {
                     Pendientes
                     {!loading && (
                       <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-xs font-semibold">
-                        {categories.filter((c) => c.status !== "JUDGING_CLOSED" && c.status !== "JUDGING_DESERTED").length}
+                        {tabCounts.pending}
+                      </Badge>
+                    )}
+                  </TabsTrigger>
+                  <TabsTrigger value="in_progress" className="px-4 py-2 text-sm">
+                    En proceso
+                    {!loading && (
+                      <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-xs font-semibold">
+                        {tabCounts.inProgress}
                       </Badge>
                     )}
                   </TabsTrigger>
@@ -603,7 +645,7 @@ export default function StaffPage() {
                     Cerradas
                     {!loading && (
                       <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-xs font-semibold">
-                        {categories.filter((c) => c.status === "JUDGING_CLOSED" || c.status === "JUDGING_DESERTED").length}
+                        {tabCounts.closed}
                       </Badge>
                     )}
                   </TabsTrigger>

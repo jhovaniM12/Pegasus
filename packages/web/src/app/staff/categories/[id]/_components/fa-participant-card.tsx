@@ -92,7 +92,22 @@ export function FaParticipantCard({
           </span>
           <span
             className={cn(
-              "mt-2.5 inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider transition-colors",
+              "mt-1.5 max-w-full truncate px-1 text-center text-xs font-semibold",
+              disqualified
+                ? "text-slate-400"
+                : !editable && selected
+                  ? "text-slate-500"
+                  : selected
+                    ? "text-amber-900/80"
+                    : "text-slate-500"
+            )}
+            title={participant.horseName || undefined}
+          >
+            {participant.horseName || "Sin nombre"}
+          </span>
+          <span
+            className={cn(
+              "mt-2 inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider transition-colors",
               disqualified
                 ? "bg-slate-100 text-slate-500"
                 : !editable && selected
