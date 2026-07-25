@@ -25,12 +25,7 @@ type DirectorRoundsProps = {
     action: () => Promise<unknown>,
     variant?: "default" | "destructive"
   ) => void;
-  onOpenTieBreak: (input: {
-    testTypes: TieBreakTestType[];
-    votes: Array<{ judgeUserId: string; approved: boolean }>;
-    publicDrawConfirmed: boolean;
-    drawNotes: string;
-  }) => void;
+  onOpenTieBreak: (testTypes: TieBreakTestType[]) => void;
 };
 
 function latestOfType(rounds: RoundManagementItem[], type: RoundManagementItem["roundType"]) {
@@ -291,15 +286,7 @@ export function DirectorRounds({
     return (
       <div className="space-y-4">
         {pendingTieBlock && blockInfo ? (
-          <TieBreakPanel
-            busy={busy}
-            blockInfo={blockInfo}
-            judges={f2.forms.map((form) => ({
-              judgeUserId: form.judgeUserId,
-              judgeName: form.judgeName
-            }))}
-            onOpen={onOpenTieBreak}
-          />
+          <TieBreakPanel busy={busy} blockInfo={blockInfo} onOpen={onOpenTieBreak} />
         ) : (
           <Button
             className="w-full bg-emerald-600 text-white hover:bg-emerald-700"

@@ -61,44 +61,15 @@ export function assertTieBreakTestsAllowed(
   };
 }
 
-export type TieBreakJudgeVote = {
-  judgeUserId: string;
-  approved: boolean;
-};
-
 export function validateTieBreakOpening(input: {
   testType: TieBreakTestType;
-  votes: TieBreakJudgeVote[];
-  activeJudgeIds: string[];
   completedTestTypes: TieBreakTestType[];
   tiedParticipantCount: number;
-  publicDrawConfirmed: boolean;
 }): { ok: true } | { ok: false; message: string } {
-  const uniqueVotes = new Map(input.votes.map((vote) => [vote.judgeUserId, vote]));
-  if (
-    uniqueVotes.size !== input.activeJudgeIds.length ||
-    input.activeJudgeIds.some((judgeId) => !uniqueVotes.has(judgeId))
-  ) {
-    return { ok: false, message: "Debes registrar el voto individual de cada juez activo." };
-  }
-
-  const required = Math.floor(input.activeJudgeIds.length / 2) + 1;
-  const approved = [...uniqueVotes.values()].filter((vote) => vote.approved).length;
-  if (approved < required) {
-    return {
-      ok: false,
-      message: `La prueba requiere mayoría reglamentaria (${required} votos).`
-    };
-  }
-
   const participantGuard = assertTieBreakTestsAllowed(input.tiedParticipantCount, [
     input.testType
   ]);
   if (!participantGuard.ok) return participantGuard;
-
-  if (input.testType !== "MOUNT" && !input.publicDrawConfirmed) {
-    return { ok: false, message: "Debes certificar el sorteo público de la prueba." };
-  }
 
   if (input.testType === "MOUNT") {
     const completed = new Set(input.completedTestTypes);

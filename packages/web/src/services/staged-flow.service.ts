@@ -229,18 +229,10 @@ class StagedFlowService extends ApiService {
     return this.post<ApiResponse<StagedCategory>>(`/api/staff/fair-categories/${stageId}/rounds/consolidate`);
   }
 
-  async openTieBreak(
-    stageId: string,
-    input: {
-      testTypes: TieBreakTestType[];
-      votes: Array<{ judgeUserId: string; approved: boolean }>;
-      publicDrawConfirmed: boolean;
-      drawNotes: string;
-    }
-  ): Promise<ApiResponse<StagedCategory>> {
+  async openTieBreak(stageId: string, testTypes: TieBreakTestType[]): Promise<ApiResponse<StagedCategory>> {
     return this.post<ApiResponse<StagedCategory>>(
       `/api/staff/fair-categories/${stageId}/rounds/tie-break/open`,
-      input
+      { testTypes }
     );
   }
 

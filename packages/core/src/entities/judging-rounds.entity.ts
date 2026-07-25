@@ -30,8 +30,6 @@ export type TieBreakTestType =
   | "MOUNT";
 
 export type TieBreakTestStatus = "PENDING" | "ACTIVE" | "DONE";
-export type TieBreakTestSelectionMethod = "PUBLIC_DRAW" | "MOUNT_LAST_RESORT";
-
 export const MAX_AWARD_POSITIONS = 5;
 
 @Unique("UQ_judging_rounds_stage_type_sequence", ["fairCategoryStageId", "roundType", "sequence"])
@@ -272,45 +270,9 @@ export class TieBreakTest extends PegasusBaseEntity {
   @Column({ name: "status", type: "varchar" })
   status!: TieBreakTestStatus;
 
-  @Column({ name: "selection_method", type: "varchar" })
-  selectionMethod!: TieBreakTestSelectionMethod;
-
-  @Column({ name: "drawn_at", type: "timestamp", nullable: true })
-  drawnAt!: Date | null;
-
-  @Column({ name: "drawn_by_user_id", type: "uuid", nullable: true })
-  drawnByUserId!: string | null;
-
-  @Column({ name: "draw_notes", type: "text", nullable: true })
-  drawNotes!: string | null;
-
   @Column({ name: "executed_at", type: "timestamp", nullable: true })
   executedAt!: Date | null;
 
   @Column({ name: "executed_by_user_id", type: "uuid", nullable: true })
   executedByUserId!: string | null;
-}
-
-@Unique("UQ_tie_break_test_votes_test_judge", ["tieBreakTestId", "judgeUserId"])
-@Entity({ name: "tie_break_test_votes" })
-export class TieBreakTestVote extends PegasusBaseEntity {
-  @Column({ name: "tie_break_test_id", type: "uuid" })
-  tieBreakTestId!: string;
-
-  @ManyToOne(() => TieBreakTest, { nullable: false, onDelete: "CASCADE" })
-  @JoinColumn({ name: "tie_break_test_id" })
-  tieBreakTest!: TieBreakTest;
-
-  @Column({ name: "judge_user_id", type: "uuid" })
-  judgeUserId!: string;
-
-  @ManyToOne(() => User, { nullable: false })
-  @JoinColumn({ name: "judge_user_id" })
-  judgeUser!: User;
-
-  @Column({ name: "approved", type: "boolean" })
-  approved!: boolean;
-
-  @Column({ name: "voted_at", type: "timestamp" })
-  votedAt!: Date;
 }

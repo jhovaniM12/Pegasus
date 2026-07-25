@@ -370,15 +370,7 @@ export type TieBreakTestDto = {
   label: string;
   testOrder: number;
   status: "PENDING" | "ACTIVE" | "DONE";
-  selectionMethod: "PUBLIC_DRAW" | "MOUNT_LAST_RESORT";
-  drawnAt: string | null;
-  drawNotes: string | null;
   executedAt: string | null;
-  votes: Array<{
-    judgeUserId: string;
-    approved: boolean;
-    votedAt: string;
-  }>;
 };
 
 export type RoundManagementItem = {

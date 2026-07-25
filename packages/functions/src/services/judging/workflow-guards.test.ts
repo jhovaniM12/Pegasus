@@ -57,62 +57,37 @@ describe("assertTieBreakTestsAllowed (Art. 13)", () => {
 });
 
 describe("validateTieBreakOpening", () => {
-  const judgeIds = ["j1", "j2", "j3"];
-  const majorityVotes = [
-    { judgeUserId: "j1", approved: true },
-    { judgeUserId: "j2", approved: true },
-    { judgeUserId: "j3", approved: false }
-  ];
-
-  it("exige votos individuales, mayoría y sorteo público", () => {
+  it("abre la ronda con solo elegir una prueba permitida", () => {
     expect(
       validateTieBreakOpening({
         testType: "DOUBLE_TABLE",
-        votes: majorityVotes.slice(0, 2),
-        activeJudgeIds: judgeIds,
         completedTestTypes: [],
-        tiedParticipantCount: 2,
-        publicDrawConfirmed: true
-      }).ok
-    ).toBe(false);
-    expect(
-      validateTieBreakOpening({
-        testType: "DOUBLE_TABLE",
-        votes: majorityVotes,
-        activeJudgeIds: judgeIds,
-        completedTestTypes: [],
-        tiedParticipantCount: 2,
-        publicDrawConfirmed: false
-      }).ok
-    ).toBe(false);
-    expect(
-      validateTieBreakOpening({
-        testType: "DOUBLE_TABLE",
-        votes: majorityVotes,
-        activeJudgeIds: judgeIds,
-        completedTestTypes: [],
-        tiedParticipantCount: 2,
-        publicDrawConfirmed: true
+        tiedParticipantCount: 2
       })
     ).toEqual({ ok: true });
+  });
+
+  it("respeta las restricciones de Art. 13 por número de ejemplares", () => {
+    expect(
+      validateTieBreakOpening({
+        testType: "PARALLEL",
+        completedTestTypes: [],
+        tiedParticipantCount: 3
+      }).ok
+    ).toBe(false);
   });
 
   it("impide Montar hasta agotar pruebas anteriores", () => {
     expect(
       validateTieBreakOpening({
         testType: "MOUNT",
-        votes: majorityVotes,
-        activeJudgeIds: judgeIds,
         completedTestTypes: ["DOUBLE_TABLE"],
-        tiedParticipantCount: 2,
-        publicDrawConfirmed: false
+        tiedParticipantCount: 2
       }).ok
     ).toBe(false);
     expect(
       validateTieBreakOpening({
         testType: "MOUNT",
-        votes: majorityVotes,
-        activeJudgeIds: judgeIds,
         completedTestTypes: [
           "DOUBLE_TABLE",
           "DIRECTION_CHANGE",
@@ -120,8 +95,7 @@ describe("validateTieBreakOpening", () => {
           "CIRCLES",
           "STOP_AND_GO"
         ],
-        tiedParticipantCount: 2,
-        publicDrawConfirmed: false
+        tiedParticipantCount: 2
       })
     ).toEqual({ ok: true });
   });

@@ -14,7 +14,6 @@ import {
   JudgingRoundFormDesertedPosition,
   JudgingRoundResult,
   TieBreakTest,
-  TieBreakTestVote,
   User,
   type JudgingParticipantStatus,
   type JudgingRoundResultStatus,
@@ -1440,12 +1439,7 @@ async function consolidateTieBreak(
 export async function openTieBreak(
   user: User,
   stageId: string,
-  input: {
-    testTypes: TieBreakTestType[];
-    votes: Array<{ judgeUserId: string; approved: boolean }>;
-    publicDrawConfirmed: boolean;
-    drawNotes: string;
-  }
+  input: { testTypes: TieBreakTestType[] }
 ): Promise<StagedCategoryDto> {
   assertUserRole(user, ["TECHNICAL_DIRECTOR"]);
   const dataSource = await getDataSource();
@@ -1491,7 +1485,6 @@ export async function openTieBreak(
     if (!testType) {
       throw new BadRequestError("Debes seleccionar una prueba de desempate.");
     }
-    const activeJudges = await getActiveJudgesForStage(manager, stage);
     const previousTieBreaks = await manager.getRepository(JudgingRound).find({
       where: {
         fairCategoryStageId: stage.id,
@@ -1511,11 +1504,8 @@ export async function openTieBreak(
           });
     const openingGuard = validateTieBreakOpening({
       testType,
-      votes: input.votes,
-      activeJudgeIds: activeJudges.map((judge) => judge.id),
       completedTestTypes: previousTests.map((test) => test.testType),
-      tiedParticipantCount: pendingTieBlock.participantIds.length,
-      publicDrawConfirmed: input.publicDrawConfirmed
+      tiedParticipantCount: pendingTieBlock.participantIds.length
     });
     if (!openingGuard.ok) {
       throw new BadRequestError(openingGuard.message);
@@ -1550,23 +1540,9 @@ export async function openTieBreak(
         testType,
         testOrder: 1,
         status: "ACTIVE",
-        selectionMethod: testType === "MOUNT" ? "MOUNT_LAST_RESORT" : "PUBLIC_DRAW",
-        drawnAt: testType === "MOUNT" ? null : new Date(),
-        drawnByUserId: testType === "MOUNT" ? null : user.id,
-        drawNotes: input.drawNotes,
         executedAt: null,
         executedByUserId: null
       })
-    );
-    await manager.getRepository(TieBreakTestVote).save(
-      input.votes.map((vote) =>
-        manager.getRepository(TieBreakTestVote).create({
-          tieBreakTestId: test.id,
-          judgeUserId: vote.judgeUserId,
-          approved: vote.approved,
-          votedAt: new Date()
-        })
-      )
     );
 
     await seedRoundForms(
@@ -1602,11 +1578,7 @@ export async function openTieBreak(
       payload: {
         roundId: round.id,
         testId: test.id,
-        testType,
-        selectionMethod: test.selectionMethod,
-        drawnAt: test.drawnAt?.toISOString() ?? null,
-        drawNotes: test.drawNotes,
-        votes: input.votes
+        testType
       }
     });
     const notification = stageNotificationContext(stage);
@@ -2059,12 +2031,6 @@ export async function getRoundsManagement(user: User, stageId: string) {
         where: { roundId: round.id },
         order: { testOrder: "ASC" }
       });
-      const testVotes =
-        tests.length === 0
-          ? []
-          : await manager.getRepository(TieBreakTestVote).find({
-              where: tests.map((test) => ({ tieBreakTestId: test.id }))
-            });
       const tieBlocks =
         round.roundType === "F2" && round.status !== "OPEN"
           ? await loadBlockingTieBlocks(manager, round)
@@ -2191,17 +2157,7 @@ export async function getRoundsManagement(user: User, stageId: string) {
           label: TIE_BREAK_TEST_LABELS[test.testType],
           testOrder: test.testOrder,
           status: test.status,
-          selectionMethod: test.selectionMethod,
-          drawnAt: test.drawnAt?.toISOString() ?? null,
-          drawNotes: test.drawNotes,
-          executedAt: test.executedAt?.toISOString() ?? null,
-          votes: testVotes
-            .filter((vote) => vote.tieBreakTestId === test.id)
-            .map((vote) => ({
-              judgeUserId: vote.judgeUserId,
-              approved: vote.approved,
-              votedAt: vote.votedAt.toISOString()
-            }))
+          executedAt: test.executedAt?.toISOString() ?? null
         }))
       });
     }
