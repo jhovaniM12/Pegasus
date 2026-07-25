@@ -35,7 +35,7 @@ Parámetros vigentes (decisión de producto):
 | R-CLOSE-OFFICIAL | Cierre fusiona desempates | Nota 5.d | `closeResults` reescribe F2 a FINAL | CONFIRMADA | `close-results-pipeline` / `official-f2-close` |
 | R-TIE-TESTS | Pruebas opcionales de desempate | Art. 13 / 15 | Votos individuales, mayoría, sorteo público, ejecución trazable; Montar solo tras agotar anteriores | CONFIRMADA | `workflow-guards.test` / contrato de pruebas |
 | R-JUDGE-PANELS | Conformación del panel | Art. 15 / decisión escrita 2026-07-24 | Panel simultáneo 1/3/5; prohibidos 2/4. Dos solo Grado B alternada sin consolidación conjunta | DECISIÓN_OPERATIVA | `workflow-guards.test` |
-| R-RESET-TEST | Reinicio de categoría para pruebas | — | Bloqueado en producción | CONFIRMADA | `workflow-guards.test` |
+| R-RESET-TEST | Reinicio de categoría | Decisión operativa 2026-07-24 | Disponible en todos los entornos (incl. producción); restringido al Director Técnico | DECISIÓN_OPERATIVA | `access-control.test` |
 | R-DQ-MULTI | Reportes de descalificación | Art. 15 | Una denuncia para toda causal salvo hiperflexión; hiperflexión queda provisional hasta 2/3 o 3/5 | CONFIRMADA | `disqualification-reports` |
 
 ## Gate CI

@@ -118,21 +118,3 @@ export function validateTieBreakOpening(input: {
 
   return { ok: true };
 }
-
-export type StageResetEnv = {
-  NODE_ENV?: string | null;
-  VERCEL_ENV?: string | null;
-  ALLOW_STAGE_RESET_FOR_TESTING?: string | null;
-};
-
-/**
- * El reinicio de categoría para pruebas no debe usarse en producción salvo override explícito.
- */
-export function isStageResetAllowedForTesting(env: StageResetEnv): boolean {
-  const isProduction =
-    env.NODE_ENV === "production" ||
-    env.VERCEL_ENV === "production" ||
-    env.ALLOW_STAGE_RESET_FOR_TESTING === "0";
-  if (!isProduction) return true;
-  return env.ALLOW_STAGE_RESET_FOR_TESTING === "1";
-}

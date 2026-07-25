@@ -36,7 +36,6 @@ import {
   recordDisqualificationReport,
   requiredDisqualificationReports
 } from "./judging/disqualification-rules.js";
-import { isStageResetAllowedForTesting } from "./judging/workflow-guards.js";
 import {
   ROLE_LABELS,
   assertStageAccess,
@@ -1816,17 +1815,6 @@ export async function consolidateFa(user: User, stageId: string): Promise<Staged
 
 export async function resetStageForTesting(user: User, stageId: string): Promise<StagedCategoryDto> {
   assertUserRole(user, ["TECHNICAL_DIRECTOR"]);
-  if (
-    !isStageResetAllowedForTesting({
-      NODE_ENV: process.env.NODE_ENV,
-      VERCEL_ENV: process.env.VERCEL_ENV,
-      ALLOW_STAGE_RESET_FOR_TESTING: process.env.ALLOW_STAGE_RESET_FOR_TESTING
-    })
-  ) {
-    throw new ForbiddenError(
-      "El reinicio de categoría para pruebas no está disponible en este entorno."
-    );
-  }
   const dataSource = await getDataSource();
 
   return dataSource.transaction(async (manager) => {

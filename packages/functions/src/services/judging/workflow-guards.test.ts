@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   activeJudgeIndexes,
   assertTieBreakTestsAllowed,
-  isStageResetAllowedForTesting,
   tieBlockResolutionPriority,
   validateTieBreakOpening
 } from "./workflow-guards.js";
@@ -125,24 +124,5 @@ describe("validateTieBreakOpening", () => {
         publicDrawConfirmed: false
       })
     ).toEqual({ ok: true });
-  });
-});
-
-describe("isStageResetAllowedForTesting", () => {
-  it("permite reset fuera de producción", () => {
-    expect(isStageResetAllowedForTesting({ NODE_ENV: "development" })).toBe(true);
-    expect(isStageResetAllowedForTesting({})).toBe(true);
-  });
-
-  it("bloquea reset en producción salvo override", () => {
-    expect(isStageResetAllowedForTesting({ NODE_ENV: "production" })).toBe(false);
-    expect(isStageResetAllowedForTesting({ VERCEL_ENV: "production" })).toBe(false);
-    expect(isStageResetAllowedForTesting({ ALLOW_STAGE_RESET_FOR_TESTING: "0" })).toBe(false);
-    expect(
-      isStageResetAllowedForTesting({
-        NODE_ENV: "production",
-        ALLOW_STAGE_RESET_FOR_TESTING: "1"
-      })
-    ).toBe(true);
   });
 });
