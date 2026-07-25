@@ -316,6 +316,7 @@ export function JudgeRoundWorkspace({
     const nextParticipants = syncParticipantsWithSelection(localParticipantsRef.current, next);
     localParticipantsRef.current = nextParticipants;
     setLocalParticipants(nextParticipants);
+    hasLocalPendingRef.current = true;
     void queueFormSnapshot({ selectedParticipantIds: next });
   };
 
@@ -328,6 +329,7 @@ export function JudgeRoundWorkspace({
     localDesertedPositionsRef.current = nextDesertedPositions;
     setLocalParticipants(nextParticipants);
     setLocalDesertedPositions(nextDesertedPositions);
+    hasLocalPendingRef.current = true;
     void queueFormSnapshot({
       positions: nextPositions,
       desertedPositions: nextDesertedPositions,

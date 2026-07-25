@@ -768,15 +768,16 @@ export async function syncRoundStage(userId: string, stageId: string): Promise<S
         const apiError = error instanceof ApiError ? error : null;
         const details = apiError?.details as RevisionConflictDetails | undefined;
         const currentRevision = details?.currentRevision;
-        const canReapplyAnnotation =
+        const canReapplyLocalDraft =
           apiError?.code === "REVISION_CONFLICT" &&
           details?.resolution === "CAN_REAPPLY_LOCAL_DRAFT" &&
           typeof currentRevision === "number" &&
           currentRevision !== baseRevision &&
-          (mutation.aggregateType === "ROUND_NOTE" ||
+          (mutation.aggregateType === "ROUND_FORM" ||
+            mutation.aggregateType === "ROUND_NOTE" ||
             mutation.aggregateType === "ROUND_REMINDERS");
 
-        if (canReapplyAnnotation && typeof currentRevision === "number") {
+        if (canReapplyLocalDraft && typeof currentRevision === "number") {
           await markMutationStatus(mutation.operationId, {
             status: "PENDING",
             baseRevision: currentRevision,

@@ -20,6 +20,8 @@ import {
 import { stagedFlowService } from "@/services/staged-flow.service";
 import type { RoundState } from "@/types/staged-flow";
 
+const ROUND_SYNC_DEBOUNCE_MS = 400;
+
 type UseRoundFormParams = {
   stageId: string;
   userId: string | null;
@@ -27,6 +29,21 @@ type UseRoundFormParams = {
   onRoundChange: (round: RoundState) => void;
   onSyncNotice?: (message: string) => void;
 };
+
+function maxFormRevision(left: RoundState, right: RoundState): RoundState {
+  const leftRevision = left.form?.revision ?? 0;
+  const rightRevision = right.form?.revision ?? 0;
+  if (rightRevision <= leftRevision) return left;
+  if (!left.form || !right.form || left.form.id !== right.form.id) return right;
+  return {
+    ...left,
+    form: {
+      ...left.form,
+      revision: right.form.revision,
+    },
+    stage: right.stage ?? left.stage,
+  };
+}
 
 export function useRoundForm({
   stageId,
@@ -43,10 +60,31 @@ export function useRoundForm({
   const syncInFlightRef = useRef(false);
   const syncRequestedRef = useRef(false);
   const isClosingRef = useRef(false);
+  const formVersionRef = useRef(0);
+  const syncDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const queueChainRef = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
-    roundRef.current = round;
-  }, [round]);
+    void (async () => {
+      const hasPending =
+        userId != null ? await hasBlockingMutationsForStage(userId, stageId) : false;
+      if (hasPending || isClosingRef.current) {
+        // Conserva el borrador local; solo sube la revisión si el servidor avanzó.
+        roundRef.current = maxFormRevision(roundRef.current, round);
+        return;
+      }
+      roundRef.current = round;
+    })();
+  }, [round, stageId, userId]);
+
+  useEffect(
+    () => () => {
+      if (syncDebounceTimerRef.current) {
+        clearTimeout(syncDebounceTimerRef.current);
+      }
+    },
+    []
+  );
 
   const refreshPendingState = useCallback(async () => {
     if (!userId) {
@@ -87,7 +125,7 @@ export function useRoundForm({
     }
     syncInFlightRef.current = true;
     setIsSyncing(true);
-    let latestResult = {
+    const totals = {
       synced: 0,
       conflicts: 0,
       failed: 0,
@@ -96,21 +134,33 @@ export function useRoundForm({
     try {
       do {
         syncRequestedRef.current = false;
-        latestResult = await syncRoundStage(userId, stageId);
+        const formVersionAtStart = formVersionRef.current;
+        const latestResult = await syncRoundStage(userId, stageId);
+        totals.synced += latestResult.synced;
+        totals.conflicts += latestResult.conflicts;
+        totals.failed += latestResult.failed;
         if (latestResult.round) {
-          roundRef.current = latestResult.round;
-          onRoundChange(latestResult.round);
-          await cacheRoundStageSnapshot({ userId, round: latestResult.round });
+          if (formVersionRef.current === formVersionAtStart && !isClosingRef.current) {
+            roundRef.current = latestResult.round;
+            onRoundChange(latestResult.round);
+            await cacheRoundStageSnapshot({ userId, round: latestResult.round });
+          } else {
+            // Hubo clics locales más recientes: conserva el borrador y solo sube la revisión.
+            roundRef.current = maxFormRevision(roundRef.current, latestResult.round);
+            await cacheRoundStageSnapshot({ userId, round: roundRef.current });
+          }
+          totals.round = roundRef.current;
         }
         await refreshPendingState();
-        if (latestResult.conflicts > 0) {
-          onSyncNotice?.(
-            "Hay conflictos de sincronización en la tarjeta. Revisa antes de cerrar."
-          );
-        }
       } while (syncRequestedRef.current);
 
-      return latestResult;
+      if (totals.conflicts > 0) {
+        onSyncNotice?.(
+          "Hay conflictos de sincronización en la tarjeta. Revisa antes de cerrar."
+        );
+      }
+
+      return totals;
     } finally {
       syncInFlightRef.current = false;
       setIsSyncing(false);
@@ -122,6 +172,17 @@ export function useRoundForm({
     void syncNow();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- solo al recuperar ONLINE
   }, [connectivityState]);
+
+  const scheduleSync = useCallback(() => {
+    if (connectivityState !== "ONLINE") return;
+    if (syncDebounceTimerRef.current) {
+      clearTimeout(syncDebounceTimerRef.current);
+    }
+    syncDebounceTimerRef.current = setTimeout(() => {
+      syncDebounceTimerRef.current = null;
+      void syncNow();
+    }, ROUND_SYNC_DEBOUNCE_MS);
+  }, [connectivityState, syncNow]);
 
   const loadFromOfflineCache = useCallback(
     async (overrideUserId?: string): Promise<RoundState | null> => {
@@ -138,26 +199,18 @@ export function useRoundForm({
   );
 
   const queueFormSnapshot = useCallback(
-    async (payload: Omit<RoundFormMutationPayload, "roundId" | "tieBlockIdentity">) => {
+    (payload: Omit<RoundFormMutationPayload, "roundId" | "tieBlockIdentity">) => {
       const current = roundRef.current;
       if (!userId || !current.form || isClosingRef.current) return;
+
+      formVersionRef.current += 1;
+      setHasBlockingPending(true);
 
       const fullPayload: RoundFormMutationPayload = {
         roundId: current.round.id,
         tieBlockIdentity: current.round.tieBlockIdentity || "STANDARD",
         ...payload,
       };
-
-      await queueOfflineMutation({
-        deduplicationKey: `ROUND_FORM:${stageId}:${current.round.id}:${fullPayload.tieBlockIdentity}:${current.form.id}`,
-        userId,
-        stageId,
-        aggregateType: "ROUND_FORM",
-        aggregateId: current.form.id,
-        operationType: "UPDATE_ROUND_FORM",
-        baseRevision: current.form.revision,
-        payload: fullPayload,
-      });
 
       const optimistic: RoundState = {
         ...current,
@@ -184,14 +237,29 @@ export function useRoundForm({
       };
       roundRef.current = optimistic;
       onRoundChange(optimistic);
-      await cacheRoundStageSnapshot({ userId, round: optimistic });
-      await refreshPendingState();
 
-      if (connectivityState === "ONLINE") {
-        await syncNow();
-      }
+      queueChainRef.current = queueChainRef.current
+        .catch(() => undefined)
+        .then(async () => {
+          if (isClosingRef.current) return;
+
+          await queueOfflineMutation({
+            deduplicationKey: `ROUND_FORM:${stageId}:${current.round.id}:${fullPayload.tieBlockIdentity}:${current.form!.id}`,
+            userId,
+            stageId,
+            aggregateType: "ROUND_FORM",
+            aggregateId: current.form!.id,
+            operationType: "UPDATE_ROUND_FORM",
+            baseRevision: roundRef.current.form?.revision ?? current.form!.revision,
+            payload: fullPayload,
+          });
+
+          await cacheRoundStageSnapshot({ userId, round: roundRef.current });
+          await refreshPendingState();
+          scheduleSync();
+        });
     },
-    [connectivityState, onRoundChange, refreshPendingState, stageId, syncNow, userId]
+    [onRoundChange, refreshPendingState, scheduleSync, stageId, userId]
   );
 
   const advanceRoundFormRevisions = useCallback(

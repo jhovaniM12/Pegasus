@@ -419,6 +419,72 @@ describe("sync engine revision chaining", () => {
     await expect(listMutationsForUser(USER_ID)).resolves.toHaveLength(0);
   });
 
+  it("reaplica un formulario de ronda sobre la revisión actual cuando el servidor lo permite", async () => {
+    connectivityMock.mockResolvedValue(true);
+
+    await queueOfflineMutation({
+      deduplicationKey: `ROUND_FORM:${STAGE_ID}:${ROUND_ID}:STANDARD:${FORM_ID}`,
+      userId: USER_ID,
+      stageId: STAGE_ID,
+      aggregateType: "ROUND_FORM",
+      aggregateId: FORM_ID,
+      operationType: "UPDATE_ROUND_FORM",
+      baseRevision: 4,
+      payload: {
+        roundId: ROUND_ID,
+        tieBlockIdentity: "STANDARD",
+        positions: [{ participantId: PARTICIPANT_ID, position: 2 }],
+      },
+    });
+
+    updateRoundFormMock
+      .mockRejectedValueOnce(
+        new ApiError("Conflicto de revisión", {
+          status: 409,
+          code: "REVISION_CONFLICT",
+          details: {
+            currentRevision: 9,
+            resolution: "CAN_REAPPLY_LOCAL_DRAFT",
+          },
+        })
+      )
+      .mockResolvedValueOnce({
+        data: {
+          round: { id: ROUND_ID, tieBlockIdentity: "STANDARD" },
+          form: { id: FORM_ID, revision: 10 },
+          participants: [],
+          availableReminders: [],
+        },
+        sync: {
+          operationId: "op-form",
+          applied: true,
+          duplicate: false,
+          revision: 10,
+          serverUpdatedAt: new Date().toISOString(),
+        },
+      } as never);
+
+    const result = await syncRoundStage(USER_ID, STAGE_ID);
+
+    expect(result).toMatchObject({ synced: 1, conflicts: 0, failed: 0 });
+    expect(updateRoundFormMock).toHaveBeenNthCalledWith(
+      1,
+      STAGE_ID,
+      expect.objectContaining({ baseRevision: 4 })
+    );
+    expect(updateRoundFormMock).toHaveBeenNthCalledWith(
+      2,
+      STAGE_ID,
+      expect.objectContaining({
+        baseRevision: 9,
+        payload: expect.objectContaining({
+          positions: [{ participantId: PARTICIPANT_ID, position: 2 }],
+        }),
+      })
+    );
+    await expect(listMutationsForUser(USER_ID)).resolves.toHaveLength(0);
+  });
+
   it("marca CONFLICT si el servidor rechaza la revisión sin encadenar", async () => {
     connectivityMock.mockResolvedValue(true);
 
