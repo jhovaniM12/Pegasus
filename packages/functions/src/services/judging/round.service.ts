@@ -22,7 +22,11 @@ import {
   type TieBreakReason,
   type TieBreakTestType
 } from "@pegasus/core";
-import { tieBlockKey, typedTieBlockKey } from "@pegasus/core/judging/tie-blocks";
+import {
+  isTieBlockResolutionCovered,
+  tieBlockKey,
+  typedTieBlockKey
+} from "@pegasus/core/judging/tie-blocks";
 import type { EntityManager } from "typeorm";
 import { BadRequestError, ForbiddenError, FormClosedError, NotFoundError } from "../../lib/errors.js";
 import {
@@ -1123,7 +1127,7 @@ type PendingTieBlock = {
 
 type ResolvedTieBlockKeys = {
   typed: Set<string>;
-  legacy: Set<string>;
+  participants: Set<string>;
 };
 
 async function loadResolvedTieBlockKeys(
@@ -1137,7 +1141,7 @@ async function loadResolvedTieBlockKeys(
 
   const resolved: ResolvedTieBlockKeys = {
     typed: new Set<string>(),
-    legacy: new Set<string>()
+    participants: new Set<string>()
   };
   for (const tieBreakRound of tieBreakRounds) {
     const results = await manager.getRepository(JudgingRoundResult).find({
@@ -1148,13 +1152,11 @@ async function loadResolvedTieBlockKeys(
 
     const participantIds = await loadTieBreakParticipantIds(manager, tieBreakRound.id);
     if (participantIds.length > 1) {
+      // El orden consolidado resuelve cualquier causa pendiente para el mismo
+      // conjunto exacto de ejemplares. La causa tipada se conserva para auditoría.
+      resolved.participants.add(tieBlockKey(participantIds));
       if (tieBreakRound.tieBreakReason) {
         resolved.typed.add(typedTieBlockKey(tieBreakRound.tieBreakReason, participantIds));
-      } else {
-        // Las rondas históricas no tienen causa persistida. Se reconocen solo por
-        // participantes para no reabrirlas automáticamente; el saneamiento queda
-        // deliberadamente fuera del flujo transaccional.
-        resolved.legacy.add(tieBlockKey(participantIds));
       }
     }
   }
@@ -1163,10 +1165,12 @@ async function loadResolvedTieBlockKeys(
 }
 
 function isTieBlockResolved(block: PendingTieBlock, resolved: ResolvedTieBlockKeys): boolean {
-  return (
-    resolved.typed.has(typedTieBlockKey(block.reason, block.participantIds)) ||
-    resolved.legacy.has(tieBlockKey(block.participantIds))
-  );
+  return isTieBlockResolutionCovered({
+    reason: block.reason,
+    participantIds: block.participantIds,
+    resolvedTypedKeys: resolved.typed,
+    resolvedParticipantKeys: resolved.participants
+  });
 }
 
 async function loadBlockingTieBlocks(
@@ -1413,9 +1417,8 @@ async function consolidateTieBreak(
       const participantIds = await loadTieBreakParticipantIds(manager, round.id);
       if (round.tieBreakReason) {
         resolvedKeys.typed.add(typedTieBlockKey(round.tieBreakReason, participantIds));
-      } else {
-        resolvedKeys.legacy.add(tieBlockKey(participantIds));
       }
+      resolvedKeys.participants.add(tieBlockKey(participantIds));
     }
     hasRemainingBlockingTie = (await loadBlockingTieBlocks(manager, parentRound)).some(
       (block) => !isTieBlockResolved(block, resolvedKeys)
@@ -2038,7 +2041,7 @@ export async function getRoundsManagement(user: User, stageId: string) {
       const resolvedKeys =
         round.roundType === "F2" && round.status !== "OPEN"
           ? await loadResolvedTieBlockKeys(manager, stage.id, round.id)
-          : { typed: new Set<string>(), legacy: new Set<string>() };
+          : { typed: new Set<string>(), participants: new Set<string>() };
       const tieBlocksDto = tieBlocks.map((block) => {
         const resolved = isTieBlockResolved(block, resolvedKeys);
         return {

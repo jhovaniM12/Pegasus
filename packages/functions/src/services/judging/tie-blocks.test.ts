@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   getBlockingTiedBlocks,
+  isTieBlockResolutionCovered,
   tieBlockKey,
   typedTieBlockKey
 } from "@pegasus/core/judging/tie-blocks";
@@ -22,6 +23,30 @@ describe("getBlockingTiedBlocks", () => {
     expect(typedTieBlockKey("FIFTH_PLACE_EXCEPTION_5E", ["a", "b"])).not.toBe(
       typedTieBlockKey("SUM_EQUALITY", ["a", "b"])
     );
+  });
+
+  it("un orden consolidado cubre otra causa para los mismos ejemplares", () => {
+    expect(
+      isTieBlockResolutionCovered({
+        reason: "SUM_EQUALITY",
+        participantIds: ["b", "a"],
+        resolvedTypedKeys: new Set([
+          typedTieBlockKey("FIFTH_PLACE_EXCEPTION_5E", ["a", "b"])
+        ]),
+        resolvedParticipantKeys: new Set([tieBlockKey(["a", "b"])])
+      })
+    ).toBe(true);
+  });
+
+  it("no cubre un bloque con un conjunto distinto de ejemplares", () => {
+    expect(
+      isTieBlockResolutionCovered({
+        reason: "SUM_EQUALITY",
+        participantIds: ["a", "b", "c"],
+        resolvedTypedKeys: new Set(),
+        resolvedParticipantKeys: new Set([tieBlockKey(["a", "b"])])
+      })
+    ).toBe(false);
   });
 
   it("agrupa empate por misma suma en puestos premiables", () => {

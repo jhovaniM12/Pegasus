@@ -16,6 +16,18 @@ export function typedTieBlockKey(reason: TieBreakReason, participantIds: string[
   return `${reason}:${tieBlockKey(participantIds)}`;
 }
 
+export function isTieBlockResolutionCovered(input: {
+  reason: TieBreakReason;
+  participantIds: string[];
+  resolvedTypedKeys: ReadonlySet<string>;
+  resolvedParticipantKeys: ReadonlySet<string>;
+}): boolean {
+  return (
+    input.resolvedTypedKeys.has(typedTieBlockKey(input.reason, input.participantIds)) ||
+    input.resolvedParticipantKeys.has(tieBlockKey(input.participantIds))
+  );
+}
+
 /**
  * Reconstruye únicamente bloques por igualdad de suma que bloquean el cierre.
  *
