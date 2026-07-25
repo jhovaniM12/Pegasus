@@ -8,8 +8,9 @@ import {
   type UserRole
 } from "@pegasus/core";
 import type { EntityManager } from "typeorm";
-import { ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import { BadRequestError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { assertIndividualJudgingCategory } from "./category-flow-rules.js";
+import { activeJudgeIndexes } from "./workflow-guards.js";
 
 /**
  * Helpers compartidos del flujo de juzgamiento (prepista, FA y rondas F1/F2/desempate).
@@ -41,6 +42,7 @@ export type WorkflowEventType =
   | "JUDGE_FA_CLOSED"
   | "FA_REPEAT_TRACK_REQUESTED"
   | "FA_REPEAT_TRACK_EXECUTED"
+  | "DISQUALIFICATION_REPORTED"
   | "JUDGING_PARTICIPANT_DISQUALIFIED"
   | "FA_CONSOLIDATED"
   | "ROUND_OPENED"
@@ -72,7 +74,7 @@ export function roleExternalIdForUser(user: User): string {
 export async function getStageOrThrow(manager: EntityManager, stageId: string): Promise<FairCategoryStage> {
   const stage = await manager.getRepository(FairCategoryStage).findOne({
     where: { id: stageId },
-    relations: { fair: true, category: { gait: true } }
+    relations: { fair: { grade: true }, category: { gait: true } }
   });
 
   if (!stage) {
@@ -81,6 +83,37 @@ export async function getStageOrThrow(manager: EntityManager, stageId: string): 
 
   assertIndividualJudgingCategory(stage.category);
   return stage;
+}
+
+/**
+ * Panel efectivo de una categoría. Con dos jueces en Grado B alterna uno por
+ * categoría; nunca devuelve ambos para una consolidación conjunta.
+ */
+export async function getActiveJudgesForStage(
+  manager: EntityManager,
+  stage: FairCategoryStage
+): Promise<User[]> {
+  const configured = (await getUsersByFairRole(manager, stage.fairId, "2")).sort((a, b) =>
+    a.id.localeCompare(b.id)
+  );
+  const fairStages = await manager.getRepository(FairCategoryStage).find({
+    where: { fairId: stage.fairId },
+    order: { createdAt: "ASC", id: "ASC" }
+  });
+  const stageOrdinal = Math.max(
+    0,
+    fairStages.findIndex((candidate) => candidate.id === stage.id)
+  );
+  try {
+    const indexes = activeJudgeIndexes({
+      configuredJudgeCount: configured.length,
+      isGradeB: stage.fair.grade?.nomenclature?.toUpperCase() === "B",
+      stageOrdinal
+    });
+    return indexes.map((index) => configured[index]).filter((judge): judge is User => Boolean(judge));
+  } catch (error) {
+    throw new BadRequestError(error instanceof Error ? error.message : "Panel de jueces inválido.");
+  }
 }
 
 export async function assertStaffInFair(

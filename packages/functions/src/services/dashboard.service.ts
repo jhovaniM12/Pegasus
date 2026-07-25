@@ -26,6 +26,7 @@ const WORKFLOW_EVENT_LABELS: Record<string, string> = {
   JUDGING_STARTED: "Juzgamiento iniciado",
   FA_STARTED: "Formato FA iniciado",
   JUDGE_FA_CLOSED: "Formulario FA cerrado",
+  DISQUALIFICATION_REPORTED: "Reporte provisional de descalificación",
   JUDGING_PARTICIPANT_DISQUALIFIED: "Participante descalificado",
   FA_CONSOLIDATED: "FA consolidado",
   ROUND_OPENED: "Ronda abierta",

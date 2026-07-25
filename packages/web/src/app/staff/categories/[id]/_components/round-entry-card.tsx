@@ -352,6 +352,12 @@ export function RoundEntryCard(props: RoundEntryCardProps) {
           )}
         </p>
       )}
+      {!disqualified && participant.provisionalDisqualification && (
+        <p className="mt-1 rounded-lg bg-amber-50 px-2 py-1.5 text-center text-[10px] font-medium text-amber-800">
+          Hiperflexión provisional: {participant.provisionalDisqualification.reportCount}/
+          {participant.provisionalDisqualification.requiredReports} votos
+        </p>
+      )}
     </div>
   );
 }

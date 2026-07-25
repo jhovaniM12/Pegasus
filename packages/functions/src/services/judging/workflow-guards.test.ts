@@ -1,0 +1,148 @@
+import { describe, expect, it } from "vitest";
+import {
+  activeJudgeIndexes,
+  assertTieBreakTestsAllowed,
+  isStageResetAllowedForTesting,
+  tieBlockResolutionPriority,
+  validateTieBreakOpening
+} from "./workflow-guards.js";
+
+describe("activeJudgeIndexes", () => {
+  it("permite paneles simultáneos de 1, 3 y 5", () => {
+    expect(activeJudgeIndexes({ configuredJudgeCount: 1, isGradeB: false, stageOrdinal: 0 })).toEqual([0]);
+    expect(activeJudgeIndexes({ configuredJudgeCount: 3, isGradeB: false, stageOrdinal: 0 })).toEqual([0, 1, 2]);
+    expect(activeJudgeIndexes({ configuredJudgeCount: 5, isGradeB: false, stageOrdinal: 0 })).toEqual([0, 1, 2, 3, 4]);
+  });
+
+  it("alterna dos jueces en Grado B sin consolidarlos juntos", () => {
+    expect(activeJudgeIndexes({ configuredJudgeCount: 2, isGradeB: true, stageOrdinal: 0 })).toEqual([0]);
+    expect(activeJudgeIndexes({ configuredJudgeCount: 2, isGradeB: true, stageOrdinal: 1 })).toEqual([1]);
+    expect(activeJudgeIndexes({ configuredJudgeCount: 2, isGradeB: true, stageOrdinal: 2 })).toEqual([0]);
+  });
+
+  it("prohíbe dos fuera de Grado B y cualquier panel de cuatro", () => {
+    expect(() =>
+      activeJudgeIndexes({ configuredJudgeCount: 2, isGradeB: false, stageOrdinal: 0 })
+    ).toThrow("Dos jueces solo");
+    expect(() =>
+      activeJudgeIndexes({ configuredJudgeCount: 4, isGradeB: true, stageOrdinal: 0 })
+    ).toThrow("Panel simultáneo no reglamentario");
+  });
+});
+
+describe("tieBlockResolutionPriority", () => {
+  it("resuelve SUM 1.º–4.º antes de 5.e sin mezclar causas", () => {
+    expect(tieBlockResolutionPriority({ reason: "SUM_EQUALITY", startPosition: 4 })).toBe(0);
+    expect(
+      tieBlockResolutionPriority({
+        reason: "FIFTH_PLACE_EXCEPTION_5E",
+        startPosition: 5
+      })
+    ).toBe(1);
+    expect(tieBlockResolutionPriority({ reason: "SUM_EQUALITY", startPosition: 5 })).toBe(2);
+  });
+});
+
+describe("assertTieBreakTestsAllowed (Art. 13)", () => {
+  it("permite Paralelo/Cambio de dirección con 2 ejemplares", () => {
+    expect(assertTieBreakTestsAllowed(2, ["PARALLEL"]).ok).toBe(true);
+    expect(assertTieBreakTestsAllowed(2, ["DIRECTION_CHANGE"]).ok).toBe(true);
+  });
+
+  it("rechaza Paralelo y Cambio de dirección con 3 o más", () => {
+    expect(assertTieBreakTestsAllowed(3, ["PARALLEL"]).ok).toBe(false);
+    expect(assertTieBreakTestsAllowed(4, ["DIRECTION_CHANGE"]).ok).toBe(false);
+    expect(assertTieBreakTestsAllowed(3, ["DOUBLE_TABLE"]).ok).toBe(true);
+    expect(assertTieBreakTestsAllowed(3, ["CIRCLES", "MOUNT"]).ok).toBe(true);
+  });
+});
+
+describe("validateTieBreakOpening", () => {
+  const judgeIds = ["j1", "j2", "j3"];
+  const majorityVotes = [
+    { judgeUserId: "j1", approved: true },
+    { judgeUserId: "j2", approved: true },
+    { judgeUserId: "j3", approved: false }
+  ];
+
+  it("exige votos individuales, mayoría y sorteo público", () => {
+    expect(
+      validateTieBreakOpening({
+        testType: "DOUBLE_TABLE",
+        votes: majorityVotes.slice(0, 2),
+        activeJudgeIds: judgeIds,
+        completedTestTypes: [],
+        tiedParticipantCount: 2,
+        publicDrawConfirmed: true
+      }).ok
+    ).toBe(false);
+    expect(
+      validateTieBreakOpening({
+        testType: "DOUBLE_TABLE",
+        votes: majorityVotes,
+        activeJudgeIds: judgeIds,
+        completedTestTypes: [],
+        tiedParticipantCount: 2,
+        publicDrawConfirmed: false
+      }).ok
+    ).toBe(false);
+    expect(
+      validateTieBreakOpening({
+        testType: "DOUBLE_TABLE",
+        votes: majorityVotes,
+        activeJudgeIds: judgeIds,
+        completedTestTypes: [],
+        tiedParticipantCount: 2,
+        publicDrawConfirmed: true
+      })
+    ).toEqual({ ok: true });
+  });
+
+  it("impide Montar hasta agotar pruebas anteriores", () => {
+    expect(
+      validateTieBreakOpening({
+        testType: "MOUNT",
+        votes: majorityVotes,
+        activeJudgeIds: judgeIds,
+        completedTestTypes: ["DOUBLE_TABLE"],
+        tiedParticipantCount: 2,
+        publicDrawConfirmed: false
+      }).ok
+    ).toBe(false);
+    expect(
+      validateTieBreakOpening({
+        testType: "MOUNT",
+        votes: majorityVotes,
+        activeJudgeIds: judgeIds,
+        completedTestTypes: [
+          "DOUBLE_TABLE",
+          "DIRECTION_CHANGE",
+          "PARALLEL",
+          "CIRCLES",
+          "STOP_AND_GO"
+        ],
+        tiedParticipantCount: 2,
+        publicDrawConfirmed: false
+      })
+    ).toEqual({ ok: true });
+  });
+});
+
+describe("isStageResetAllowedForTesting", () => {
+  it("permite reset fuera de producción", () => {
+    expect(isStageResetAllowedForTesting({ NODE_ENV: "development" })).toBe(true);
+    expect(isStageResetAllowedForTesting({})).toBe(true);
+  });
+
+  it("bloquea reset en producción salvo override", () => {
+    expect(isStageResetAllowedForTesting({ NODE_ENV: "production" })).toBe(false);
+    expect(isStageResetAllowedForTesting({ VERCEL_ENV: "production" })).toBe(false);
+    expect(isStageResetAllowedForTesting({ ALLOW_STAGE_RESET_FOR_TESTING: "0" })).toBe(false);
+    expect(
+      isStageResetAllowedForTesting({
+        NODE_ENV: "production",
+        ALLOW_STAGE_RESET_FOR_TESTING: "1"
+      })
+    ).toBe(true);
+  });
+});

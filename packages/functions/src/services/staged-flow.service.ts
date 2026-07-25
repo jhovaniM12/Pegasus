@@ -9,6 +9,7 @@ import {
   FairStaff,
   getDataSource,
   JudgingParticipant,
+  JudgingDisqualificationReport,
   JudgingRound,
   JudgingRoundEntry,
   JudgingRoundForm,
@@ -32,10 +33,16 @@ import {
 } from "./offline-idempotency.service.js";
 import type { MutationSyncMeta } from "../lib/http.js";
 import {
+  recordDisqualificationReport,
+  requiredDisqualificationReports
+} from "./judging/disqualification-rules.js";
+import { isStageResetAllowedForTesting } from "./judging/workflow-guards.js";
+import {
   ROLE_LABELS,
   assertStageAccess,
   assertUserRole,
   formatStaffDisplayName,
+  getActiveJudgesForStage,
   getStageOrThrow,
   getUsersByFairRole,
   queueRoleNotifications,
@@ -782,7 +789,7 @@ export async function startJudging(user: User, stageId: string): Promise<StagedC
       );
     }
 
-    const judges = await getUsersByFairRole(manager, stage.fairId, "2");
+    const judges = await getActiveJudgesForStage(manager, stage);
     for (const judge of judges) {
       await manager.getRepository(FaJudgeForm).upsert(
         {
@@ -834,6 +841,10 @@ async function getJudgeFormOrCreate(
   stage: FairCategoryStage,
   user: User
 ): Promise<FaJudgeForm> {
+  const activeJudges = await getActiveJudgesForStage(manager, stage);
+  if (!activeJudges.some((judge) => judge.id === user.id)) {
+    throw new ForbiddenError("Este juez no está asignado a la categoría alternada.");
+  }
   let form = await manager.getRepository(FaJudgeForm).findOne({
     where: { fairCategoryStageId: stage.id, judgeUserId: user.id }
   });
@@ -982,7 +993,7 @@ export async function getFa(user: User, stageId: string) {
 
 async function getFaForStage(manager: EntityManager, user: User, stage: FairCategoryStage) {
   const form = await getJudgeFormOrCreate(manager, stage, user);
-  const [participants, decisions, reasons, consolidatedRows, faForms, stageDisqualifyDecisions, repeatTrackRequests] =
+  const [participants, decisions, reasons, consolidatedRows, faForms, stageDisqualifyDecisions, repeatTrackRequests, disqualificationReports] =
     await Promise.all([
       manager.getRepository(JudgingParticipant).find({
         where: { fairCategoryStageId: stage.id },
@@ -1016,6 +1027,10 @@ async function getFaForStage(manager: EntityManager, user: User, stage: FairCate
       manager.getRepository(FaRepeatTrackRequest).find({
         where: { fairCategoryStageId: stage.id },
         relations: { requestedByUser: { person: true } }
+      }),
+      manager.getRepository(JudgingDisqualificationReport).find({
+        where: { fairCategoryStageId: stage.id },
+        relations: { disqualificationReason: true }
       })
     ]);
   const decisionsByParticipantId = new Map(decisions.map((decision) => [decision.judgingParticipantId, decision]));
@@ -1026,6 +1041,7 @@ async function getFaForStage(manager: EntityManager, user: User, stage: FairCate
   const judgeByDisqualifyDecision = new Map(
     stageDisqualifyDecisions.map((decision) => [decision.judgingParticipantId, decision.faJudgeForm.judgeUser])
   );
+  const activeJudgeCount = (await getActiveJudgesForStage(manager, stage)).length;
 
   return {
     stage: await buildStageSummary(manager, stage),
@@ -1047,6 +1063,10 @@ async function getFaForStage(manager: EntityManager, user: User, stage: FairCate
     participants: participants.map((participant) => {
       const decision = decisionsByParticipantId.get(participant.id);
       const repeatTrackRequest = repeatRequestByParticipantId.get(participant.id) ?? null;
+      const participantReports = disqualificationReports.filter(
+        (report) => report.judgingParticipantId === participant.id
+      );
+      const provisionalReason = participantReports[0]?.disqualificationReason ?? null;
       const disqualifiedBy =
         toDisqualifiedByDto(participant.disqualifiedByUser) ??
         toDisqualifiedByDto(
@@ -1064,6 +1084,24 @@ async function getFaForStage(manager: EntityManager, user: User, stage: FairCate
         riderName: participant.fairEntry.riderName,
         registrationNumber: participant.fairEntry.registrationNumber,
         status: participant.status,
+        provisionalDisqualification:
+          participant.status === "ELIGIBLE" && provisionalReason
+            ? {
+                reason: {
+                  id: provisionalReason.id,
+                  code: provisionalReason.code,
+                  name: provisionalReason.name,
+                  description: provisionalReason.description
+                },
+                reportCount: participantReports.filter(
+                  (report) => report.disqualificationReasonId === provisionalReason.id
+                ).length,
+                requiredReports: requiredDisqualificationReports(
+                  provisionalReason.code,
+                  activeJudgeCount
+                )
+              }
+            : null,
         disqualificationReason: participant.disqualificationReason
           ? {
               id: participant.disqualificationReason.id,
@@ -1392,6 +1430,31 @@ export async function disqualifyParticipant(
       throw new BadRequestError("El ejemplar ya está descalificado.");
     }
 
+    const judges = await getActiveJudgesForStage(manager, stage);
+    const reportDecision = await recordDisqualificationReport(manager, {
+      stageId: stage.id,
+      participantId: participant.id,
+      reason,
+      judgeUserId: user.id,
+      judgeCount: judges.length,
+      faJudgeFormId: form.id
+    });
+    if (!reportDecision.reachedThreshold) {
+      await recordEvent(manager, {
+        stageId: stage.id,
+        userId: user.id,
+        eventType: "DISQUALIFICATION_REPORTED",
+        payload: {
+          judgingParticipantId: participant.id,
+          reasonId: reason.id,
+          reportCount: reportDecision.reportCount,
+          requiredReports: reportDecision.requiredReports,
+          provisional: true
+        }
+      });
+      return getFaForStage(manager, user, stage);
+    }
+
     participant.status = "DISQUALIFIED";
     participant.disqualifiedByJudgeFormId = form.id;
     participant.disqualifiedByUserId = user.id;
@@ -1412,7 +1475,12 @@ export async function disqualifyParticipant(
       stageId: stage.id,
       userId: user.id,
       eventType: "JUDGING_PARTICIPANT_DISQUALIFIED",
-      payload: { judgingParticipantId: participant.id, reasonId: reason.id }
+      payload: {
+        judgingParticipantId: participant.id,
+        reasonId: reason.id,
+        reportCount: reportDecision.reportCount,
+        requiredReports: reportDecision.requiredReports
+      }
     });
     const notification = stageNotificationContext(stage);
     const judgeName = formatStaffDisplayName(user);
@@ -1664,7 +1732,7 @@ export async function consolidateFa(user: User, stageId: string): Promise<Staged
       throw new BadRequestError("Solo se puede consolidar con juzgamiento iniciado.");
     }
 
-    const judges = await getUsersByFairRole(manager, stage.fairId, "2");
+    const judges = await getActiveJudgesForStage(manager, stage);
     const forms = await manager.getRepository(FaJudgeForm).find({
       where: { fairCategoryStageId: stage.id }
     });
@@ -1748,6 +1816,17 @@ export async function consolidateFa(user: User, stageId: string): Promise<Staged
 
 export async function resetStageForTesting(user: User, stageId: string): Promise<StagedCategoryDto> {
   assertUserRole(user, ["TECHNICAL_DIRECTOR"]);
+  if (
+    !isStageResetAllowedForTesting({
+      NODE_ENV: process.env.NODE_ENV,
+      VERCEL_ENV: process.env.VERCEL_ENV,
+      ALLOW_STAGE_RESET_FOR_TESTING: process.env.ALLOW_STAGE_RESET_FOR_TESTING
+    })
+  ) {
+    throw new ForbiddenError(
+      "El reinicio de categoría para pruebas no está disponible en este entorno."
+    );
+  }
   const dataSource = await getDataSource();
 
   return dataSource.transaction(async (manager) => {

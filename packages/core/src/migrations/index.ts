@@ -31,3 +31,5 @@ export { AddOfflineMutationFoundation1717430400029 } from "./1717430400029-AddOf
 export { ExpandFairEntryImportIdentity1717430400030 } from "./1717430400030-ExpandFairEntryImportIdentity.js";
 export { AddUserAccessCodePlaintext1717430400031 } from "./1717430400031-AddUserAccessCodePlaintext.js";
 export { CreateJudgingRoundUnawardedResults1717430400032 } from "./1717430400032-CreateJudgingRoundUnawardedResults.js";
+export { CreateJudgingDisqualificationReports1717430400033 } from "./1717430400033-CreateJudgingDisqualificationReports.js";
+export { AddTieBreakTestTraceability1717430400034 } from "./1717430400034-AddTieBreakTestTraceability.js";

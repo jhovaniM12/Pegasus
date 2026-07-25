@@ -23,6 +23,65 @@ function baseRound(overrides: Partial<RoundManagementItem>): RoundManagementItem
   };
 }
 
+describe("buildOfficialF2Results - cierre oficial sin fusión cliente", () => {
+  it("cuando F2 está CLOSED usa las filas del backend sin proyectar desempates", () => {
+    const official = buildOfficialF2Results([
+      baseRound({
+        status: "CLOSED",
+        results: [
+          {
+            id: "r1",
+            participantId: "p1",
+            trackPosition: 1,
+            riderName: "A",
+            registrationNumber: "1",
+            scoreValue: 4,
+            firstPlaceVotes: 2,
+            finalPosition: 1,
+            status: "FINAL",
+            awardDistinctive: null,
+          },
+          {
+            id: "r2",
+            participantId: "p2",
+            trackPosition: 2,
+            riderName: "B",
+            registrationNumber: "2",
+            scoreValue: 9,
+            firstPlaceVotes: 0,
+            finalPosition: 2,
+            status: "FINAL",
+            awardDistinctive: null,
+          },
+        ],
+      }),
+      baseRound({
+        id: "tb-1",
+        roundType: "TIE_BREAK",
+        sequence: 1,
+        status: "CONSOLIDATED",
+        results: [
+          {
+            id: "t1",
+            participantId: "p2",
+            trackPosition: 2,
+            riderName: "B",
+            registrationNumber: "2",
+            scoreValue: 3,
+            firstPlaceVotes: 1,
+            finalPosition: 5,
+            status: "PROVISIONAL",
+            awardDistinctive: null,
+          },
+        ],
+      }),
+    ]);
+
+    expect(official?.results.find((row) => row.participantId === "p2")?.finalPosition).toBe(2);
+    expect(official?.results.every((row) => row.status === "FINAL")).toBe(true);
+  });
+});
+
 describe("buildOfficialF2Results - outcomes DESERTED vs UNAWARDED", () => {
   it("diferencia puestos desiertos de no adjudicados", () => {
     const official = buildOfficialF2Results([
@@ -57,7 +116,7 @@ describe("buildOfficialF2Results - outcomes DESERTED vs UNAWARDED", () => {
             finalPosition: 4,
             assignedVotes: 2,
             minimumRequired: 2,
-            outcomeType: "UNAWARDED_MINIMUM_CONSIDERATION",
+            outcomeType: "UNAWARDED_INSUFFICIENT_CONSIDERATION",
             awardDistinctive: null,
           },
         ],
@@ -69,7 +128,7 @@ describe("buildOfficialF2Results - outcomes DESERTED vs UNAWARDED", () => {
     expect(official?.positionOutcomes).toEqual([
       expect.objectContaining({
         finalPosition: 4,
-        outcomeType: "UNAWARDED_MINIMUM_CONSIDERATION",
+        outcomeType: "UNAWARDED_INSUFFICIENT_CONSIDERATION",
         assignedVotes: 2,
       }),
       expect.objectContaining({

@@ -180,6 +180,16 @@ export function FaParticipantCard({
         </div>
       )}
 
+      {!disqualified && participant.provisionalDisqualification && (
+        <div className="mt-3 border-t border-slate-100 pt-3">
+          <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+            Hiperflexión reportada: {participant.provisionalDisqualification.reportCount}/
+            {participant.provisionalDisqualification.requiredReports} votos. El ejemplar continúa
+            provisionalmente elegible.
+          </div>
+        </div>
+      )}
+
       {repeatRequest && !disqualified && (
         <div className="mt-3 border-t border-slate-100 pt-3">
           <div

@@ -21,6 +21,8 @@ import type { TieBreakReason } from "@pegasus/core";
  * 6. Excepción 5.e: si todos los jueces asignan quinto, nadie lo declara desierto y
  *    cada juez escoge un ejemplar diferente, esos ejemplares forman un bloque especial
  *    independiente de las sumas y de la consideración mínima ordinaria.
+ *    DECISIÓN_OPERATIVA (R-F2-5E-EXCL): se excluyen del bloque quienes ya tienen
+ *    puesto provisional adjudicado entre el 1.º y el 4.º; el resto disputa solo el 5.º.
  */
 
 export type JudgeCard = {
@@ -55,7 +57,7 @@ export type ScoredParticipant = {
 export type PositionOutcomeType =
   | "AWARDED"
   | "DESERTED"
-  | "UNAWARDED_MINIMUM_CONSIDERATION"
+  | "UNAWARDED_INSUFFICIENT_CONSIDERATION"
   | "TIE_BREAK_REQUIRED";
 
 export type DesertedPositionResult = {
@@ -234,12 +236,11 @@ export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult
     }
   }
 
-  // Desierto explícito por mayoría: solo si NINGÚN juez asignó el puesto a un ejemplar.
-  // Invariante: assignedVotes > 0 ⇒ outcome != DESERTED.
+  // Nota 5.b: 2/3 o 3/5 declaraciones explícitas hacen desierto el puesto,
+  // aunque el juez restante haya asignado allí un ejemplar.
   const explicitDesertedByMajority = new Map<number, number>();
   for (const [position, votesCount] of desertedVoteCountByPosition.entries()) {
-    const assignedVotes = assignedVotesByPosition.get(position) ?? 0;
-    if (votesCount >= threshold && assignedVotes === 0) {
+    if (votesCount >= threshold) {
       explicitDesertedByMajority.set(position, votesCount);
     }
   }
@@ -249,10 +250,10 @@ export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult
   // 2) En cada puesto premiable, recorrer candidatos en orden de mérito hasta encontrar
   //    uno con consideración mínima (cardsCount >= threshold). Los que no cumplen quedan
   //    diferidos (sin cinta) y no consumen el puesto.
-  // 3) Si no queda candidato elegible:
-  //    - assignedVotes === 0 → DESERTED
-  //    - assignedVotes > 0  → UNAWARDED_MINIMUM_CONSIDERATION
+  // 3) Si no queda candidato elegible y no hubo mayoría explícita de desierto:
+  //    → UNAWARDED_INSUFFICIENT_CONSIDERATION, incluso con cero asignaciones.
   // 4) Ejemplares no premiables se reubican desde el puesto 6 (sin cinta).
+  // 5) Si luego aplica 5.e, se retira el outcome del quinto y se reserva al desempate.
   const ranked: Array<Aggregate & { finalPosition: number }> = [];
   const deferred: Aggregate[] = [];
   const desertedResults: DesertedPositionResult[] = [];
@@ -281,18 +282,11 @@ export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult
 
     if (!awarded) {
       const assignedVotes = assignedVotesByPosition.get(position) ?? 0;
-      if (assignedVotes === 0) {
-        desertedResults.push({
-          finalPosition: position,
-          votesCount: desertedVoteCountByPosition.get(position) ?? 0
-        });
-      } else {
-        unawardedResults.push({
-          finalPosition: position,
-          assignedVotes,
-          minimumRequired: threshold
-        });
-      }
+      unawardedResults.push({
+        finalPosition: position,
+        assignedVotes,
+        minimumRequired: threshold
+      });
     }
   }
 
@@ -348,9 +342,8 @@ export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult
     });
   }
 
-  // Excepción 5.e: únicamente aplica cuando están todas las tarjetas esperadas,
-  // ningún juez declara desierto el quinto, cada tarjeta contiene exactamente una
-  // selección de quinto y todos los jueces escogieron ejemplares diferentes.
+  // Excepción 5.e: bloque especial independiente de sumas/consideración mínima.
+  // DECISIÓN_OPERATIVA: excluir a quienes ya tienen puesto provisional 1.º–4.º.
   const fifthSelectionsByCard = cards.map((card) =>
     card.positions.filter((position) => position.position === MAX_AWARD_POSITIONS)
   );
@@ -371,14 +364,68 @@ export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult
     noJudgeDesertedFifth &&
     everyJudgeSelectedDifferentFifth
   ) {
-    tiedGroups.push({
-      reason: "FIFTH_PLACE_EXCEPTION_5E",
-      participantIds: fifthPlaceParticipantIds,
-      positionSum: null,
-      startPosition: MAX_AWARD_POSITIONS,
-      endPosition: MAX_AWARD_POSITIONS + fifthPlaceParticipantIds.length - 1,
-      blocksClosure: true
-    });
+    const fifthDisputants = [
+      ...new Set(
+        fifthPlaceParticipantIds.filter((participantId) => {
+          const provisionalPosition = positionById.get(participantId);
+          return provisionalPosition == null || provisionalPosition > 4;
+        })
+      )
+    ];
+
+    if (fifthDisputants.length >= 2) {
+      // El quinto queda reservado al desempate 5.e: retirar outcomes contradictorios
+      // y reubicar disputantes en 5..(5+n-1).
+      for (let i = desertedResults.length - 1; i >= 0; i -= 1) {
+        if (desertedResults[i]?.finalPosition === MAX_AWARD_POSITIONS) {
+          desertedResults.splice(i, 1);
+        }
+      }
+      for (let i = unawardedResults.length - 1; i >= 0; i -= 1) {
+        if (unawardedResults[i]?.finalPosition === MAX_AWARD_POSITIONS) {
+          unawardedResults.splice(i, 1);
+        }
+      }
+
+      const disputantSet = new Set(fifthDisputants);
+      const orderedDisputants = [...participants]
+        .filter((p) => disputantSet.has(p.participantId))
+        .sort(
+          (a, b) =>
+            a.finalPosition - b.finalPosition || a.participantId.localeCompare(b.participantId)
+        );
+      const reservedStart = MAX_AWARD_POSITIONS;
+      const reservedEnd = reservedStart + orderedDisputants.length - 1;
+      orderedDisputants.forEach((participant, index) => {
+        participant.finalPosition = reservedStart + index;
+        positionById.set(participant.participantId, participant.finalPosition);
+      });
+
+      const displaced = participants
+        .filter(
+          (p) => !disputantSet.has(p.participantId) && p.finalPosition >= reservedStart
+        )
+        .sort(
+          (a, b) =>
+            a.finalPosition - b.finalPosition || a.participantId.localeCompare(b.participantId)
+        );
+      let nextFree = reservedEnd + 1;
+      for (const participant of displaced) {
+        participant.finalPosition = nextFree;
+        positionById.set(participant.participantId, nextFree);
+        nextFree += 1;
+      }
+      participants.sort((a, b) => a.finalPosition - b.finalPosition);
+
+      tiedGroups.push({
+        reason: "FIFTH_PLACE_EXCEPTION_5E",
+        participantIds: orderedDisputants.map((p) => p.participantId),
+        positionSum: null,
+        startPosition: reservedStart,
+        endPosition: reservedEnd,
+        blocksClosure: true
+      });
+    }
   }
 
   const tiedIds = new Set(tiedGroups.flatMap((g) => g.participantIds));

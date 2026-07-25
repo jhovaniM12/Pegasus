@@ -71,7 +71,7 @@ function resolveOutcomes({
     })),
     ...unawardedResults.map((row) => ({
       finalPosition: row.finalPosition,
-      outcomeType: "UNAWARDED_MINIMUM_CONSIDERATION" as const,
+      outcomeType: "UNAWARDED_INSUFFICIENT_CONSIDERATION" as const,
       participantId: null,
       assignedVotes: row.assignedVotes,
       minimumRequired: row.minimumRequired,
@@ -85,8 +85,12 @@ function outcomeLabel(outcome: PositionOutcome): string {
   switch (outcome.outcomeType) {
     case "DESERTED":
       return "Puesto desierto";
-    case "UNAWARDED_MINIMUM_CONSIDERATION":
+    case "UNAWARDED_INSUFFICIENT_CONSIDERATION":
       return "Puesto no adjudicado";
+    case "TIE_BREAK_REQUIRED":
+      return outcome.tieBreakReason === "FIFTH_PLACE_EXCEPTION_5E"
+        ? "Desempate para definir quinto puesto (5.e)"
+        : "Empate por suma";
     default: {
       const _exhaustive: never = outcome.outcomeType;
       return _exhaustive;
@@ -98,8 +102,12 @@ function outcomeDescription(outcome: PositionOutcome): string | null {
   switch (outcome.outcomeType) {
     case "DESERTED":
       return "Ningún juez asignó este puesto";
-    case "UNAWARDED_MINIMUM_CONSIDERATION":
+    case "UNAWARDED_INSUFFICIENT_CONSIDERATION":
       return "Ningún ejemplar alcanzó la consideración mínima";
+    case "TIE_BREAK_REQUIRED":
+      return outcome.tieBreakReason === "FIFTH_PLACE_EXCEPTION_5E"
+        ? "Quintos distintos pendientes de desempate"
+        : "Suma empatada pendiente de desempate";
     default: {
       const _exhaustive: never = outcome.outcomeType;
       return _exhaustive;
@@ -111,8 +119,12 @@ function outcomeBadgeLabel(outcome: PositionOutcome): string {
   switch (outcome.outcomeType) {
     case "DESERTED":
       return "Desierto";
-    case "UNAWARDED_MINIMUM_CONSIDERATION":
+    case "UNAWARDED_INSUFFICIENT_CONSIDERATION":
       return "No adjudicado";
+    case "TIE_BREAK_REQUIRED":
+      return outcome.tieBreakReason === "FIFTH_PLACE_EXCEPTION_5E"
+        ? "Desempate 5.e"
+        : "Empate por suma";
     default: {
       const _exhaustive: never = outcome.outcomeType;
       return _exhaustive;
@@ -216,6 +228,10 @@ function Podium({
   );
 }
 
+function unresolvedTieMembership(row: RoundResult) {
+  return (row.tieMembership ?? []).find((block) => !block.resolved) ?? null;
+}
+
 function StatusBadge({
   row,
   outcome,
@@ -257,14 +273,34 @@ function StatusBadge({
       </span>
     );
   }
-  if (row?.status === "TIED" && (row.finalPosition == null || row.finalPosition <= 5)) {
+
+  const pendingTie = row ? unresolvedTieMembership(row) : null;
+  if (pendingTie?.reason === "FIFTH_PLACE_EXCEPTION_5E") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+      <span className="inline-flex items-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-800">
         <AlertTriangle className="size-3" />
-        Empate
+        Desempate para definir quinto puesto (5.e)
       </span>
     );
   }
+  if (pendingTie?.reason === "SUM_EQUALITY") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+        <AlertTriangle className="size-3" />
+        Empate por suma
+      </span>
+    );
+  }
+
+  // Sin membresía a bloque: no mostrar "Empate" solo por status TIED residual.
+  if (row && (row.finalPosition == null || row.finalPosition > 5) && !row.awardDistinctive) {
+    return (
+      <span className="inline-flex rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-600">
+        Sin premio
+      </span>
+    );
+  }
+
   return (
     <span
       className={cn(
@@ -349,21 +385,27 @@ export function OfficialResultBoard({
             {Array.from({ length: maxPosition }, (_, index) => index + 1).map((position) => {
               const row = sorted.find((result) => result.finalPosition === position);
               const outcome = outcomeByPosition.get(position);
-              if (!row && !outcome) return null;
+              // Outcomes de desempate no sustituyen filas de participantes en el mismo puesto.
+              const displayOutcome =
+                row && outcome?.outcomeType === "TIE_BREAK_REQUIRED" ? undefined : outcome;
+              if (!row && !displayOutcome) return null;
 
-              const isTied = row?.status === "TIED" && !forceOfficialStatus;
-              const isDeserted = outcome?.outcomeType === "DESERTED";
+              const pendingTie = row && !forceOfficialStatus ? unresolvedTieMembership(row) : null;
+              const isTiedRow = Boolean(pendingTie);
+              const isDeserted = displayOutcome?.outcomeType === "DESERTED";
 
               return (
                 <tr
-                  key={row?.id ?? `outcome-${outcome?.outcomeType}-${position}`}
+                  key={row?.id ?? `outcome-${displayOutcome?.outcomeType}-${position}`}
                   className={cn(
                     "border-b border-slate-100 text-sm last:border-0",
-                    isTied
-                      ? "bg-amber-50/60"
-                      : outcome
-                        ? "bg-slate-50/70"
-                        : "hover:bg-slate-50/40"
+                    pendingTie?.reason === "FIFTH_PLACE_EXCEPTION_5E"
+                      ? "bg-violet-50/50"
+                      : isTiedRow
+                        ? "bg-amber-50/60"
+                        : displayOutcome
+                          ? "bg-slate-50/70"
+                          : "hover:bg-slate-50/40"
                   )}
                 >
                   <td className="py-3 pl-4 pr-2">
@@ -380,11 +422,13 @@ export function OfficialResultBoard({
                         </p>
                         <p className="font-mono text-xs text-slate-400">{row.registrationNumber}</p>
                       </>
-                    ) : outcome ? (
+                    ) : displayOutcome ? (
                       <>
-                        <p className="font-semibold text-slate-500">{outcomeLabel(outcome)}</p>
-                        {outcomeDescription(outcome) && (
-                          <p className="mt-0.5 text-xs text-slate-400">{outcomeDescription(outcome)}</p>
+                        <p className="font-semibold text-slate-500">{outcomeLabel(displayOutcome)}</p>
+                        {outcomeDescription(displayOutcome) && (
+                          <p className="mt-0.5 text-xs text-slate-400">
+                            {outcomeDescription(displayOutcome)}
+                          </p>
                         )}
                       </>
                     ) : null}
@@ -393,7 +437,9 @@ export function OfficialResultBoard({
                   <td className="py-3 pr-3">
                     <div className="flex justify-center">
                       <DistinctiveBadge
-                        distinctive={row?.awardDistinctive ?? outcome?.awardDistinctive ?? null}
+                        distinctive={
+                          row?.awardDistinctive ?? displayOutcome?.awardDistinctive ?? null
+                        }
                         deserted={Boolean(isDeserted && !row)}
                       />
                     </div>
@@ -409,16 +455,16 @@ export function OfficialResultBoard({
                     <td className="py-3 pr-3 text-right tabular-nums text-slate-600">
                       {row
                         ? row.firstPlaceVotes
-                        : outcome?.outcomeType === "DESERTED"
-                          ? (outcome.votesCount ?? "—")
-                          : outcome?.assignedVotes ?? "—"}
+                        : displayOutcome?.outcomeType === "DESERTED"
+                          ? (displayOutcome.votesCount ?? "—")
+                          : displayOutcome?.assignedVotes ?? "—"}
                     </td>
                   )}
 
                   <td className="py-3 pr-4 text-right">
                     <StatusBadge
                       row={row}
-                      outcome={outcome}
+                      outcome={displayOutcome}
                       provisionalLabel={provisionalLabel}
                       provisionalVariant={provisionalVariant}
                       forceOfficialStatus={forceOfficialStatus}

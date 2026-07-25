@@ -874,11 +874,16 @@ export default function StaffCategoryPage() {
     [stageId, toast]
   );
 
-  const handleOpenTieBreak = (testTypes: TieBreakTestType[]) => {
+  const handleOpenTieBreak = (input: {
+    testTypes: TieBreakTestType[];
+    votes: Array<{ judgeUserId: string; approved: boolean }>;
+    publicDrawConfirmed: boolean;
+    drawNotes: string;
+  }) => {
     runAction(
       "Abrir desempate",
       "Se abrirá una ronda de desempate solo para los ejemplares empatados. Los jueces volverán a emitir su tarjeta.",
-      () => stagedFlowService.openTieBreak(stageId, testTypes)
+      () => stagedFlowService.openTieBreak(stageId, input)
     );
   };
 

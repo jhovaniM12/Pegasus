@@ -31,7 +31,13 @@ type TieBreakPanelProps = {
   busy: boolean;
   /** Información del bloque de empate actual que se va a resolver. */
   blockInfo: TieBlockInfo;
-  onOpen: (testTypes: TieBreakTestType[]) => void;
+  judges: Array<{ judgeUserId: string; judgeName: string }>;
+  onOpen: (input: {
+    testTypes: TieBreakTestType[];
+    votes: Array<{ judgeUserId: string; approved: boolean }>;
+    publicDrawConfirmed: boolean;
+    drawNotes: string;
+  }) => void;
 };
 
 function assertNever(value: never): never {
@@ -52,8 +58,13 @@ function blockLabel(blockInfo: TieBlockInfo): string {
   }
 }
 
-export function TieBreakPanel({ busy, blockInfo, onOpen }: TieBreakPanelProps) {
+export function TieBreakPanel({ busy, blockInfo, judges, onOpen }: TieBreakPanelProps) {
   const [selected, setSelected] = useState<TieBreakTestType | null>(null);
+  const [votes, setVotes] = useState<Record<string, boolean | null>>({});
+  const [publicDrawConfirmed, setPublicDrawConfirmed] = useState(false);
+  const [drawNotes, setDrawNotes] = useState("");
+  const allVotesRecorded = judges.every((judge) => votes[judge.judgeUserId] != null);
+  const drawReady = selected === "MOUNT" || publicDrawConfirmed;
 
   return (
     <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-5">
@@ -96,12 +107,65 @@ export function TieBreakPanel({ busy, blockInfo, onOpen }: TieBreakPanelProps) {
         })}
       </div>
 
+      <div className="mt-4 space-y-2 rounded-lg border border-amber-200 bg-white p-3">
+        <p className="text-xs font-semibold text-slate-800">Votos individuales</p>
+        {judges.map((judge) => (
+          <div key={judge.judgeUserId} className="flex items-center justify-between gap-3 text-xs">
+            <span>{judge.judgeName}</span>
+            <div className="flex gap-1">
+              {[true, false].map((approved) => (
+                <button
+                  key={String(approved)}
+                  type="button"
+                  onClick={() =>
+                    setVotes((current) => ({ ...current, [judge.judgeUserId]: approved }))
+                  }
+                  className={cn(
+                    "rounded border px-2 py-1",
+                    votes[judge.judgeUserId] === approved
+                      ? "border-amber-500 bg-amber-100 text-amber-900"
+                      : "border-slate-200 text-slate-600"
+                  )}
+                >
+                  {approved ? "A favor" : "En contra"}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <label className="mt-3 flex items-center gap-2 text-xs text-amber-900">
+        <input
+          type="checkbox"
+          checked={publicDrawConfirmed}
+          disabled={selected === "MOUNT"}
+          onChange={(event) => setPublicDrawConfirmed(event.target.checked)}
+        />
+        Certifico que la prueba fue seleccionada mediante sorteo público
+      </label>
+      <textarea
+        className="mt-3 min-h-20 w-full rounded-lg border border-amber-200 bg-white p-2 text-xs"
+        value={drawNotes}
+        onChange={(event) => setDrawNotes(event.target.value)}
+        placeholder="Acta, testigos y observaciones del sorteo o de la decisión de Montar"
+        maxLength={1000}
+      />
+
       <Button
         className="mt-4 w-full bg-amber-600 text-white hover:bg-amber-700 disabled:bg-amber-600/50"
-        disabled={busy || !selected}
+        disabled={busy || !selected || !allVotesRecorded || !drawReady || !drawNotes.trim()}
         onClick={() => {
           if (!selected) return;
-          onOpen([selected]);
+          onOpen({
+            testTypes: [selected],
+            votes: judges.map((judge) => ({
+              judgeUserId: judge.judgeUserId,
+              approved: votes[judge.judgeUserId] === true
+            })),
+            publicDrawConfirmed,
+            drawNotes: drawNotes.trim()
+          });
         }}
       >
         <Scale className="size-4" />

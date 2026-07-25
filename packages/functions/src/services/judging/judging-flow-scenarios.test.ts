@@ -267,6 +267,102 @@ describe("escenarios integrados del dominio FA → F1/F2 → desempate", () => {
     expect(Object.fromEntries(resolved)).toEqual({ A: 3, B: 4 });
   });
 
+  it("E2E lógico 3 jueces: FA→F1→F2→desempate 5.e con exclusión 1º–4º→oficial", () => {
+    const participants = Array.from({ length: 9 }, (_, index): ScenarioParticipant => ({
+      id: `p${index + 1}`,
+      status: "ELIGIBLE"
+    }));
+    const fa = consolidateFaScenario(
+      participants,
+      ["j1", "j2", "j3"].map((judgeId) => ({
+        judgeId,
+        selectedParticipantIds: participants.map((participant) => participant.id)
+      }))
+    );
+    expect(resolveNextRoundType("FA_CONSOLIDATED", fa.length)).toBe("F1");
+
+    const f1 = consolidateF1Scenario(
+      participants,
+      ["j1", "j2", "j3"].map((judgeId) => ({
+        judgeId,
+        selectedParticipantIds: ["p1", "p2", "p3", "p4", "p5", "p6", "p7"]
+      }))
+    );
+    expect(resolveNextRoundType("F1_CONSOLIDATED", f1.length)).toBe("F2");
+
+    const eligible = ["p1", "p2", "p3", "p4", "p5", "p6", "p7"];
+    const f2 = computeF2(
+      [
+        rankingCard(
+          "j1",
+          [
+            ["p1", 1],
+            ["p2", 2],
+            ["p3", 3],
+            ["p4", 4],
+            ["p5", 5]
+          ],
+          eligible
+        ),
+        rankingCard(
+          "j2",
+          [
+            ["p1", 1],
+            ["p2", 2],
+            ["p5", 3],
+            ["p4", 4],
+            ["p6", 5]
+          ],
+          eligible
+        ),
+        rankingCard(
+          "j3",
+          [
+            ["p1", 1],
+            ["p2", 2],
+            ["p5", 3],
+            ["p4", 4],
+            ["p7", 5]
+          ],
+          eligible
+        )
+      ],
+      3
+    );
+    const fifth = f2.tiedGroups.find((group) => group.reason === "FIFTH_PLACE_EXCEPTION_5E");
+    expect(fifth?.participantIds.sort()).toEqual(["p6", "p7"]);
+    expect(fifth?.participantIds).not.toContain("p5");
+    expect(f2.participants.find((row) => row.participantId === "p5")?.tied).toBe(false);
+
+    const resolved = officialTieBreakPositions(
+      [
+        rankingCard("j1", [["p6", 5], ["p7", 6]], ["p6", "p7"]),
+        rankingCard("j2", [["p6", 5], ["p7", 6]], ["p6", "p7"]),
+        rankingCard("j3", [["p6", 5], ["p7", 6]], ["p6", "p7"])
+      ],
+      5
+    );
+    expect(Object.fromEntries(resolved)).toEqual({ p6: 5, p7: 6 });
+  });
+
+  it("E2E lógico 5 jueces: mayoría de primeros y cierre sin empate", () => {
+    const eligible = ["A", "B", "C", "D", "E"];
+    const f2 = computeF2(
+      [
+        rankingCard("j1", [["A", 1], ["B", 2], ["C", 3], ["D", 4], ["E", 5]], eligible),
+        rankingCard("j2", [["A", 1], ["B", 2], ["C", 3], ["D", 4], ["E", 5]], eligible),
+        rankingCard("j3", [["A", 1], ["C", 2], ["B", 3], ["D", 4], ["E", 5]], eligible),
+        rankingCard("j4", [["B", 1], ["A", 2], ["C", 3], ["D", 4], ["E", 5]], eligible),
+        rankingCard("j5", [["B", 1], ["C", 2], ["A", 3], ["D", 4], ["E", 5]], eligible)
+      ],
+      5
+    );
+
+    expect(f2.majorityWinnerId).toBe("A");
+    expect(f2.hasBlockingTie).toBe(false);
+    expect(f2.participants.find((row) => row.participantId === "A")?.finalPosition).toBe(1);
+  });
+
   it("no bloquea el cierre por una igualdad completamente ubicada desde el sexto puesto", () => {
     const eligible = ["A", "B", "C", "D", "E", "F", "G"];
     const result = computeF2(

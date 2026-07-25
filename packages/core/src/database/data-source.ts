@@ -20,6 +20,7 @@ import {
   Gait,
   Grade,
   Grouping,
+  JudgingDisqualificationReport,
   JudgingParticipant,
   JudgingRound,
   JudgingRoundForm,
@@ -31,6 +32,7 @@ import {
   JudgingRoundDesertedResult,
   JudgingRoundUnawardedResult,
   TieBreakTest,
+  TieBreakTestVote,
   NotificationOutbox,
   OfflineOperationReceipt,
   Person,
@@ -68,6 +70,8 @@ import {
   ExpandFairEntryImportIdentity1717430400030,
   AddUserAccessCodePlaintext1717430400031,
   CreateJudgingRoundUnawardedResults1717430400032,
+  CreateJudgingDisqualificationReports1717430400033,
+  AddTieBreakTestTraceability1717430400034,
   CreateFairEntriesTable1717430400004,
   CreateFairResultsTable1717430400008,
   CreateFairStaffTable1717430400007,
@@ -123,6 +127,7 @@ export const AppDataSource = new DataSource({
     Gait,
     Grade,
     Grouping,
+    JudgingDisqualificationReport,
     JudgingParticipant,
     JudgingRound,
     JudgingRoundForm,
@@ -134,6 +139,7 @@ export const AppDataSource = new DataSource({
     JudgingRoundDesertedResult,
     JudgingRoundUnawardedResult,
     TieBreakTest,
+    TieBreakTestVote,
     NotificationOutbox,
     OfflineOperationReceipt,
     Person,
@@ -180,7 +186,9 @@ export const AppDataSource = new DataSource({
     AddOfflineMutationFoundation1717430400029,
     ExpandFairEntryImportIdentity1717430400030,
     AddUserAccessCodePlaintext1717430400031,
-    CreateJudgingRoundUnawardedResults1717430400032
+    CreateJudgingRoundUnawardedResults1717430400032,
+    CreateJudgingDisqualificationReports1717430400033,
+    AddTieBreakTestTraceability1717430400034
   ]
 });
 

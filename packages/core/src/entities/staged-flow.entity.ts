@@ -191,6 +191,54 @@ export class JudgingParticipant extends PegasusBaseEntity {
   disqualifiedAt!: Date | null;
 }
 
+@Unique("UQ_judging_disqualification_reports_participant_reason_judge", [
+  "judgingParticipantId",
+  "disqualificationReasonId",
+  "judgeUserId"
+])
+@Entity({ name: "judging_disqualification_reports" })
+export class JudgingDisqualificationReport extends PegasusBaseEntity {
+  @Column({ name: "fair_category_stage_id", type: "uuid" })
+  fairCategoryStageId!: string;
+
+  @ManyToOne(() => FairCategoryStage, { nullable: false, onDelete: "CASCADE" })
+  @JoinColumn({ name: "fair_category_stage_id" })
+  fairCategoryStage!: FairCategoryStage;
+
+  @Column({ name: "judging_participant_id", type: "uuid" })
+  judgingParticipantId!: string;
+
+  @ManyToOne(() => JudgingParticipant, { nullable: false, onDelete: "CASCADE" })
+  @JoinColumn({ name: "judging_participant_id" })
+  judgingParticipant!: JudgingParticipant;
+
+  @Column({ name: "disqualification_reason_id", type: "uuid" })
+  disqualificationReasonId!: string;
+
+  @ManyToOne(() => DisqualificationReason, { nullable: false })
+  @JoinColumn({ name: "disqualification_reason_id" })
+  disqualificationReason!: DisqualificationReason;
+
+  @Column({ name: "judge_user_id", type: "uuid" })
+  judgeUserId!: string;
+
+  @ManyToOne(() => User, { nullable: false })
+  @JoinColumn({ name: "judge_user_id" })
+  judgeUser!: User;
+
+  @Column({ name: "fa_judge_form_id", type: "uuid", nullable: true })
+  faJudgeFormId!: string | null;
+
+  @Column({ name: "round_id", type: "uuid", nullable: true })
+  roundId!: string | null;
+
+  @Column({ name: "round_form_id", type: "uuid", nullable: true })
+  roundFormId!: string | null;
+
+  @Column({ name: "reported_at", type: "timestamp" })
+  reportedAt!: Date;
+}
+
 @Unique("UQ_fa_judge_forms_stage_judge", ["fairCategoryStageId", "judgeUserId"])
 @Entity({ name: "fa_judge_forms" })
 export class FaJudgeForm extends PegasusBaseEntity {

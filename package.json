@@ -34,7 +34,10 @@
     "db:seed:fair-staff": "pnpm --filter @pegasus/core db:seed:fair-staff",
     "db:seed:fair-results": "pnpm --filter @pegasus/core db:seed:fair-results",
     "db:seed:disqualification-reasons": "pnpm --filter @pegasus/core db:seed:disqualification-reasons",
-    "diagnose:tie-breaks": "tsx packages/functions/src/scripts/report-tie-break-anomalies.ts"
+    "diagnose:tie-breaks": "tsx packages/functions/src/scripts/report-tie-break-anomalies.ts",
+    "check:regulatory": "node packages/functions/scripts/check-regulatory-matrix.mjs",
+    "test:judging": "pnpm --filter @pegasus/functions test -- src/services/judging",
+    "verify:regulatory": "pnpm check:regulatory && pnpm --filter @pegasus/core build && pnpm --filter @pegasus/functions typecheck && pnpm test:judging && pnpm --filter @pegasus/web exec vitest run src/app/staff/categories && pnpm --filter @pegasus/web lint"
   },
   "devDependencies": {
     "@types/node": "^22.15.29",

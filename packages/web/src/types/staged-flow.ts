@@ -98,6 +98,11 @@ export type FaParticipant = {
   riderName: string;
   registrationNumber: string;
   status: JudgingParticipantStatus;
+  provisionalDisqualification: {
+    reason: DisqualificationReason;
+    reportCount: number;
+    requiredReports: number;
+  } | null;
   disqualificationReason: DisqualificationReason | null;
   disqualifiedBy: { id: string; name: string } | null;
   repeatTrackRequest: {
@@ -205,6 +210,11 @@ export type RoundParticipant = {
   riderName: string;
   registrationNumber: string;
   status: JudgingParticipantStatus;
+  provisionalDisqualification: {
+    reason: DisqualificationReason;
+    reportCount: number;
+    requiredReports: number;
+  } | null;
   disqualificationReason: DisqualificationReason | null;
   disqualifiedBy: { id: string; name: string } | null;
   selected: boolean;
@@ -275,6 +285,14 @@ export type AwardDistinctiveDto = {
   colorHex: string | null;
 };
 
+export type ResultTieMembership = {
+  reason: TieBreakReason;
+  positionSum: number | null;
+  startPosition: number;
+  endPosition: number;
+  resolved: boolean;
+};
+
 export type RoundResult = {
   id: string;
   participantId: string;
@@ -286,6 +304,8 @@ export type RoundResult = {
   finalPosition: number | null;
   status: RoundResultStatus;
   awardDistinctive: AwardDistinctiveDto | null;
+  /** Membresía explícita a bloques de empate (no inferir solo desde status TIED). */
+  tieMembership?: ResultTieMembership[];
   /** Metadato de presentación agregado al combinar el F2 con desempates consolidados. */
   resolvedByTieBreak?: boolean;
 };
@@ -293,7 +313,7 @@ export type RoundResult = {
 export type PositionOutcomeType =
   | "AWARDED"
   | "DESERTED"
-  | "UNAWARDED_MINIMUM_CONSIDERATION"
+  | "UNAWARDED_INSUFFICIENT_CONSIDERATION"
   | "TIE_BREAK_REQUIRED";
 
 export type DesertedRoundResult = {
@@ -310,23 +330,25 @@ export type UnawardedRoundResult = {
   finalPosition: number;
   assignedVotes: number;
   minimumRequired: number;
-  outcomeType: "UNAWARDED_MINIMUM_CONSIDERATION";
+  outcomeType: "UNAWARDED_INSUFFICIENT_CONSIDERATION";
   awardDistinctive: AwardDistinctiveDto | null;
 };
 
 export type PositionOutcome = {
   finalPosition: number;
-  outcomeType: Exclude<PositionOutcomeType, "AWARDED" | "TIE_BREAK_REQUIRED">;
-  participantId: null;
+  outcomeType: Exclude<PositionOutcomeType, "AWARDED">;
+  participantId: string | null;
   assignedVotes: number;
   minimumRequired: number | null;
   votesCount: number | null;
   awardDistinctive: AwardDistinctiveDto | null;
+  tieBreakReason?: TieBreakReason | null;
 };
 
 export type RoundManagementForm = {
   id: string;
   revision: number;
+  judgeUserId: string;
   judgeName: string;
   status: RoundFormStatus;
   startedAt: string | null;
@@ -348,6 +370,15 @@ export type TieBreakTestDto = {
   label: string;
   testOrder: number;
   status: "PENDING" | "ACTIVE" | "DONE";
+  selectionMethod: "PUBLIC_DRAW" | "MOUNT_LAST_RESORT";
+  drawnAt: string | null;
+  drawNotes: string | null;
+  executedAt: string | null;
+  votes: Array<{
+    judgeUserId: string;
+    approved: boolean;
+    votedAt: string;
+  }>;
 };
 
 export type RoundManagementItem = {
@@ -365,6 +396,7 @@ export type RoundManagementItem = {
     positionSum: number | null;
     startPosition: number;
     endPosition: number;
+    resolved?: boolean;
   }>;
   forms: RoundManagementForm[];
   results: RoundResult[];

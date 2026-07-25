@@ -1,0 +1,33 @@
+name: Regulatory gate
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  judging-regulatory:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Regulatory matrix gate
+        run: node packages/functions/scripts/check-regulatory-matrix.mjs
+      - name: Build core
+        run: pnpm --filter @pegasus/core build
+      - name: Typecheck functions
+        run: pnpm --filter @pegasus/functions typecheck
+      - name: Judging unit + fixtures + scenarios + E2E dominio
+        run: pnpm --filter @pegasus/functions test -- src/services/judging
+      - name: Web official-result contracts
+        run: pnpm --filter @pegasus/web exec vitest run src/app/staff/categories
+      - name: Lint web
+        run: pnpm --filter @pegasus/web lint

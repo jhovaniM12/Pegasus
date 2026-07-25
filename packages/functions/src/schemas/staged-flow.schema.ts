@@ -92,7 +92,18 @@ export const desertCompetitionSchema = z.object({
 });
 
 export const openTieBreakSchema = z.object({
-  testTypes: z.array(tieBreakTestTypeSchema).min(1).max(1)
+  testTypes: z.array(tieBreakTestTypeSchema).min(1).max(1),
+  votes: z
+    .array(
+      z.object({
+        judgeUserId: z.string().uuid(),
+        approved: z.boolean()
+      })
+    )
+    .min(1)
+    .max(5),
+  publicDrawConfirmed: z.boolean(),
+  drawNotes: z.string().trim().min(1).max(1000)
 });
 
 export const roundEntryReminderEffectSchema = z.enum(["SUMA", "RESTA"]);
