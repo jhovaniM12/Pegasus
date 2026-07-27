@@ -329,7 +329,7 @@ export function OfficialResultBoard({
                     {row ? (
                       <>
                         <p className="truncate font-semibold text-slate-900">
-                          #{row.trackPosition} · {row.riderName}
+                          #{row.trackPosition} · {row.horseName || "Sin nombre"}
                         </p>
                         <p className="truncate font-mono text-xs text-slate-400">
                           {row.registrationNumber}

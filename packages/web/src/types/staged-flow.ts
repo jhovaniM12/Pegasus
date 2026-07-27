@@ -302,6 +302,7 @@ export type RoundResult = {
   id: string;
   participantId: string;
   trackPosition: number;
+  horseName: string;
   riderName: string;
   registrationNumber: string;
   scoreValue: number;

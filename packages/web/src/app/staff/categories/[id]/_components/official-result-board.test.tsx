@@ -6,6 +6,7 @@ import type { RoundResult } from "@/types/staged-flow";
 function result(partial: Partial<RoundResult> & Pick<RoundResult, "id" | "participantId">): RoundResult {
   return {
     trackPosition: 1,
+    horseName: "Ejemplar",
     riderName: "Jinete",
     registrationNumber: "REG",
     scoreValue: 10,
@@ -28,6 +29,7 @@ describe("OfficialResultBoard - resultado oficial 1.º–5.º", () => {
             id: "r1",
             participantId: "p1",
             trackPosition: 1,
+            horseName: "CANTADOR",
             finalPosition: 1,
             status: "FINAL",
             awardDistinctive: { id: "d1", label: "Azul", colorHex: "#2563eb" },
@@ -36,6 +38,7 @@ describe("OfficialResultBoard - resultado oficial 1.º–5.º", () => {
             id: "r2",
             participantId: "p2",
             trackPosition: 8,
+            horseName: "OTRO",
             finalPosition: 8,
             status: "FINAL",
             awardDistinctive: null,
@@ -57,8 +60,9 @@ describe("OfficialResultBoard - resultado oficial 1.º–5.º", () => {
       />
     );
 
-    expect(markup).toContain("#1 · Jinete");
+    expect(markup).toContain("#1 · CANTADOR");
     expect(markup).not.toContain("#8");
+    expect(markup).not.toContain("Jinete");
     expect(markup).toContain("Puesto desierto");
     // Cinco celdas de puesto (1..5).
     expect(markup.match(/tabular-nums text-slate-700">\d+<\/span>/g)?.length).toBe(5);

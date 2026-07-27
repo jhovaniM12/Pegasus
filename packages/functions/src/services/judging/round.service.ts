@@ -2033,7 +2033,7 @@ export async function getRoundsManagement(user: User, stageId: string) {
         : [];
       const results = await manager.getRepository(JudgingRoundResult).find({
         where: { roundId: round.id },
-        relations: { judgingParticipant: { fairEntry: true } },
+        relations: { judgingParticipant: { fairEntry: { horse: true } } },
         order: { finalPosition: "ASC" }
       });
       const desertedResults = await manager.getRepository(JudgingRoundDesertedResult).find({
@@ -2134,6 +2134,7 @@ export async function getRoundsManagement(user: User, stageId: string) {
           id: row.id,
           participantId: row.judgingParticipantId,
           trackPosition: row.judgingParticipant.fairEntry.trackPosition,
+          horseName: row.judgingParticipant.fairEntry.horse?.name?.trim() || "",
           riderName: row.judgingParticipant.fairEntry.riderName,
           registrationNumber: row.judgingParticipant.fairEntry.registrationNumber,
           scoreValue: row.scoreValue,
