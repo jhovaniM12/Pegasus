@@ -1,4 +1,4 @@
-import type { TieBreakReason } from "@pegasus/core";
+import type { DesertedReason, TieBreakReason } from "@pegasus/core";
 
 export type ManagementTieBlock = {
   reason: TieBreakReason;
@@ -15,7 +15,10 @@ export type ManagementOutcome = {
   participantId: string | null;
   assignedVotes: number;
   minimumRequired: number | null;
+  /** @deprecated Preferir desertedVotes; se conserva como alias de lectura. */
   votesCount: number | null;
+  desertedVotes: number | null;
+  reason: DesertedReason | null;
   tieBreakReason: TieBreakReason | null;
 };
 
@@ -51,8 +54,19 @@ export function buildTieMembershipByParticipant(
   return membership;
 }
 
+/**
+ * Emite outcomes oficiales. Los puestos desiertos nuevos llevan causa y métricas.
+ * Filas históricas `unawarded` se proyectan como DESERTED (compatibilidad de UI).
+ */
 export function buildPositionOutcomes(input: {
-  deserted: Array<{ finalPosition: number; votesCount: number }>;
+  deserted: Array<{
+    finalPosition: number;
+    desertedVotes: number;
+    reason: DesertedReason | null;
+    assignedVotes: number;
+    minimumRequired: number | null;
+  }>;
+  /** Históricos: se muestran como Desierto con causa INSUFFICIENT_CONSIDERATION. */
   unawarded: Array<{ finalPosition: number; assignedVotes: number; minimumRequired: number }>;
   tieBlocks: ManagementTieBlock[];
 }): ManagementOutcome[] {
@@ -60,24 +74,35 @@ export function buildPositionOutcomes(input: {
     finalPosition: row.finalPosition,
     outcomeType: "DESERTED" as const,
     participantId: null,
-    assignedVotes: 0,
-    minimumRequired: null,
-    votesCount: row.votesCount,
-    tieBreakReason: null
-  }));
-  const unawardedOutcomes = input.unawarded.map((row) => ({
-    finalPosition: row.finalPosition,
-    outcomeType: "UNAWARDED_INSUFFICIENT_CONSIDERATION" as const,
-    participantId: null,
     assignedVotes: row.assignedVotes,
     minimumRequired: row.minimumRequired,
-    votesCount: null,
+    votesCount: row.desertedVotes,
+    desertedVotes: row.desertedVotes,
+    reason: row.reason,
     tieBreakReason: null
   }));
-  const occupied = new Set([
-    ...desertedOutcomes.map((row) => row.finalPosition),
-    ...unawardedOutcomes.map((row) => row.finalPosition)
-  ]);
+
+  const occupied = new Set(desertedOutcomes.map((row) => row.finalPosition));
+
+  // Históricos unawarded → DESERTED visible (sin migración destructiva).
+  const legacyDesertedOutcomes = input.unawarded
+    .filter((row) => !occupied.has(row.finalPosition))
+    .map((row) => ({
+      finalPosition: row.finalPosition,
+      outcomeType: "DESERTED" as const,
+      participantId: null,
+      assignedVotes: row.assignedVotes,
+      minimumRequired: row.minimumRequired,
+      votesCount: 0,
+      desertedVotes: 0,
+      reason: "INSUFFICIENT_CONSIDERATION" as const,
+      tieBreakReason: null
+    }));
+
+  for (const row of legacyDesertedOutcomes) {
+    occupied.add(row.finalPosition);
+  }
+
   const tieBreakRequired = input.tieBlocks
     .filter((block) => !block.resolved)
     .flatMap((block) => {
@@ -91,13 +116,15 @@ export function buildPositionOutcomes(input: {
           assignedVotes: 0,
           minimumRequired: null,
           votesCount: null,
+          desertedVotes: null,
+          reason: null,
           tieBreakReason: block.reason
         });
       }
       return rows;
     });
 
-  return [...desertedOutcomes, ...unawardedOutcomes, ...tieBreakRequired].sort(
+  return [...desertedOutcomes, ...legacyDesertedOutcomes, ...tieBreakRequired].sort(
     (a, b) => a.finalPosition - b.finalPosition
   );
 }

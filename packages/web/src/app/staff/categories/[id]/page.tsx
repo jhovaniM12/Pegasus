@@ -32,6 +32,7 @@ import { ManagementView } from "./_components/management-view";
 import { JudgeRoundWorkspace } from "./_components/judge-round-workspace";
 import { DirectorRounds } from "./_components/director-rounds";
 import { OfficialResultBoard } from "./_components/official-result-board";
+import { OfficialScorecard } from "./_components/official-scorecard";
 import { buildOfficialF2Results } from "./_components/official-f2-results";
 import { RoundConsolidatedDetail } from "./_components/round-consolidated-detail";
 import { isJudgeViewStale } from "./_components/judge-view";
@@ -947,8 +948,15 @@ export default function StaffCategoryPage() {
           </div>
         )}
 
-        {currentUser?.role === "TECHNICAL_DIRECTOR" && (
+        {currentUser?.role === "TECHNICAL_DIRECTOR" ? (
           <SummaryHeader summary={summary} />
+        ) : (
+          <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+              {summary.fair.name ?? "Feria"}
+            </p>
+            <h1 className="mt-1 text-lg font-semibold text-slate-950">{summary.category.name}</h1>
+          </div>
         )}
 
         {/* ── DIRECTOR TÉCNICO ─────────────────────────────────────────── */}
@@ -1085,7 +1093,7 @@ export default function StaffCategoryPage() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-base font-semibold text-slate-950">Formato FA</h2>
-                <p className="text-sm text-slate-500">{faSelectedCount} / 10 seleccionados</p>
+                <p className="text-sm text-slate-500">{faSelectedCount} seleccionados</p>
               </div>
               <div className="flex flex-wrap gap-2">
                 {fa.form.status !== "CLOSED" && (
@@ -1237,16 +1245,26 @@ export default function StaffCategoryPage() {
         )}
 
         {currentUser?.role === "JUDGE" && summary.status === "JUDGING_CLOSED" && !fa && !round && (
-          <section className="mt-4 rounded-lg border border-slate-200 bg-white p-5">
+          <section className="mt-4 space-y-4 rounded-lg border border-slate-200 bg-white p-5">
             {judgeOfficialF2 ? (
-              <OfficialResultBoard
-                results={judgeOfficialF2.results}
-                desertedResults={judgeOfficialF2.desertedResults}
-                unawardedResults={judgeOfficialF2.unawardedResults}
-                positionOutcomes={judgeOfficialF2.positionOutcomes}
-                title="Resultado oficial"
-                forceOfficialStatus
-              />
+              <>
+                <OfficialResultBoard
+                  results={judgeOfficialF2.results}
+                  desertedResults={judgeOfficialF2.desertedResults}
+                  unawardedResults={judgeOfficialF2.unawardedResults}
+                  positionOutcomes={judgeOfficialF2.positionOutcomes}
+                  title="Resultado oficial"
+                  forceOfficialStatus
+                />
+                <OfficialScorecard
+                  fairName={summary.fair.name}
+                  fairStartDate={summary.fair.startDate}
+                  fairEndDate={summary.fair.endDate}
+                  categoryName={summary.category.name}
+                  forms={judgeOfficialF2.forms}
+                  results={judgeOfficialF2.results}
+                />
+              </>
             ) : (
               <div className="rounded-lg border border-slate-200 bg-slate-50 px-6 py-8 text-center">
                 <p className="text-base font-semibold text-slate-900">Resultado oficial</p>
@@ -1428,7 +1446,6 @@ export default function StaffCategoryPage() {
         onOpenChange={setCloseFaOpen}
         summary={{
           selectedCount: selectedIds.size,
-          maxSelected: 10,
           disqualifiedCount: fa?.form.disqualifiedCount ?? 0,
           discardedCount: fa
             ? fa.participants.filter(

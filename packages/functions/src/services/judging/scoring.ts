@@ -1,5 +1,7 @@
-import { MAX_AWARD_POSITIONS } from "@pegasus/core";
+import { MAX_AWARD_POSITIONS, type DesertedReason } from "@pegasus/core";
 import type { TieBreakReason } from "@pegasus/core";
+
+export type { DesertedReason };
 
 /**
  * Cómputo oficial de la tarjeta F2 (y de las rondas de desempate, que usan la misma lógica).
@@ -7,18 +9,21 @@ import type { TieBreakReason } from "@pegasus/core";
  * Reglas reglamentarias FEDEQUINAS (Cap. XI, Art. 15) implementadas aquí, como funciones
  * PURAS para poder probarlas sin base de datos:
  *
- * 1. Cada juez asigna un puesto ordinal (1 = mejor) a los candidatos de su preferencia.
- * 2. Regla de voto de castigo: si un juez NO asigna posición a un participante, ese
+ * 1. Cada juez asigna únicamente los puestos que considera merecidos.
+ * 2. Al cerrar F2, los puestos sin ejemplar se registran como votos de puesto desierto.
+ * 3. Regla de voto de castigo: si un juez NO asigna posición a un participante, ese
  *    participante recibe automáticamente la posición N+1 (donde N = MAX_AWARD_POSITIONS),
- *    es decir, posición 6. Todos los participantes elegibles compiten en el ranking final.
- * 3. La suma de puestos (reales + votos de castigo) define el orden: menor suma = mejor.
- * 4. Excepción de "mayoría de primeros puestos": si un ejemplar recibe el primer
- *    puesto en la mayoría de las tarjetas, gana el primer lugar aunque su suma no
- *    sea la menor.
- * 5. Igualdad de suma: si dos o más ejemplares con consideración mínima comparten
- *    suma (y ninguno está cubierto por la regla de mayoría), forman un único grupo.
- *    Si el rango del grupo toca el top 5, participan todos sus integrantes.
- * 6. Excepción 5.e: si todos los jueces asignan quinto, nadie lo declara desierto y
+ *    es decir, posición 6. La suma se conserva para auditoría y desempates.
+ * 4. Consolidación por puesto: un ejemplar solo ocupa un puesto si alcanza la
+ *    consideración mínima (mayoría) de asignaciones a ESE puesto. La suma no compacta
+ *    ni asciende ejemplares hacia puestos superiores desiertos.
+ * 5. Si ninguna asignación alcanza la consideración mínima, el puesto queda DESERTED
+ *    (incluye cero asignaciones y consideración insuficiente).
+ * 6. Excepción de "mayoría de primeros puestos": si un ejemplar recibe el primer
+ *    puesto en la mayoría de las tarjetas, queda adjudicado en el 1.º.
+ * 7. Igualdad de suma: si dos o más ejemplares con consideración mínima comparten
+ *    suma y no tienen puesto premiable adjudicado por votos, forman un grupo de empate.
+ * 8. Excepción 5.e: si todos los jueces asignan quinto, nadie lo declara desierto y
  *    cada juez escoge un ejemplar diferente, esos ejemplares forman un bloque especial
  *    independiente de las sumas y de la consideración mínima ordinaria.
  *    DECISIÓN_OPERATIVA (R-F2-5E-EXCL): se excluyen del bloque quienes ya tienen
@@ -60,23 +65,17 @@ export type PositionOutcomeType =
   | "UNAWARDED_INSUFFICIENT_CONSIDERATION"
   | "TIE_BREAK_REQUIRED";
 
+/** Modo de consolidación: P2 por puesto absoluto; desempate por ranking relativo de suma. */
+export type ScoringMode = "P2" | "TIE_BREAK";
+
 export type DesertedPositionResult = {
   finalPosition: number;
-  /**
-   * Número de jueces que declararon el puesto desierto de forma explícita.
-   * Solo aplica cuando outcome = DESERTED (ningún juez asignó el puesto a un ejemplar).
-   */
-  votesCount: number;
-};
-
-/**
- * Puesto con asignaciones reales de jueces, pero sin ejemplar que cumpla
- * la consideración mínima exigida para recibir el premio.
- */
-export type UnawardedPositionResult = {
-  finalPosition: number;
+  reason: DesertedReason;
+  /** Máximo de votos de asignación que alcanzó un ejemplar en ese puesto. */
   assignedVotes: number;
   minimumRequired: number;
+  /** Votos de puesto desierto (explícitos o derivados al cerrar). */
+  desertedVotes: number;
 };
 
 /**
@@ -106,13 +105,11 @@ export type TiedGroup = {
 
 export type ScoringResult = {
   participants: ScoredParticipant[];
-  /** Puestos verdaderamente desiertos: ningún juez asignó ese puesto a un ejemplar. */
-  desertedResults: DesertedPositionResult[];
   /**
-   * Puestos con asignaciones, pero sin candidato elegible por consideración mínima.
-   * Nunca deben confundirse con desiertos.
+   * Puestos oficiales desiertos: sin asignación suficiente para ese puesto
+   * (cero asignaciones, consideración insuficiente o mayoría explícita de desierto).
    */
-  unawardedResults: UnawardedPositionResult[];
+  desertedResults: DesertedPositionResult[];
   /** True si existe al menos un grupo empatado (incluye no bloqueantes). */
   hasTie: boolean;
   /**
@@ -141,27 +138,37 @@ type Aggregate = {
   cardsCount: number;
 };
 
+function buildDesertedResult(input: {
+  finalPosition: number;
+  reason: DesertedReason;
+  assignedVotes: number;
+  minimumRequired: number;
+  desertedVotes: number;
+}): DesertedPositionResult {
+  return {
+    finalPosition: input.finalPosition,
+    reason: input.reason,
+    assignedVotes: input.assignedVotes,
+    minimumRequired: input.minimumRequired,
+    desertedVotes: input.desertedVotes
+  };
+}
+
 /**
- * Calcula el resultado oficial de una tarjeta F2.
- *
- * Aplica la regla de voto de castigo: cada participante elegible que un juez no puntúa
- * recibe automáticamente la posición PENALTY_POSITION (= MAX_AWARD_POSITIONS + 1 = 6).
- * Por tanto, TODOS los participantes elegibles aparecen en el ranking final.
- *
- * El `cardsCount` refleja cuántos jueces realmente asignaron un puesto (sin contar votos
- * de castigo), para aplicar la regla reglamentaria de consideración mínima para premiación.
- *
- * Los grupos de empate (`tiedGroups`) llevan metadatos de rango y bandera `blocksClosure`
- * que indica si el empate afecta posiciones premiables (1..MAX_AWARD_POSITIONS).
+ * Calcula el resultado oficial de una tarjeta F2 o de desempate.
  *
  * @param cards Tarjetas de cada juez (una por juez) con los puestos asignados.
  * @param judgeCount Número total de jueces de la feria (para el umbral de mayoría).
+ * @param mode `P2` adjudica por votos de puesto absoluto; `TIE_BREAK` ordena por suma relativa 1..n.
  */
-export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult {
+export function computeF2(
+  cards: JudgeCard[],
+  judgeCount: number,
+  mode: ScoringMode = "P2"
+): ScoringResult {
   const empty: ScoringResult = {
     participants: [],
     desertedResults: [],
-    unawardedResults: [],
     hasTie: false,
     hasBlockingTie: false,
     tiedGroups: [],
@@ -204,99 +211,98 @@ export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult
   const majorityWinner = aggregates.find((agg) => agg.firstPlaceVotes >= threshold) ?? null;
   const majorityWinnerId = majorityWinner?.participantId ?? null;
 
-  // Orden: ganador por mayoría primero; resto por suma ascendente, luego primeros puestos, luego id estable.
-  const ordered = [...aggregates].sort((a, b) => {
-    if (majorityWinnerId) {
-      if (a.participantId === majorityWinnerId) return -1;
-      if (b.participantId === majorityWinnerId) return 1;
-    }
-    if (a.positionSum !== b.positionSum) return a.positionSum - b.positionSum;
-    if (a.firstPlaceVotes !== b.firstPlaceVotes) return b.firstPlaceVotes - a.firstPlaceVotes;
-    return a.participantId.localeCompare(b.participantId);
-  });
+  if (mode === "TIE_BREAK") {
+    return computeRelativeBySumRanking(aggregates, majorityWinnerId, threshold);
+  }
 
-  // Conteo de declaraciones explícitas de desierto y de asignaciones reales por puesto.
+  // Conteo de votos de desierto y de asignaciones por puesto / ejemplar.
   const desertedVoteCountByPosition = new Map<number, number>();
   for (const card of cards) {
     const uniqueDeserted = new Set(card.desertedPositions);
     for (const position of uniqueDeserted) {
-      if (!Number.isInteger(position) || position < 1) continue;
+      if (!Number.isInteger(position) || position < 1 || position > MAX_AWARD_POSITIONS) continue;
       desertedVoteCountByPosition.set(position, (desertedVoteCountByPosition.get(position) ?? 0) + 1);
     }
   }
-  const assignedVotesByPosition = new Map<number, number>();
+
+  const assignmentVotesByPosition = new Map<number, Map<string, number>>();
   for (const card of cards) {
-    const uniqueAssigned = new Set(
-      card.positions
-        .map((entry) => entry.position)
-        .filter((position) => Number.isInteger(position) && position >= 1)
-    );
-    for (const position of uniqueAssigned) {
-      assignedVotesByPosition.set(position, (assignedVotesByPosition.get(position) ?? 0) + 1);
+    const seenPositions = new Set<number>();
+    for (const entry of card.positions) {
+      if (!Number.isInteger(entry.position) || entry.position < 1 || entry.position > MAX_AWARD_POSITIONS) {
+        continue;
+      }
+      if (seenPositions.has(entry.position)) continue;
+      seenPositions.add(entry.position);
+      const byHorse = assignmentVotesByPosition.get(entry.position) ?? new Map<string, number>();
+      byHorse.set(entry.participantId, (byHorse.get(entry.participantId) ?? 0) + 1);
+      assignmentVotesByPosition.set(entry.position, byHorse);
     }
   }
 
-  // Nota 5.b: 2/3 o 3/5 declaraciones explícitas hacen desierto el puesto,
-  // aunque el juez restante haya asignado allí un ejemplar.
-  const explicitDesertedByMajority = new Map<number, number>();
-  for (const [position, votesCount] of desertedVoteCountByPosition.entries()) {
-    if (votesCount >= threshold) {
-      explicitDesertedByMajority.set(position, votesCount);
-    }
-  }
-
-  // Asignación de puestos (Reglamento FEDEQUINAS, notas aclaratorias 5.b, 5.c y 5.e):
-  // 1) Respetar desiertos explícitos por mayoría cuando no hubo asignaciones.
-  // 2) En cada puesto premiable, recorrer candidatos en orden de mérito hasta encontrar
-  //    uno con consideración mínima (cardsCount >= threshold). Los que no cumplen quedan
-  //    diferidos (sin cinta) y no consumen el puesto.
-  // 3) Si no queda candidato elegible y no hubo mayoría explícita de desierto:
-  //    → UNAWARDED_INSUFFICIENT_CONSIDERATION, incluso con cero asignaciones.
-  // 4) Ejemplares no premiables se reubican desde el puesto 6 (sin cinta).
-  // 5) Si luego aplica 5.e, se retira el outcome del quinto y se reserva al desempate.
+  // Adjudicación por puesto: la suma no compacta ni asciende ejemplares.
   const ranked: Array<Aggregate & { finalPosition: number }> = [];
-  const deferred: Aggregate[] = [];
+  const awardedIds = new Set<string>();
   const desertedResults: DesertedPositionResult[] = [];
-  const unawardedResults: UnawardedPositionResult[] = [];
-  let pointer = 0;
 
   for (let position = 1; position <= MAX_AWARD_POSITIONS; position += 1) {
-    const explicitVotes = explicitDesertedByMajority.get(position);
-    if (explicitVotes != null) {
-      desertedResults.push({ finalPosition: position, votesCount: explicitVotes });
+    const desertedVotes = desertedVoteCountByPosition.get(position) ?? 0;
+    const votesByHorse = assignmentVotesByPosition.get(position) ?? new Map<string, number>();
+    let bestVotes = 0;
+    for (const votes of votesByHorse.values()) {
+      if (votes > bestVotes) bestVotes = votes;
+    }
+
+    if (desertedVotes >= threshold) {
+      desertedResults.push(
+        buildDesertedResult({
+          finalPosition: position,
+          reason: "EXPLICIT_MAJORITY",
+          assignedVotes: bestVotes,
+          minimumRequired: threshold,
+          desertedVotes
+        })
+      );
       continue;
     }
 
-    let awarded = false;
-    while (pointer < ordered.length) {
-      const candidate = ordered[pointer];
-      pointer += 1;
-      if (candidate.cardsCount < threshold) {
-        deferred.push(candidate);
+    const leaders = [...votesByHorse.entries()].filter(([, votes]) => votes === bestVotes);
+    const winnerId = leaders.length === 1 ? leaders[0]?.[0] ?? null : null;
+
+    if (winnerId != null && bestVotes >= threshold && !awardedIds.has(winnerId)) {
+      const aggregate = aggregates.find((agg) => agg.participantId === winnerId);
+      if (aggregate) {
+        ranked.push({ ...aggregate, finalPosition: position });
+        awardedIds.add(winnerId);
         continue;
       }
-      ranked.push({ ...candidate, finalPosition: position });
-      awarded = true;
-      break;
     }
 
-    if (!awarded) {
-      const assignedVotes = assignedVotesByPosition.get(position) ?? 0;
-      unawardedResults.push({
+    desertedResults.push(
+      buildDesertedResult({
         finalPosition: position,
-        assignedVotes,
-        minimumRequired: threshold
-      });
-    }
+        reason: bestVotes === 0 ? "NO_ASSIGNMENTS" : "INSUFFICIENT_CONSIDERATION",
+        assignedVotes: bestVotes,
+        minimumRequired: threshold,
+        desertedVotes
+      })
+    );
   }
 
-  while (pointer < ordered.length) {
-    deferred.push(ordered[pointer]);
-    pointer += 1;
-  }
+  // Ejemplares sin puesto premiable adjudicado: ranking residual desde el 6.º por suma.
+  const deferred = [...aggregates]
+    .filter((agg) => !awardedIds.has(agg.participantId))
+    .sort((a, b) => {
+      if (majorityWinnerId) {
+        if (a.participantId === majorityWinnerId) return -1;
+        if (b.participantId === majorityWinnerId) return 1;
+      }
+      if (a.positionSum !== b.positionSum) return a.positionSum - b.positionSum;
+      if (a.firstPlaceVotes !== b.firstPlaceVotes) return b.firstPlaceVotes - a.firstPlaceVotes;
+      return a.participantId.localeCompare(b.participantId);
+    });
 
-  let nextNonAwardPosition =
-    Math.max(MAX_AWARD_POSITIONS, ...ranked.map((participant) => participant.finalPosition)) + 1;
+  let nextNonAwardPosition = MAX_AWARD_POSITIONS + 1;
   for (const participant of deferred) {
     ranked.push({ ...participant, finalPosition: nextNonAwardPosition++ });
   }
@@ -312,13 +318,13 @@ export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult
   }));
   const positionById = new Map(participants.map((p) => [p.participantId, p.finalPosition]));
 
-  // Detección de empates: misma suma entre participantes no cubiertos por la mayoría.
-  // Solo entran al grupo quienes cumplen consideración mínima (nota 5.c): el desempate
-  // define puestos premiables, no reordena ejemplares "sin cinta".
+  // Empates por suma: solo entre ejemplares SIN puesto premiable adjudicado por votos.
+  // Si ya ocupan un puesto concreto por consideración, la suma no los desplaza ni abre desempate.
   const sumGroups = new Map<number, string[]>();
   for (const agg of aggregates) {
     if (agg.participantId === majorityWinnerId) continue;
     if (agg.cardsCount < threshold) continue;
+    if (awardedIds.has(agg.participantId)) continue;
     const group = sumGroups.get(agg.positionSum) ?? [];
     group.push(agg.participantId);
     sumGroups.set(agg.positionSum, group);
@@ -336,8 +342,6 @@ export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult
       positionSum,
       startPosition,
       endPosition,
-      // Bloquea cierre si afecta posiciones premiables: cubre empates dentro del top 5
-      // y empates que cruzan el quinto puesto (5-6); excluye empates 6-7+.
       blocksClosure: startPosition <= MAX_AWARD_POSITIONS
     });
   }
@@ -379,11 +383,6 @@ export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult
       for (let i = desertedResults.length - 1; i >= 0; i -= 1) {
         if (desertedResults[i]?.finalPosition === MAX_AWARD_POSITIONS) {
           desertedResults.splice(i, 1);
-        }
-      }
-      for (let i = unawardedResults.length - 1; i >= 0; i -= 1) {
-        if (unawardedResults[i]?.finalPosition === MAX_AWARD_POSITIONS) {
-          unawardedResults.splice(i, 1);
         }
       }
 
@@ -438,9 +437,78 @@ export function computeF2(cards: JudgeCard[], judgeCount: number): ScoringResult
   return {
     participants,
     desertedResults: desertedResults.sort((a, b) => a.finalPosition - b.finalPosition),
-    unawardedResults: unawardedResults.sort((a, b) => a.finalPosition - b.finalPosition),
     hasTie: tiedGroups.length > 0,
     hasBlockingTie,
+    tiedGroups,
+    majorityWinnerId
+  };
+}
+
+/**
+ * Ranking relativo por suma (modo desempate).
+ * Conserva el procedimiento histórico: puestos 1..n según mérito de suma,
+ * sin desiertos ni adjudicación por votos absolutos de puesto.
+ */
+function computeRelativeBySumRanking(
+  aggregates: Aggregate[],
+  majorityWinnerId: string | null,
+  threshold: number
+): ScoringResult {
+  const ordered = [...aggregates].sort((a, b) => {
+    if (majorityWinnerId) {
+      if (a.participantId === majorityWinnerId) return -1;
+      if (b.participantId === majorityWinnerId) return 1;
+    }
+    if (a.positionSum !== b.positionSum) return a.positionSum - b.positionSum;
+    if (a.firstPlaceVotes !== b.firstPlaceVotes) return b.firstPlaceVotes - a.firstPlaceVotes;
+    return a.participantId.localeCompare(b.participantId);
+  });
+
+  const participants: ScoredParticipant[] = ordered.map((agg, index) => ({
+    participantId: agg.participantId,
+    positionSum: agg.positionSum,
+    firstPlaceVotes: agg.firstPlaceVotes,
+    cardsCount: agg.cardsCount,
+    finalPosition: index + 1,
+    tied: false
+  }));
+  const positionById = new Map(participants.map((p) => [p.participantId, p.finalPosition]));
+
+  const sumGroups = new Map<number, string[]>();
+  for (const agg of aggregates) {
+    if (agg.participantId === majorityWinnerId) continue;
+    if (agg.cardsCount < threshold) continue;
+    const group = sumGroups.get(agg.positionSum) ?? [];
+    group.push(agg.participantId);
+    sumGroups.set(agg.positionSum, group);
+  }
+
+  const tiedGroups: TiedGroup[] = [];
+  for (const [positionSum, participantIds] of sumGroups.entries()) {
+    if (participantIds.length < 2) continue;
+    const positions = participantIds.map((id) => positionById.get(id) ?? Number.MAX_SAFE_INTEGER);
+    const startPosition = Math.min(...positions);
+    const endPosition = startPosition + participantIds.length - 1;
+    tiedGroups.push({
+      reason: "SUM_EQUALITY",
+      participantIds,
+      positionSum,
+      startPosition,
+      endPosition,
+      blocksClosure: startPosition <= MAX_AWARD_POSITIONS
+    });
+  }
+
+  const tiedIds = new Set(tiedGroups.flatMap((g) => g.participantIds));
+  for (const p of participants) {
+    p.tied = tiedIds.has(p.participantId);
+  }
+
+  return {
+    participants,
+    desertedResults: [],
+    hasTie: tiedGroups.length > 0,
+    hasBlockingTie: tiedGroups.some((g) => g.blocksClosure),
     tiedGroups,
     majorityWinnerId
   };

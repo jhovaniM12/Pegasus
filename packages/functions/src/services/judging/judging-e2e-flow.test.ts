@@ -93,7 +93,8 @@ describe("E2E dominio: pre-pista → FA → F1 → F2 → desempate → oficial"
         rankingCard("j2", [["p6", 1], ["p5", 2], ["p7", 3]], ["p5", "p6", "p7"]),
         rankingCard("j3", [["p6", 1], ["p5", 2], ["p7", 3]], ["p5", "p6", "p7"])
       ],
-      3
+      3,
+      "TIE_BREAK"
     );
     expect(tb1.hasBlockingTie).toBe(false);
     expect(tb1.majorityWinnerId).toBe("p6");
@@ -112,7 +113,7 @@ describe("E2E dominio: pre-pista → FA → F1 → F2 → desempate → oficial"
         results: official,
         outcomePositions: [
           ...f2.desertedResults.map((r) => r.finalPosition),
-          ...f2.unawardedResults.map((r) => r.finalPosition)
+          
         ]
       })
     ).toEqual([]);
@@ -132,17 +133,20 @@ describe("E2E dominio: pre-pista → FA → F1 → F2 → desempate → oficial"
       ],
       3
     );
-    // A:1+2+2=5, B:2+1+3=6, C:3+3+1=7 → sin empate. Forzamos empate A/B con 2 jueces:
+    // Empate A/B: en F2 la adjudicación por puesto deja 1.º/2.º desiertos y el residual
+    // no bloquea. El desempate por suma relativa sí puede empatar y requerir reintento.
     const f2Tie = computeF2(
       [rankingCard("j1", [["A", 1], ["B", 2]], ["A", "B"]), rankingCard("j2", [["B", 1], ["A", 2]], ["A", "B"])],
-      2
+      2,
+      "TIE_BREAK"
     );
     expect(f2Tie.hasBlockingTie).toBe(true);
 
     // Primer desempate empatado; segundo resuelve.
     const tb1 = computeF2(
       [rankingCard("j1", [["A", 1], ["B", 2]], ["A", "B"]), rankingCard("j2", [["B", 1], ["A", 2]], ["A", "B"])],
-      2
+      2,
+      "TIE_BREAK"
     );
     expect(tb1.hasBlockingTie).toBe(true);
 
@@ -152,7 +156,8 @@ describe("E2E dominio: pre-pista → FA → F1 → F2 → desempate → oficial"
         rankingCard("j2", [["A", 1], ["B", 2]], ["A", "B"]),
         rankingCard("j3", [["A", 1], ["B", 2]], ["A", "B"])
       ],
-      3
+      3,
+      "TIE_BREAK"
     );
     expect(tb2.hasBlockingTie).toBe(false);
 
@@ -202,11 +207,18 @@ describe("E2E dominio: pre-pista → FA → F1 → F2 → desempate → oficial"
     expect(f2.hasBlockingTie).toBe(false);
 
     const official = mergeTieBreaksIntoOfficialF2(toProvisional(f2), []);
-    expect(validateOfficialClosePositions({ results: official, outcomePositions: [] })).toEqual(
-      []
-    );
+    expect(
+      validateOfficialClosePositions({
+        results: official,
+        outcomePositions: [
+          ...f2.desertedResults.map((r) => r.finalPosition),
+          
+        ]
+      })
+    ).toEqual([]);
     expect(official.every((r) => r.status === "FINAL")).toBe(true);
     expect(official.find((r) => r.participantId === "p1")?.finalPosition).toBe(1);
+    expect(f2.desertedResults.some((row) => row.finalPosition === 2)).toBe(true);
   });
 
   it("5 jueces: 5.e con quintos distintos → desempate → oficial", () => {
@@ -232,7 +244,8 @@ describe("E2E dominio: pre-pista → FA → F1 → F2 → desempate → oficial"
         rankingCard("j4", [["E", 1], ["F", 2], ["G", 3], ["H", 4], ["I", 5]], fifth!.participantIds),
         rankingCard("j5", [["E", 1], ["F", 2], ["G", 3], ["H", 4], ["I", 5]], fifth!.participantIds)
       ],
-      5
+      5,
+      "TIE_BREAK"
     );
     expect(tb.hasBlockingTie).toBe(false);
 

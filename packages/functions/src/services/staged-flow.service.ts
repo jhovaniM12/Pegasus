@@ -66,7 +66,7 @@ export type StagedCategoryDto = {
   stageId: string;
   revision: number;
   status: FairCategoryStageStatus;
-  fair: { id: string; name: string | null };
+  fair: { id: string; name: string | null; startDate: string | null; endDate: string | null };
   category: { id: string; name: string | null; minAgeMonths: number; maxAgeMonths: number };
   gait: { id: string; name: string | null };
   totalEntries: number;
@@ -217,7 +217,12 @@ async function buildStageSummaries(
       stageId: stage.id,
       revision: stage.revision,
       status: stage.status,
-      fair: { id: stage.fair.id, name: stage.fair.name },
+      fair: {
+        id: stage.fair.id,
+        name: stage.fair.name,
+        startDate: stage.fair.startDate,
+        endDate: stage.fair.endDate
+      },
       category: {
         id: stage.category.id,
         name: stage.category.name,
@@ -1665,9 +1670,7 @@ async function getManagementForStage(manager: EntityManager, stage: FairCategory
           id: form.id,
           revision: form.revision,
           judgeUserId: form.judgeUserId,
-          judgeName: form.judgeUser.person
-            ? `${form.judgeUser.person.name} ${form.judgeUser.person.lastName}`.trim()
-            : ROLE_LABELS.JUDGE,
+          judgeName: formatStaffDisplayName(form.judgeUser, ROLE_LABELS.JUDGE),
           status: form.status,
           startedAt: form.startedAt?.toISOString() ?? null,
           closedAt: form.closedAt?.toISOString() ?? null,

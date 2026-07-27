@@ -21,7 +21,7 @@ const ROUND_TITLES: Record<RoundType, string> = {
 
 const ROUND_HINTS: Record<RoundType, string> = {
   F1: "Selecciona los ejemplares que pasan a la tarjeta final.",
-  F2: "Toca el botón de puesto en cada tarjeta para asignar la posición. Al insertar en un puesto ocupado los demás se desplazan. Los puestos vacíos quedan sin asignar hasta la consolidación.",
+  F2: "Toca el botón de puesto en cada tarjeta para asignar la posición. Al insertar en un puesto ocupado los demás se desplazan. Los puestos que dejes vacíos se registrarán como desiertos al cerrar tu tarjeta.",
   TIE_BREAK:
     "Toca el botón de puesto en cada tarjeta para asignar la posición. Al insertar en un puesto ocupado los demás se desplazan. Debes asignar un puesto a cada ejemplar empatado.",
 };
@@ -194,8 +194,9 @@ export function JudgeRoundWorkspace({
         (_, index) => round.positionRange!.min + index
       );
     }
-    return Array.from({ length: Math.min(MAX_F2_POSITIONS, eligibleParticipants.length) }, (_, index) => index + 1);
-  }, [eligibleParticipants.length, round.positionRange]);
+    // F2 siempre ofrece los 5 puestos premiables, aunque haya menos ejemplares.
+    return Array.from({ length: MAX_F2_POSITIONS }, (_, index) => index + 1);
+  }, [round.positionRange]);
 
   const positionSummaryItems = useMemo(() => {
     const trackByPosition = new Map(
@@ -349,7 +350,7 @@ export function JudgeRoundWorkspace({
     const currentAssignments = getCurrentAssignments();
     if (!allowedPositions.includes(targetPosition)) return;
     const nextAssignments = assignWithCascade(currentAssignments, participantId, targetPosition, allowedPositions);
-    // Las posiciones vacías no se marcan como desiertos al editar; la consolidación decide DESERTED vs UNAWARDED.
+    // Las posiciones vacías no se marcan como desiertos al editar; se derivan al cerrar F2.
     persistRankingState(nextAssignments, []);
   };
 
@@ -375,6 +376,20 @@ export function JudgeRoundWorkspace({
     (roundType !== "TIE_BREAK" || allTiedParticipantsRanked) &&
     !hasBlockingPending &&
     !isSyncing;
+
+  const emptyPositionsForClose = useMemo(() => {
+    if (roundType !== "F2") return [] as number[];
+    const assigned = new Set(assignedByParticipant.map((item) => item.position));
+    return allowedPositions.filter((position) => !assigned.has(position));
+  }, [allowedPositions, assignedByParticipant, roundType]);
+
+  const closeConfirmationMessage = useMemo(() => {
+    if (roundType === "F2" && emptyPositionsForClose.length > 0) {
+      const labels = emptyPositionsForClose.map((position) => `${position}.º`).join(", ");
+      return `Los puestos ${labels} no tienen ejemplar asignado y se registrarán como desiertos en tu tarjeta. ¿Deseas cerrar la prueba individual P2?`;
+    }
+    return "Una vez cerrado, no podrás modificar las posiciones asignadas. ¿Estás seguro de que deseas cerrar?";
+  }, [emptyPositionsForClose, roundType]);
 
   const closeRound = async () => {
     const closeBody = buildCloseBody();
@@ -595,7 +610,7 @@ export function JudgeRoundWorkspace({
                 roundType === "TIE_BREAK"
                   ? "Cerrar desempate"
                   : `Cerrar prueba individual ${roundType === "F1" ? "P1" : "P2"}`,
-                "Una vez cerrado, no podrás modificar las posiciones asignadas. ¿Estás seguro de que deseas cerrar?",
+                closeConfirmationMessage,
                 () => closeRound(),
                 "default",
                 "Cerrar prueba"

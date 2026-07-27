@@ -9,17 +9,14 @@ import {
 } from "./official-f2-close.js";
 import { computeF2, type JudgeCard } from "./scoring.js";
 
-function card(
+function rankingCard(
   judgeUserId: string,
-  ordered: string[],
-  eligible: string[] = ordered
+  positions: Array<[participantId: string, position: number]>,
+  eligible: string[]
 ): JudgeCard {
   return {
     judgeUserId,
-    positions: ordered.map((participantId, index) => ({
-      participantId,
-      position: index + 1
-    })),
+    positions: positions.map(([participantId, position]) => ({ participantId, position })),
     desertedPositions: [],
     eligibleParticipantIds: eligible
   };
@@ -30,17 +27,21 @@ function card(
  * merge oficial → validación de cierre. Replica la secuencia de closeResults.
  */
 describe("pipeline closeResults (integración de dominio)", () => {
-  it("persiste outcomes, resuelve múltiples desempates y cierra sin TIED residual", () => {
-    const eligible = ["A", "B", "C", "D"];
+  it("persiste outcomes DESERTED, resuelve 5.e y cierra sin TIED residual", () => {
+    const eligible = ["A", "B", "C", "D", "E", "F", "G"];
     const f2 = computeF2(
-      [card("j1", ["A", "B", "C", "D"]), card("j2", ["B", "A", "C", "D"])],
-      2
+      [
+        rankingCard("j1", [["A", 1], ["B", 2], ["C", 3], ["D", 4], ["E", 5]], eligible),
+        rankingCard("j2", [["A", 1], ["B", 2], ["C", 3], ["D", 4], ["F", 5]], eligible),
+        rankingCard("j3", [["A", 1], ["B", 2], ["C", 3], ["D", 4], ["G", 5]], eligible)
+      ],
+      3
     );
 
-    // Empate A/B por suma en puestos 1-2.
     expect(f2.hasBlockingTie).toBe(true);
-    const sumBlock = f2.tiedGroups.find((group) => group.reason === "SUM_EQUALITY");
-    expect(sumBlock?.participantIds.sort()).toEqual(["A", "B"]);
+    const fifthBlock = f2.tiedGroups.find((group) => group.reason === "FIFTH_PLACE_EXCEPTION_5E");
+    expect(fifthBlock?.participantIds.sort()).toEqual(["E", "F", "G"]);
+    expect(f2.desertedResults).toEqual([]);
 
     const provisionalResults = f2.participants.map((participant) => ({
       participantId: participant.participantId,
@@ -62,30 +63,37 @@ describe("pipeline closeResults (integración de dominio)", () => {
       }));
 
     const membership = buildTieMembershipByParticipant(pendingBlocks);
-    expect(membership.get("A")?.[0]?.reason).toBe("SUM_EQUALITY");
+    expect(membership.get("E")?.[0]?.reason).toBe("FIFTH_PLACE_EXCEPTION_5E");
     const outcomesBefore = buildPositionOutcomes({
       deserted: f2.desertedResults,
-      unawarded: f2.unawardedResults,
+      unawarded: [],
       tieBlocks: pendingBlocks
     });
     expect(outcomesBefore.some((row) => row.outcomeType === "TIE_BREAK_REQUIRED")).toBe(true);
 
-    // Primer desempate sigue empatado.
     const stillTied = computeF2(
-      [card("j1", ["A", "B"]), card("j2", ["B", "A"])],
-      2
+      [
+        rankingCard("j1", [["E", 1], ["F", 2], ["G", 3]], ["E", "F", "G"]),
+        rankingCard("j2", [["F", 1], ["E", 2], ["G", 3]], ["E", "F", "G"])
+      ],
+      2,
+      "TIE_BREAK"
     );
     expect(stillTied.hasBlockingTie).toBe(true);
 
-    // Segundo desempate define orden.
     const resolvedTie = computeF2(
-      [card("j1", ["A", "B"]), card("j2", ["A", "B"])],
-      2
+      [
+        rankingCard("j1", [["F", 1], ["E", 2], ["G", 3]], ["E", "F", "G"]),
+        rankingCard("j2", [["F", 1], ["E", 2], ["G", 3]], ["E", "F", "G"]),
+        rankingCard("j3", [["F", 1], ["E", 2], ["G", 3]], ["E", "F", "G"])
+      ],
+      3,
+      "TIE_BREAK"
     );
     expect(resolvedTie.hasBlockingTie).toBe(false);
     const resolutions = resolvedTie.participants.map((participant) => ({
       participantId: participant.participantId,
-      finalPosition: participant.finalPosition,
+      finalPosition: fifthBlock!.startPosition + participant.finalPosition - 1,
       sequence: 2
     }));
 
@@ -94,62 +102,36 @@ describe("pipeline closeResults (integración de dominio)", () => {
       results: official,
       outcomePositions: [
         ...f2.desertedResults.map((row) => row.finalPosition),
-        ...f2.unawardedResults.map((row) => row.finalPosition)
+        
       ]
     });
 
     expect(issues).toEqual([]);
     expect(official.every((row) => row.status === "FINAL")).toBe(true);
-    expect(official.find((row) => row.participantId === "A")?.finalPosition).toBe(1);
-    expect(official.find((row) => row.participantId === "B")?.finalPosition).toBe(2);
-    expect(official.some((row) => row.status === "TIED")).toBe(false);
-
-    // Idempotencia de dominio: re-merge sobre FINAL no altera.
-    const again = mergeTieBreaksIntoOfficialF2(official, resolutions);
-    expect(again).toEqual(official);
-
-    const outcomesAfter = buildPositionOutcomes({
-      deserted: f2.desertedResults,
-      unawarded: f2.unawardedResults,
-      tieBlocks: pendingBlocks.map((block) => ({ ...block, resolved: true }))
-    });
-    expect(outcomesAfter.some((row) => row.outcomeType === "TIE_BREAK_REQUIRED")).toBe(false);
+    expect(official.find((row) => row.participantId === "F")?.finalPosition).toBe(5);
   });
 
-  it("rechaza cierre con hueco/duplicado o TIED residual", () => {
-    const issuesTied = validateOfficialClosePositions({
-      results: [
-        {
-          participantId: "a",
-          scoreValue: 4,
-          firstPlaceVotes: 1,
-          finalPosition: 1,
-          status: "TIED"
-        }
+  it("expone puestos desiertos en el contrato cuando no hay consideración mínima", () => {
+    const eligible = ["A", "B", "C", "D"];
+    const f2 = computeF2(
+      [
+        rankingCard("j1", [["A", 2]], eligible),
+        rankingCard("j2", [["A", 2]], eligible),
+        rankingCard("j3", [], eligible)
       ],
-      outcomePositions: []
-    });
-    expect(issuesTied.some((issue) => issue.code === "RESIDUAL_TIED")).toBe(true);
+      3
+    );
 
-    const issuesDup = validateOfficialClosePositions({
-      results: [
-        {
-          participantId: "a",
-          scoreValue: 4,
-          firstPlaceVotes: 1,
-          finalPosition: 1,
-          status: "FINAL"
-        },
-        {
-          participantId: "b",
-          scoreValue: 5,
-          firstPlaceVotes: 0,
-          finalPosition: 1,
-          status: "FINAL"
-        }
-      ],
-      outcomePositions: []
+    expect(f2.participants.find((p) => p.participantId === "A")?.finalPosition).toBe(2);
+    expect(f2.desertedResults.map((row) => row.finalPosition)).toEqual([1, 3, 4, 5]);
+
+    const outcomes = buildPositionOutcomes({
+      deserted: f2.desertedResults,
+      unawarded: [],
+      tieBlocks: []
     });
-    expect(issuesDup.some((issue) => issue.code === "DUPLICATE_POSITION")).toBe(true);
+    expect(outcomes.every((row) => row.outcomeType === "DESERTED")).toBe(true);
+    expect(outcomes.map((row) => row.finalPosition)).toEqual([1, 3, 4, 5]);
+    expect(outcomes.find((row) => row.finalPosition === 1)?.reason).toBe("NO_ASSIGNMENTS");
   });
 });

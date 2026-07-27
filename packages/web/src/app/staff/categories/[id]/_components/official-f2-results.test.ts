@@ -82,8 +82,8 @@ describe("buildOfficialF2Results - cierre oficial sin fusión cliente", () => {
   });
 });
 
-describe("buildOfficialF2Results - outcomes DESERTED vs UNAWARDED", () => {
-  it("diferencia puestos desiertos de no adjudicados", () => {
+describe("buildOfficialF2Results - outcomes DESERTED con causa", () => {
+  it("proyecta desiertos y unawarded históricos como Desierto con razón", () => {
     const official = buildOfficialF2Results([
       baseRound({
         results: [
@@ -105,8 +105,11 @@ describe("buildOfficialF2Results - outcomes DESERTED vs UNAWARDED", () => {
             id: "d1",
             finalPosition: 5,
             votesCount: 0,
-            outcomeType: "DESERTED",
+            desertedVotes: 0,
+            reason: "NO_ASSIGNMENTS",
             assignedVotes: 0,
+            minimumRequired: 2,
+            outcomeType: "DESERTED",
             awardDistinctive: null,
           },
         ],
@@ -128,12 +131,15 @@ describe("buildOfficialF2Results - outcomes DESERTED vs UNAWARDED", () => {
     expect(official?.positionOutcomes).toEqual([
       expect.objectContaining({
         finalPosition: 4,
-        outcomeType: "UNAWARDED_INSUFFICIENT_CONSIDERATION",
+        outcomeType: "DESERTED",
+        reason: "INSUFFICIENT_CONSIDERATION",
         assignedVotes: 2,
+        minimumRequired: 2,
       }),
       expect.objectContaining({
         finalPosition: 5,
         outcomeType: "DESERTED",
+        reason: "NO_ASSIGNMENTS",
         assignedVotes: 0,
       }),
     ]);

@@ -56,7 +56,7 @@ function officialTieBreakPositions(
   cards: JudgeCard[],
   startPosition: number
 ): Map<string, number> {
-  const scoring = computeF2(cards, cards.length);
+  const scoring = computeF2(cards, cards.length, "TIE_BREAK");
   if (scoring.hasBlockingTie) {
     throw new Error("El escenario de desempate todavía no produjo una decisión.");
   }
@@ -152,15 +152,17 @@ describe("escenarios integrados del dominio FA → F1/F2 → desempate", () => {
       ],
       3
     );
-    const blockingGroup = f2.tiedGroups.find(
-      (group) => group.reason === "SUM_EQUALITY" && group.positionSum === 12
-    );
 
-    expect(blockingGroup?.participantIds.sort()).toEqual(["p2", "p3", "p5"]);
-    expect(blockingGroup?.startPosition).toBe(3);
-    expect(blockingGroup?.endPosition).toBe(5);
+    // Adjudicación por puesto: 1.º=p1 (2 votos), 3.º=p2 (2), 5.º=p7 (2).
+    // 2.º y 4.º desiertos (sin consideración mínima). La suma no compacta.
+    expect(f2.participants.find((p) => p.participantId === "p1")?.finalPosition).toBe(1);
+    expect(f2.participants.find((p) => p.participantId === "p2")?.finalPosition).toBe(3);
+    expect(f2.participants.find((p) => p.participantId === "p7")?.finalPosition).toBe(5);
+    expect(f2.desertedResults.map((row) => row.finalPosition).sort()).toEqual([2, 4]);
     expect(f2.tiedGroups.some((group) => group.reason === "FIFTH_PLACE_EXCEPTION_5E")).toBe(false);
+    expect(f2.hasBlockingTie).toBe(false);
 
+    // Un desempate sobre puestos 3–5 (escenario legacy) sigue resolviendo por suma relativa.
     const resolved = officialTieBreakPositions(
       [
         rankingCard("j1", [["p2", 3], ["p3", 4], ["p5", 5]], ["p2", "p3", "p5"]),
@@ -251,7 +253,8 @@ describe("escenarios integrados del dominio FA → F1/F2 → desempate", () => {
         rankingCard("j1", [["A", 3], ["B", 4]], eligible),
         rankingCard("j2", [["B", 3], ["A", 4]], eligible)
       ],
-      2
+      2,
+      "TIE_BREAK"
     );
 
     expect(firstAttempt.hasBlockingTie).toBe(true);

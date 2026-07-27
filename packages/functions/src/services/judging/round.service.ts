@@ -52,6 +52,10 @@ import {
 } from "./official-f2-close.js";
 import { computeF2, type JudgeCard } from "./scoring.js";
 import {
+  deriveImplicitDesertedPositions,
+  f2AllowedPositions
+} from "./f2-deserted-positions.js";
+import {
   tieBlockResolutionPriority,
   validateTieBreakOpening
 } from "./workflow-guards.js";
@@ -510,7 +514,6 @@ async function applyRoundFormEntries(
     const positions = input.positions ?? [];
     const desertedPositions = Array.from(new Set(input.desertedPositions ?? []));
     const eligibleEntries = entries.filter((entry) => isEligible(entry.judgingParticipantId));
-    const eligibleCount = eligibleEntries.length;
     const positionBounds = await getRoundPositionBounds(
       manager,
       round,
@@ -518,7 +521,7 @@ async function applyRoundFormEntries(
     );
     const minAssignablePosition = round.roundType === "TIE_BREAK" ? positionBounds.min : MIN_AWARD_POSITION;
     const maxAssignablePosition =
-      round.roundType === "TIE_BREAK" ? positionBounds.max : Math.min(eligibleCount, MAX_AWARD_POSITIONS);
+      round.roundType === "TIE_BREAK" ? positionBounds.max : MAX_AWARD_POSITIONS;
     // Desiertos solo en puestos premiables (1..5); el desempate puede asignar hasta el 6.º (nota 5.e).
     const maxDesertablePosition = Math.min(maxAssignablePosition, MAX_AWARD_POSITIONS);
     const positionByParticipant = new Map(positions.map((p) => [p.participantId, p.position]));
@@ -877,14 +880,37 @@ export async function closeRoundForm(user: User, stageId: string, input: CloseRo
       );
       const minAssignablePosition = round.roundType === "TIE_BREAK" ? positionBounds.min : MIN_AWARD_POSITION;
       const maxAssignablePosition =
-        round.roundType === "TIE_BREAK" ? positionBounds.max : Math.min(eligibleCount, MAX_AWARD_POSITIONS);
+        round.roundType === "TIE_BREAK" ? positionBounds.max : MAX_AWARD_POSITIONS;
       const maxDesertablePosition = Math.min(maxAssignablePosition, MAX_AWARD_POSITIONS);
       const deserted = new Set(desertedRows.map((row) => row.position));
       const positioned = eligibleEntries.filter((entry) => entry.position !== null);
       const assigned = positioned.map((entry) => entry.position as number);
 
-      // F2 / desempate: las posiciones vacías permanecen vacías.
-      // No se fabrican votos de desierto; la consolidación decide el outcome.
+      // F2: al cerrar, los puestos sin ejemplar se materializan como votos de desierto.
+      // El backend es la fuente de verdad (no depende del payload del cliente).
+      if (round.roundType === "F2") {
+        const allowedPositions = f2AllowedPositions(minAssignablePosition, maxDesertablePosition);
+        const implicitDesertedPositions = deriveImplicitDesertedPositions({
+          allowedPositions,
+          assignedPositions: assigned,
+          existingDesertedPositions: [...deserted]
+        });
+        if (implicitDesertedPositions.length > 0) {
+          await manager.getRepository(JudgingRoundFormDesertedPosition).save(
+            implicitDesertedPositions.map((position) =>
+              manager.getRepository(JudgingRoundFormDesertedPosition).create({
+                roundFormId: form.id,
+                position
+              })
+            )
+          );
+          for (const position of implicitDesertedPositions) {
+            deserted.add(position);
+          }
+        }
+      }
+
+      // F2 / desempate: validar asignaciones; en F2 los vacíos ya son desiertos derivados.
       if (round.roundType === "F2" || round.roundType === "TIE_BREAK") {
         if (round.roundType === "TIE_BREAK" && positioned.length !== eligibleCount) {
           throw new BadRequestError(
@@ -1326,17 +1352,8 @@ async function consolidateRankingRound(
         manager.getRepository(JudgingRoundDesertedResult).create({
           roundId: round.id,
           finalPosition: row.finalPosition,
-          votesCount: row.votesCount
-        })
-      )
-    );
-  }
-  if (scoring.unawardedResults.length > 0) {
-    await manager.getRepository(JudgingRoundUnawardedResult).save(
-      scoring.unawardedResults.map((row) =>
-        manager.getRepository(JudgingRoundUnawardedResult).create({
-          roundId: round.id,
-          finalPosition: row.finalPosition,
+          votesCount: row.desertedVotes,
+          reason: row.reason,
           assignedVotes: row.assignedVotes,
           minimumRequired: row.minimumRequired
         })
@@ -1383,7 +1400,7 @@ async function consolidateTieBreak(
   const stage = await getStageOrThrow(manager, round.fairCategoryStageId);
   const judges = await getActiveJudgesForStage(manager, stage);
   const cards = await loadJudgeCards(manager, round.id);
-  const scoring = computeF2(cards, judges.length);
+  const scoring = computeF2(cards, judges.length, "TIE_BREAK");
   const positionBounds = await getRoundPositionBounds(manager, round);
 
   // Resultados propios de la ronda de desempate (trazabilidad).
@@ -2057,7 +2074,10 @@ export async function getRoundsManagement(user: User, stageId: string) {
       const positionOutcomesBase = buildPositionOutcomes({
         deserted: desertedResults.map((row) => ({
           finalPosition: row.finalPosition,
-          votesCount: row.votesCount
+          desertedVotes: row.votesCount,
+          reason: row.reason,
+          assignedVotes: row.assignedVotes,
+          minimumRequired: row.minimumRequired
         })),
         unawarded: unawardedResults.map((row) => ({
           finalPosition: row.finalPosition,
@@ -2088,9 +2108,7 @@ export async function getRoundsManagement(user: User, stageId: string) {
           id: form.id,
           revision: form.revision,
           judgeUserId: form.judgeUserId,
-          judgeName: form.judgeUser.person
-            ? `${form.judgeUser.person.name} ${form.judgeUser.person.lastName}`.trim()
-            : ROLE_LABELS.JUDGE,
+          judgeName: formatStaffDisplayName(form.judgeUser, ROLE_LABELS.JUDGE),
           status: form.status,
           startedAt: form.startedAt?.toISOString() ?? null,
           closedAt: form.closedAt?.toISOString() ?? null,
@@ -2135,8 +2153,11 @@ export async function getRoundsManagement(user: User, stageId: string) {
           id: row.id,
           finalPosition: row.finalPosition,
           votesCount: row.votesCount,
+          desertedVotes: row.votesCount,
+          reason: row.reason,
+          assignedVotes: row.assignedVotes,
+          minimumRequired: row.minimumRequired,
           outcomeType: "DESERTED" as const,
-          assignedVotes: 0,
           awardDistinctive:
             round.roundType === "F1"
               ? null

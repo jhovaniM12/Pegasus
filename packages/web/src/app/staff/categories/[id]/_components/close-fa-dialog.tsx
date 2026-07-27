@@ -12,7 +12,6 @@ import {
 
 export type CloseFaSummary = {
   selectedCount: number;
-  maxSelected: number;
   disqualifiedCount: number;
   discardedCount: number;
 };
@@ -84,7 +83,7 @@ export function CloseFaDialog({
           <div className="mt-4 grid grid-cols-3 gap-3">
             <SummaryMetric
               label="Seleccionados"
-              value={`${summary.selectedCount} / ${summary.maxSelected}`}
+              value={`${summary.selectedCount}`}
               valueClassName="text-amber-600"
             />
             <SummaryMetric

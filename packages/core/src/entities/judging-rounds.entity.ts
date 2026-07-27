@@ -191,6 +191,11 @@ export class JudgingRoundResult extends PegasusBaseEntity {
   status!: JudgingRoundResultStatus;
 }
 
+export type DesertedReason =
+  | "NO_ASSIGNMENTS"
+  | "INSUFFICIENT_CONSIDERATION"
+  | "EXPLICIT_MAJORITY";
+
 @Unique("UQ_judging_round_deserted_results_round_position", ["roundId", "finalPosition"])
 @Entity({ name: "judging_round_deserted_results" })
 export class JudgingRoundDesertedResult extends PegasusBaseEntity {
@@ -204,14 +209,30 @@ export class JudgingRoundDesertedResult extends PegasusBaseEntity {
   @Column({ name: "final_position", type: "integer" })
   finalPosition!: number;
 
+  /**
+   * Votos de puesto desierto (explícitos o derivados al cerrar).
+   * Equivale a `desertedVotes` en el contrato de administración.
+   */
   @Column({ name: "votes_count", type: "integer", default: 0 })
   votesCount!: number;
+
+  /** Causa de auditoría; null en resultados históricos previos a la columna. */
+  @Column({ name: "reason", type: "varchar", nullable: true })
+  reason!: DesertedReason | null;
+
+  /** Máximo de votos de asignación que alcanzó un ejemplar en ese puesto. */
+  @Column({ name: "assigned_votes", type: "integer", default: 0 })
+  assignedVotes!: number;
+
+  /** Umbral de consideración mínima aplicado al consolidar; null en históricos. */
+  @Column({ name: "minimum_required", type: "integer", nullable: true })
+  minimumRequired!: number | null;
 }
 
 /**
- * Puestos no adjudicados por consideración mínima insuficiente.
- * Separados de los desiertos: assignedVotes puede ser cero cuando ningún juez
- * asigna el puesto y tampoco existe mayoría explícita para declararlo desierto.
+ * Puestos no adjudicados por consideración mínima insuficiente (histórico).
+ * La consolidación actual materializa esos casos como DESERTED; esta tabla
+ * se conserva para resultados ya persistidos.
  */
 @Unique("UQ_judging_round_unawarded_results_round_position", ["roundId", "finalPosition"])
 @Entity({ name: "judging_round_unawarded_results" })

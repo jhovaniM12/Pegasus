@@ -30,9 +30,17 @@ describe("contrato API de tieBlocks / outcomes", () => {
     expect(membership.has("z")).toBe(false);
   });
 
-  it("emite TIE_BREAK_REQUIRED para bloques pendientes y omite resueltos", () => {
+  it("emite DESERTED con causa y proyecta unawarded histórico como Desierto", () => {
     const outcomes = buildPositionOutcomes({
-      deserted: [{ finalPosition: 2, votesCount: 2 }],
+      deserted: [
+        {
+          finalPosition: 2,
+          desertedVotes: 2,
+          reason: "EXPLICIT_MAJORITY",
+          assignedVotes: 1,
+          minimumRequired: 2
+        }
+      ],
       unawarded: [{ finalPosition: 4, assignedVotes: 1, minimumRequired: 2 }],
       tieBlocks: [
         {
@@ -57,12 +65,56 @@ describe("contrato API de tieBlocks / outcomes", () => {
     expect(outcomes.map((row) => row.outcomeType)).toEqual([
       "DESERTED",
       "TIE_BREAK_REQUIRED",
-      "UNAWARDED_INSUFFICIENT_CONSIDERATION"
+      "DESERTED"
     ]);
+    expect(outcomes.find((row) => row.finalPosition === 2)).toMatchObject({
+      outcomeType: "DESERTED",
+      reason: "EXPLICIT_MAJORITY",
+      desertedVotes: 2,
+      assignedVotes: 1,
+      minimumRequired: 2
+    });
+    expect(outcomes.find((row) => row.finalPosition === 4)).toMatchObject({
+      outcomeType: "DESERTED",
+      reason: "INSUFFICIENT_CONSIDERATION",
+      assignedVotes: 1,
+      minimumRequired: 2,
+      desertedVotes: 0
+    });
     expect(outcomes.find((row) => row.outcomeType === "TIE_BREAK_REQUIRED")).toMatchObject({
       finalPosition: 3,
       tieBreakReason: "SUM_EQUALITY"
     });
     expect(outcomes.some((row) => row.finalPosition === 5)).toBe(false);
+  });
+
+  it("expone el caso de tres asignaciones distintas como DESERTED con assignedVotes=1", () => {
+    const outcomes = buildPositionOutcomes({
+      deserted: [
+        {
+          finalPosition: 3,
+          reason: "INSUFFICIENT_CONSIDERATION",
+          assignedVotes: 1,
+          minimumRequired: 2,
+          desertedVotes: 0
+        }
+      ],
+      unawarded: [],
+      tieBlocks: []
+    });
+
+    expect(outcomes).toEqual([
+      {
+        finalPosition: 3,
+        outcomeType: "DESERTED",
+        participantId: null,
+        reason: "INSUFFICIENT_CONSIDERATION",
+        assignedVotes: 1,
+        minimumRequired: 2,
+        desertedVotes: 0,
+        votesCount: 0,
+        tieBreakReason: null
+      }
+    ]);
   });
 });

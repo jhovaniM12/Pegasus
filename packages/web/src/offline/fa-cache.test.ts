@@ -19,7 +19,7 @@ function buildFa(selectedIds: string[]): FaState {
       stageId: STAGE_ID,
       revision: 2,
       status: "JUDGING_STARTED",
-      fair: { id: "fair-1", name: "Feria" },
+      fair: { id: "fair-1", name: "Feria", startDate: null, endDate: null },
       gait: { id: "gait-1", name: "Trocha" },
       category: {
         id: "cat-1",

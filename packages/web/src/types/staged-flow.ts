@@ -57,7 +57,7 @@ export type StagedCategory = {
   stageId: string;
   revision: number;
   status: StageStatus;
-  fair: { id: string; name: string | null };
+  fair: { id: string; name: string | null; startDate: string | null; endDate: string | null };
   category: { id: string; name: string | null; minAgeMonths: number; maxAgeMonths: number };
   gait: { id: string; name: string | null };
   totalEntries: number;
@@ -316,12 +316,20 @@ export type PositionOutcomeType =
   | "UNAWARDED_INSUFFICIENT_CONSIDERATION"
   | "TIE_BREAK_REQUIRED";
 
+export type DesertedReason =
+  | "NO_ASSIGNMENTS"
+  | "INSUFFICIENT_CONSIDERATION"
+  | "EXPLICIT_MAJORITY";
+
 export type DesertedRoundResult = {
   id: string;
   finalPosition: number;
   votesCount: number;
-  outcomeType?: "DESERTED";
+  desertedVotes?: number;
+  reason?: DesertedReason | null;
   assignedVotes?: number;
+  minimumRequired?: number | null;
+  outcomeType?: "DESERTED";
   awardDistinctive: AwardDistinctiveDto | null;
 };
 
@@ -341,6 +349,8 @@ export type PositionOutcome = {
   assignedVotes: number;
   minimumRequired: number | null;
   votesCount: number | null;
+  desertedVotes?: number | null;
+  reason?: DesertedReason | null;
   awardDistinctive: AwardDistinctiveDto | null;
   tieBreakReason?: TieBreakReason | null;
 };

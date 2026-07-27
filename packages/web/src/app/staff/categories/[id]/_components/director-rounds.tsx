@@ -12,6 +12,7 @@ import type {
 } from "@/types/staged-flow";
 import { buildOfficialF2Results } from "./official-f2-results";
 import { OfficialResultBoard } from "./official-result-board";
+import { OfficialScorecard } from "./official-scorecard";
 import { TieBreakPanel, type TieBlockInfo } from "./tie-break-panel";
 
 type DirectorRoundsProps = {
@@ -347,16 +348,26 @@ export function DirectorRounds({
   if (status === "JUDGING_CLOSED" && f2) {
     const officialF2 = buildOfficialF2Results(rounds);
     return (
-      <OfficialResultBoard
-        results={officialF2?.results ?? f2.results}
-        desertedResults={officialF2?.desertedResults ?? f2.desertedResults}
-        unawardedResults={officialF2?.unawardedResults ?? f2.unawardedResults ?? []}
-        positionOutcomes={
-          officialF2?.positionOutcomes ?? f2.positionOutcomes ?? []
-        }
-        title="Resultado oficial"
-        forceOfficialStatus
-      />
+      <div className="space-y-4">
+        <OfficialResultBoard
+          results={officialF2?.results ?? f2.results}
+          desertedResults={officialF2?.desertedResults ?? f2.desertedResults}
+          unawardedResults={officialF2?.unawardedResults ?? f2.unawardedResults ?? []}
+          positionOutcomes={
+            officialF2?.positionOutcomes ?? f2.positionOutcomes ?? []
+          }
+          title="Resultado oficial"
+          forceOfficialStatus
+        />
+        <OfficialScorecard
+          fairName={summary.fair.name}
+          fairStartDate={summary.fair.startDate}
+          fairEndDate={summary.fair.endDate}
+          categoryName={summary.category.name}
+          forms={officialF2?.forms ?? f2.forms}
+          results={officialF2?.results ?? f2.results}
+        />
+      </div>
     );
   }
 

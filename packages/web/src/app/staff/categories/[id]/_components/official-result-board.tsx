@@ -35,25 +35,34 @@ function resolveOutcomes({
 }): PositionOutcome[] {
   if (positionOutcomes.length > 0) return positionOutcomes;
 
+  const desertedPositions = new Set(desertedResults.map((row) => row.finalPosition));
+
   return [
     ...desertedResults.map((row) => ({
       finalPosition: row.finalPosition,
       outcomeType: "DESERTED" as const,
       participantId: null,
       assignedVotes: row.assignedVotes ?? 0,
-      minimumRequired: null,
-      votesCount: row.votesCount,
+      minimumRequired: row.minimumRequired ?? null,
+      votesCount: row.desertedVotes ?? row.votesCount,
+      desertedVotes: row.desertedVotes ?? row.votesCount,
+      reason: row.reason ?? null,
       awardDistinctive: row.awardDistinctive,
     })),
-    ...unawardedResults.map((row) => ({
-      finalPosition: row.finalPosition,
-      outcomeType: "UNAWARDED_INSUFFICIENT_CONSIDERATION" as const,
-      participantId: null,
-      assignedVotes: row.assignedVotes,
-      minimumRequired: row.minimumRequired,
-      votesCount: null,
-      awardDistinctive: row.awardDistinctive,
-    })),
+    // Históricos: se muestran como Desierto con causa de consideración insuficiente.
+    ...unawardedResults
+      .filter((row) => !desertedPositions.has(row.finalPosition))
+      .map((row) => ({
+        finalPosition: row.finalPosition,
+        outcomeType: "DESERTED" as const,
+        participantId: null,
+        assignedVotes: row.assignedVotes,
+        minimumRequired: row.minimumRequired,
+        votesCount: 0,
+        desertedVotes: 0,
+        reason: "INSUFFICIENT_CONSIDERATION" as const,
+        awardDistinctive: row.awardDistinctive,
+      })),
   ].sort((a, b) => a.finalPosition - b.finalPosition);
 }
 
@@ -62,7 +71,7 @@ function outcomeLabel(outcome: PositionOutcome): string {
     case "DESERTED":
       return "Puesto desierto";
     case "UNAWARDED_INSUFFICIENT_CONSIDERATION":
-      return "Puesto no adjudicado";
+      return "Puesto desierto";
     case "TIE_BREAK_REQUIRED":
       return outcome.tieBreakReason === "FIFTH_PLACE_EXCEPTION_5E"
         ? "Desempate para definir quinto puesto (5.e)"
@@ -74,12 +83,35 @@ function outcomeLabel(outcome: PositionOutcome): string {
   }
 }
 
+function desertedReasonDescription(outcome: PositionOutcome): string {
+  switch (outcome.reason) {
+    case "NO_ASSIGNMENTS":
+      return "Ningún juez asignó ejemplar a este puesto";
+    case "EXPLICIT_MAJORITY":
+      return "Mayoría de jueces dejó el puesto desierto";
+    case "INSUFFICIENT_CONSIDERATION": {
+      const assigned = outcome.assignedVotes;
+      const required = outcome.minimumRequired;
+      if (required != null) {
+        return `Ningún ejemplar alcanzó la consideración mínima (${assigned}/${required})`;
+      }
+      return "Ningún ejemplar alcanzó la consideración mínima";
+    }
+    default:
+      return "Ningún juez asignó este puesto con consideración suficiente";
+  }
+}
+
 function outcomeDescription(outcome: PositionOutcome): string | null {
   switch (outcome.outcomeType) {
     case "DESERTED":
-      return "Ningún juez asignó este puesto";
+      return desertedReasonDescription(outcome);
     case "UNAWARDED_INSUFFICIENT_CONSIDERATION":
-      return "Ningún ejemplar alcanzó la consideración mínima";
+      return desertedReasonDescription({
+        ...outcome,
+        outcomeType: "DESERTED",
+        reason: "INSUFFICIENT_CONSIDERATION",
+      });
     case "TIE_BREAK_REQUIRED":
       return outcome.tieBreakReason === "FIFTH_PLACE_EXCEPTION_5E"
         ? "Quintos distintos pendientes de desempate"
@@ -96,7 +128,7 @@ function outcomeBadgeLabel(outcome: PositionOutcome): string {
     case "DESERTED":
       return "Desierto";
     case "UNAWARDED_INSUFFICIENT_CONSIDERATION":
-      return "No adjudicado";
+      return "Desierto";
     case "TIE_BREAK_REQUIRED":
       return outcome.tieBreakReason === "FIFTH_PLACE_EXCEPTION_5E"
         ? "Desempate 5.e"
@@ -241,13 +273,13 @@ export function OfficialResultBoard({
       )}
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[360px] text-left">
+        <table className="w-full table-fixed text-left">
           <thead>
             <tr className="border-b border-slate-200/60 bg-slate-50/40 text-xs font-semibold uppercase tracking-wider text-slate-500">
-              <th className="w-14 py-2.5 pl-4 pr-2">Puesto</th>
-              <th className="py-2.5 pr-3">Ejemplar</th>
-              <th className="py-2.5 pr-3 text-center">Distintivo</th>
-              {showScoring && <th className="py-2.5 pr-4 text-right">Suma</th>}
+              <th className="w-20 py-2.5 pl-4 pr-2 text-center sm:w-24">Puesto</th>
+              <th className="py-2.5 pr-3 text-left">Ejemplar</th>
+              <th className="w-36 py-2.5 pr-3 text-center sm:w-44 md:w-52">Distintivo</th>
+              {showScoring && <th className="w-16 py-2.5 pr-4 text-center sm:w-20 md:w-24">Suma</th>}
             </tr>
           </thead>
           <tbody>
@@ -276,19 +308,21 @@ export function OfficialResultBoard({
                           : "hover:bg-slate-50/40"
                   )}
                 >
-                  <td className="py-3 pl-4 pr-2">
+                  <td className="py-3 pl-4 pr-2 text-center align-middle">
                     <span className="inline-flex size-8 items-center justify-center rounded-full bg-slate-100 text-sm font-extrabold tabular-nums text-slate-700">
                       {position}
                     </span>
                   </td>
 
-                  <td className="py-3 pr-3">
+                  <td className="py-3 pr-3 align-middle">
                     {row ? (
                       <>
-                        <p className="font-semibold text-slate-900">
+                        <p className="truncate font-semibold text-slate-900">
                           #{row.trackPosition} · {row.riderName}
                         </p>
-                        <p className="font-mono text-xs text-slate-400">{row.registrationNumber}</p>
+                        <p className="truncate font-mono text-xs text-slate-400">
+                          {row.registrationNumber}
+                        </p>
                         <StatusBadge
                           row={row}
                           outcome={displayOutcome}
@@ -309,7 +343,7 @@ export function OfficialResultBoard({
                     ) : null}
                   </td>
 
-                  <td className="py-3 pr-3">
+                  <td className="py-3 pr-3 align-middle">
                     <div className="flex justify-center">
                       <DistinctiveBadge
                         distinctive={
@@ -321,7 +355,7 @@ export function OfficialResultBoard({
                   </td>
 
                   {showScoring && (
-                    <td className="py-3 pr-4 text-right font-semibold tabular-nums text-slate-800">
+                    <td className="py-3 pr-4 text-center align-middle font-semibold tabular-nums text-slate-800">
                       {row ? row.scoreValue : "—"}
                     </td>
                   )}

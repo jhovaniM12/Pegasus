@@ -1,6 +1,7 @@
 import type {
   DesertedRoundResult,
   PositionOutcome,
+  RoundManagementForm,
   RoundManagementItem,
   RoundResult,
   UnawardedRoundResult,
@@ -11,6 +12,7 @@ export type OfficialF2Results = {
   desertedResults: DesertedRoundResult[];
   unawardedResults: UnawardedRoundResult[];
   positionOutcomes: PositionOutcome[];
+  forms: RoundManagementForm[];
 };
 
 function latestF2(rounds: RoundManagementItem[]): RoundManagementItem | null {
@@ -22,27 +24,35 @@ function resolvePositionOutcomes(f2: RoundManagementItem): PositionOutcome[] {
     return f2.positionOutcomes;
   }
 
+  const desertedPositions = new Set((f2.desertedResults ?? []).map((row) => row.finalPosition));
+
   return [
     ...(f2.desertedResults ?? []).map((row) => ({
       finalPosition: row.finalPosition,
       outcomeType: "DESERTED" as const,
       participantId: null,
       assignedVotes: row.assignedVotes ?? 0,
-      minimumRequired: null,
-      votesCount: row.votesCount,
+      minimumRequired: row.minimumRequired ?? null,
+      votesCount: row.desertedVotes ?? row.votesCount,
+      desertedVotes: row.desertedVotes ?? row.votesCount,
+      reason: row.reason ?? null,
       awardDistinctive: row.awardDistinctive,
       tieBreakReason: null,
     })),
-    ...(f2.unawardedResults ?? []).map((row) => ({
-      finalPosition: row.finalPosition,
-      outcomeType: "UNAWARDED_INSUFFICIENT_CONSIDERATION" as const,
-      participantId: null,
-      assignedVotes: row.assignedVotes,
-      minimumRequired: row.minimumRequired,
-      votesCount: null,
-      awardDistinctive: row.awardDistinctive,
-      tieBreakReason: null,
-    })),
+    ...(f2.unawardedResults ?? [])
+      .filter((row) => !desertedPositions.has(row.finalPosition))
+      .map((row) => ({
+        finalPosition: row.finalPosition,
+        outcomeType: "DESERTED" as const,
+        participantId: null,
+        assignedVotes: row.assignedVotes,
+        minimumRequired: row.minimumRequired,
+        votesCount: 0,
+        desertedVotes: 0,
+        reason: "INSUFFICIENT_CONSIDERATION" as const,
+        awardDistinctive: row.awardDistinctive,
+        tieBreakReason: null,
+      })),
   ].sort((a, b) => a.finalPosition - b.finalPosition);
 }
 
@@ -68,6 +78,7 @@ export function buildOfficialF2Results(rounds: RoundManagementItem[]): OfficialF
       positionOutcomes: positionOutcomes.filter(
         (outcome) => outcome.outcomeType !== "TIE_BREAK_REQUIRED"
       ),
+      forms: f2.forms,
     };
   }
 
@@ -116,5 +127,6 @@ export function buildOfficialF2Results(rounds: RoundManagementItem[]): OfficialF
     positionOutcomes: positionOutcomes.filter(
       (outcome) => outcome.outcomeType !== "TIE_BREAK_REQUIRED"
     ),
+    forms: f2.forms,
   };
 }

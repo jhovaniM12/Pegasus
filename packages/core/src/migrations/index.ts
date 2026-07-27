@@ -35,3 +35,4 @@ export { CreateJudgingDisqualificationReports1717430400033 } from "./17174304000
 export { AddTieBreakTestTraceability1717430400034 } from "./1717430400034-AddTieBreakTestTraceability.js";
 export { RemoveTieBreakTestVotesAndDrawColumns1717430400035 } from "./1717430400035-RemoveTieBreakTestVotesAndDrawColumns.js";
 export { AllowZeroAssignedVotesInUnawardedResults1717430400036 } from "./1717430400036-AllowZeroAssignedVotesInUnawardedResults.js";
+export { AddDesertedResultReasonMetadata1717430400037 } from "./1717430400037-AddDesertedResultReasonMetadata.js";

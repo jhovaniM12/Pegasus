@@ -53,8 +53,9 @@ describe("fixtures reglamentarios canónicos", () => {
     }
 
     if (fixture.expect.unawardedPositions) {
-      expect(result.unawardedResults.map((row) => row.finalPosition).sort()).toEqual(
-        [...fixture.expect.unawardedPositions].sort()
+      // Compat: los puestos que antes eran UNAWARDED ahora viven en desertedResults.
+      expect(result.desertedResults.map((row) => row.finalPosition).sort()).toEqual(
+        expect.arrayContaining([...fixture.expect.unawardedPositions].sort())
       );
     }
   });

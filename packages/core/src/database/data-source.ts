@@ -73,6 +73,7 @@ import {
   AddTieBreakTestTraceability1717430400034,
   RemoveTieBreakTestVotesAndDrawColumns1717430400035,
   AllowZeroAssignedVotesInUnawardedResults1717430400036,
+  AddDesertedResultReasonMetadata1717430400037,
   CreateFairEntriesTable1717430400004,
   CreateFairResultsTable1717430400008,
   CreateFairStaffTable1717430400007,
@@ -190,7 +191,8 @@ export const AppDataSource = new DataSource({
     CreateJudgingDisqualificationReports1717430400033,
     AddTieBreakTestTraceability1717430400034,
     RemoveTieBreakTestVotesAndDrawColumns1717430400035,
-    AllowZeroAssignedVotesInUnawardedResults1717430400036
+    AllowZeroAssignedVotesInUnawardedResults1717430400036,
+    AddDesertedResultReasonMetadata1717430400037
   ]
 });
 
