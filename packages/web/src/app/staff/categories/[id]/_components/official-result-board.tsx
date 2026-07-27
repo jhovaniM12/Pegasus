@@ -15,38 +15,14 @@ type OfficialResultBoardProps = {
   desertedResults?: DesertedRoundResult[];
   unawardedResults?: UnawardedRoundResult[];
   positionOutcomes?: PositionOutcome[];
-  /** F2 muestra suma de puestos y primeros lugares; F1 solo conteo de votos. */
+  /** F2 muestra suma de puestos; F1 solo conteo de votos. */
   showScoring?: boolean;
-  /** Podio visual (top 3). Solo para resultado oficial cerrado. */
-  showPodium?: boolean;
   title?: string;
   note?: string;
   provisionalLabel?: string;
   provisionalVariant?: "neutral" | "tieBreak";
   forceOfficialStatus?: boolean;
 };
-
-const POSITION_STYLES = {
-  1: {
-    podiumBar: "bg-gradient-to-b from-amber-400 to-amber-500 h-28",
-    podiumLabel: "text-amber-950",
-    medal: "🥇",
-  },
-  2: {
-    podiumBar: "bg-gradient-to-b from-slate-300 to-slate-400 h-20",
-    podiumLabel: "text-slate-800",
-    medal: "🥈",
-  },
-  3: {
-    podiumBar: "bg-gradient-to-b from-amber-700/80 to-amber-800/80 h-14",
-    podiumLabel: "text-amber-100",
-    medal: "🥉",
-  },
-} as const;
-
-function positionStyle(position: number) {
-  return POSITION_STYLES[position as keyof typeof POSITION_STYLES] ?? null;
-}
 
 function resolveOutcomes({
   desertedResults,
@@ -147,87 +123,6 @@ function DistinctiveBadge({
   return <Cinta text={text} colorHex={distinctive.colorHex} />;
 }
 
-type PodiumSlot = {
-  position: number;
-  result?: RoundResult;
-  outcome?: PositionOutcome;
-};
-
-function PodiumCard({ slot }: { slot: PodiumSlot }) {
-  const { position, result, outcome } = slot;
-  const style = positionStyle(position);
-  if (!style) return null;
-
-  return (
-    <div className="flex flex-col items-center gap-2">
-      <div className="w-full max-w-[170px] rounded-xl border border-slate-200 bg-white px-3 py-3 text-center shadow-sm">
-        <p className="text-2xl leading-none">{style.medal}</p>
-        {result ? (
-          <>
-            <p className="mt-1.5 text-base font-extrabold tabular-nums text-slate-900">
-              #{result.trackPosition}
-            </p>
-            <p className="mt-0.5 line-clamp-2 text-[11px] font-semibold leading-tight text-slate-700">
-              {result.riderName.split(" ").slice(0, 2).join(" ")}
-            </p>
-            <div className="mt-2 flex justify-center">
-              <DistinctiveBadge distinctive={result.awardDistinctive} />
-            </div>
-            <p className="mt-1.5 font-mono text-[10px] text-slate-400">{result.registrationNumber}</p>
-          </>
-        ) : outcome ? (
-          <p className="mt-2 text-xs font-semibold text-slate-500">{outcomeLabel(outcome)}</p>
-        ) : (
-          <p className="mt-2 text-xs text-slate-400">—</p>
-        )}
-      </div>
-      <div
-        className={cn(
-          "flex w-full max-w-[170px] items-end justify-center rounded-t-lg pb-2",
-          style.podiumBar
-        )}
-      >
-        <span className={cn("text-2xl font-black tabular-nums opacity-70", style.podiumLabel)}>
-          {position}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function Podium({
-  sorted,
-  outcomeByPosition,
-}: {
-  sorted: RoundResult[];
-  outcomeByPosition: Map<number, PositionOutcome>;
-}) {
-  const slot = (pos: number): PodiumSlot => ({
-    position: pos,
-    result: sorted.find((r) => r.finalPosition === pos),
-    outcome: outcomeByPosition.get(pos),
-  });
-
-  const hasAnyTop3 =
-    sorted.some((r) => r.finalPosition !== null && r.finalPosition <= 3) ||
-    [1, 2, 3].some((p) => outcomeByPosition.has(p));
-
-  if (!hasAnyTop3) return null;
-
-  return (
-    <div className="px-5 pt-5 pb-2">
-      <p className="mb-4 text-center text-[10px] font-bold uppercase tracking-widest text-slate-400">
-        Podio
-      </p>
-      <div className="flex items-end justify-center gap-2 sm:gap-4">
-        <PodiumCard slot={slot(2)} />
-        <PodiumCard slot={slot(1)} />
-        <PodiumCard slot={slot(3)} />
-      </div>
-    </div>
-  );
-}
-
 function unresolvedTieMembership(row: RoundResult) {
   return (row.tieMembership ?? []).find((block) => !block.resolved) ?? null;
 }
@@ -245,39 +140,30 @@ function StatusBadge({
   provisionalVariant: "neutral" | "tieBreak";
   forceOfficialStatus: boolean;
 }) {
+  if (forceOfficialStatus) return null;
+
   if (outcome && !row) {
     return (
-      <span className="inline-flex items-center rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
+      <span className="mt-1.5 inline-flex items-center rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
         {outcomeBadgeLabel(outcome)}
-      </span>
-    );
-  }
-  if (row && forceOfficialStatus) {
-    return (
-      <span className="inline-flex rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-        Oficial
       </span>
     );
   }
   if (row?.resolvedByTieBreak) {
     return (
-      <span className="inline-flex rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
+      <span className="mt-1.5 inline-flex rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
         Resuelto por desempate
       </span>
     );
   }
   if (row?.status === "FINAL") {
-    return (
-      <span className="inline-flex rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-        Oficial
-      </span>
-    );
+    return null;
   }
 
   const pendingTie = row ? unresolvedTieMembership(row) : null;
   if (pendingTie?.reason === "FIFTH_PLACE_EXCEPTION_5E") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-800">
+      <span className="mt-1.5 inline-flex items-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-800">
         <AlertTriangle className="size-3" />
         Desempate para definir quinto puesto (5.e)
       </span>
@@ -285,34 +171,30 @@ function StatusBadge({
   }
   if (pendingTie?.reason === "SUM_EQUALITY") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+      <span className="mt-1.5 inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
         <AlertTriangle className="size-3" />
         Empate por suma
       </span>
     );
   }
 
-  // Sin membresía a bloque: no mostrar "Empate" solo por status TIED residual.
   if (row && (row.finalPosition == null || row.finalPosition > 5) && !row.awardDistinctive) {
     return (
-      <span className="inline-flex rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-600">
+      <span className="mt-1.5 inline-flex rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-600">
         Sin premio
       </span>
     );
   }
 
-  return (
-    <span
-      className={cn(
-        "inline-flex rounded-md border px-2 py-0.5 text-xs font-medium",
-        provisionalVariant === "tieBreak"
-          ? "border-blue-200 bg-blue-50 text-blue-700"
-          : "border-slate-200 bg-slate-50 text-slate-600"
-      )}
-    >
-      {provisionalLabel}
-    </span>
-  );
+  if (provisionalVariant === "tieBreak") {
+    return (
+      <span className="mt-1.5 inline-flex rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
+        {provisionalLabel}
+      </span>
+    );
+  }
+
+  return null;
 }
 
 export function OfficialResultBoard({
@@ -321,7 +203,6 @@ export function OfficialResultBoard({
   unawardedResults = [],
   positionOutcomes = [],
   showScoring = true,
-  showPodium = false,
   title = "Resultado F2",
   note,
   provisionalLabel = "Provisional",
@@ -345,9 +226,6 @@ export function OfficialResultBoard({
     ...sorted.map((row) => row.finalPosition ?? 0),
     ...outcomes.map((row) => row.finalPosition)
   );
-  const hasTop3 =
-    sorted.some((row) => row.finalPosition !== null && row.finalPosition <= 3) ||
-    [1, 2, 3].some((position) => outcomeByPosition.has(position));
 
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -362,30 +240,20 @@ export function OfficialResultBoard({
         </div>
       )}
 
-      {showPodium && hasTop3 && (
-        <>
-          <Podium sorted={sorted} outcomeByPosition={outcomeByPosition} />
-          <div className="mx-5 border-t border-slate-100" />
-        </>
-      )}
-
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[420px] text-left">
+        <table className="w-full min-w-[360px] text-left">
           <thead>
             <tr className="border-b border-slate-200/60 bg-slate-50/40 text-xs font-semibold uppercase tracking-wider text-slate-500">
               <th className="w-14 py-2.5 pl-4 pr-2">Puesto</th>
               <th className="py-2.5 pr-3">Ejemplar</th>
               <th className="py-2.5 pr-3 text-center">Distintivo</th>
-              {showScoring && <th className="py-2.5 pr-3 text-right">Suma</th>}
-              {showScoring && <th className="py-2.5 pr-3 text-right">1.os</th>}
-              <th className="py-2.5 pr-4 text-right">Estado</th>
+              {showScoring && <th className="py-2.5 pr-4 text-right">Suma</th>}
             </tr>
           </thead>
           <tbody>
             {Array.from({ length: maxPosition }, (_, index) => index + 1).map((position) => {
               const row = sorted.find((result) => result.finalPosition === position);
               const outcome = outcomeByPosition.get(position);
-              // Outcomes de desempate no sustituyen filas de participantes en el mismo puesto.
               const displayOutcome =
                 row && outcome?.outcomeType === "TIE_BREAK_REQUIRED" ? undefined : outcome;
               if (!row && !displayOutcome) return null;
@@ -421,6 +289,13 @@ export function OfficialResultBoard({
                           #{row.trackPosition} · {row.riderName}
                         </p>
                         <p className="font-mono text-xs text-slate-400">{row.registrationNumber}</p>
+                        <StatusBadge
+                          row={row}
+                          outcome={displayOutcome}
+                          provisionalLabel={provisionalLabel}
+                          provisionalVariant={provisionalVariant}
+                          forceOfficialStatus={forceOfficialStatus}
+                        />
                       </>
                     ) : displayOutcome ? (
                       <>
@@ -446,30 +321,10 @@ export function OfficialResultBoard({
                   </td>
 
                   {showScoring && (
-                    <td className="py-3 pr-3 text-right font-semibold tabular-nums text-slate-800">
+                    <td className="py-3 pr-4 text-right font-semibold tabular-nums text-slate-800">
                       {row ? row.scoreValue : "—"}
                     </td>
                   )}
-
-                  {showScoring && (
-                    <td className="py-3 pr-3 text-right tabular-nums text-slate-600">
-                      {row
-                        ? row.firstPlaceVotes
-                        : displayOutcome?.outcomeType === "DESERTED"
-                          ? (displayOutcome.votesCount ?? "—")
-                          : displayOutcome?.assignedVotes ?? "—"}
-                    </td>
-                  )}
-
-                  <td className="py-3 pr-4 text-right">
-                    <StatusBadge
-                      row={row}
-                      outcome={displayOutcome}
-                      provisionalLabel={provisionalLabel}
-                      provisionalVariant={provisionalVariant}
-                      forceOfficialStatus={forceOfficialStatus}
-                    />
-                  </td>
                 </tr>
               );
             })}

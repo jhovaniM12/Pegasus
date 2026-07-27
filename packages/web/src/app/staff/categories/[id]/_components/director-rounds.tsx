@@ -354,7 +354,6 @@ export function DirectorRounds({
         positionOutcomes={
           officialF2?.positionOutcomes ?? f2.positionOutcomes ?? []
         }
-        showPodium
         title="Resultado oficial"
         forceOfficialStatus
       />

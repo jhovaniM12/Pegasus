@@ -40,6 +40,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { CategoryCardSkeleton, ContentReveal, StaffFiltersSkeleton } from "@/components/loaders";
+import { cn } from "@/lib/utils";
 import { JudgeFormatActions } from "@/app/staff/_components/judge-format-actions";
 import { StartFaDialog } from "@/app/staff/categories/[id]/_components/start-fa-dialog";
 import { StartRoundDialog } from "@/app/staff/categories/[id]/_components/start-round-dialog";
@@ -697,6 +698,11 @@ export default function StaffPage() {
                 showCategoryAction &&
                 currentUser?.role === "JUDGE" &&
                 item.judge?.formats?.some((format) => format.formStatus !== "NOT_AVAILABLE");
+              // Pendientes de pre-pista solo aportan antes/durante el chequeo veterinario.
+              const showVeterinaryPending =
+                item.status === "NOT_STARTED" ||
+                item.status === "PRE_RING_STARTED" ||
+                item.status === "PRE_RING_CLOSED";
 
               return (
                 <article
@@ -720,7 +726,12 @@ export default function StaffPage() {
                       </Badge>
                     </div>
 
-                    <div className="grid grid-cols-4 gap-2 text-center">
+                    <div
+                      className={cn(
+                        "grid gap-2 text-center",
+                        showVeterinaryPending ? "grid-cols-4" : "grid-cols-3"
+                      )}
+                    >
                       <div className="rounded-md border border-slate-200/60 bg-slate-50/50 p-2 dark:bg-slate-900/10 dark:border-slate-800">
                         <span className="block text-base font-bold text-slate-950 dark:text-slate-100">{item.totalEntries}</span>
                         <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Inscritos</span>
@@ -729,10 +740,12 @@ export default function StaffPage() {
                         <span className="block text-base font-bold text-emerald-950 dark:text-emerald-100">{item.veterinary.approved}</span>
                         <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-600">Aprobados</span>
                       </div>
-                      <div className="rounded-md border border-amber-200/60 bg-amber-50/40 p-2 dark:bg-amber-950/10 dark:border-amber-900/20">
-                        <span className="block text-base font-bold text-amber-950 dark:text-amber-100">{item.veterinary.pending}</span>
-                        <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-600">Pendientes</span>
-                      </div>
+                      {showVeterinaryPending && (
+                        <div className="rounded-md border border-amber-200/60 bg-amber-50/40 p-2 dark:bg-amber-950/10 dark:border-amber-900/20">
+                          <span className="block text-base font-bold text-amber-950 dark:text-amber-100">{item.veterinary.pending}</span>
+                          <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-600">Pendientes</span>
+                        </div>
+                      )}
                       <div className="rounded-md border border-red-200/60 bg-red-50/40 p-2 dark:bg-red-950/10 dark:border-red-900/20">
                         <span className="block text-base font-bold text-red-950 dark:text-red-100">
                           {item.veterinary.rejected}

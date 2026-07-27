@@ -1244,7 +1244,6 @@ export default function StaffCategoryPage() {
                 desertedResults={judgeOfficialF2.desertedResults}
                 unawardedResults={judgeOfficialF2.unawardedResults}
                 positionOutcomes={judgeOfficialF2.positionOutcomes}
-                showPodium
                 title="Resultado oficial"
                 forceOfficialStatus
               />
