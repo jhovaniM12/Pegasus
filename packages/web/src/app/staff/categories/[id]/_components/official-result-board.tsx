@@ -75,7 +75,7 @@ function outcomeLabel(outcome: PositionOutcome): string {
     case "TIE_BREAK_REQUIRED":
       return outcome.tieBreakReason === "FIFTH_PLACE_EXCEPTION_5E"
         ? "Desempate para definir quinto puesto (5.e)"
-        : "Empate por suma";
+        : "Empate";
     default: {
       const _exhaustive: never = outcome.outcomeType;
       return _exhaustive;
@@ -132,7 +132,7 @@ function outcomeBadgeLabel(outcome: PositionOutcome): string {
     case "TIE_BREAK_REQUIRED":
       return outcome.tieBreakReason === "FIFTH_PLACE_EXCEPTION_5E"
         ? "Desempate 5.e"
-        : "Empate por suma";
+        : "Empate";
     default: {
       const _exhaustive: never = outcome.outcomeType;
       return _exhaustive;
@@ -205,7 +205,7 @@ function StatusBadge({
     return (
       <span className="mt-1.5 inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
         <AlertTriangle className="size-3" />
-        Empate por suma
+        Empate
       </span>
     );
   }

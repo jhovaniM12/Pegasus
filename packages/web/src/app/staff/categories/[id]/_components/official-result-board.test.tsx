@@ -71,7 +71,7 @@ describe("OfficialResultBoard - badges reglamentarios", () => {
       />
     );
 
-    expect(markup).toContain("Empate por suma");
+    expect(markup).toContain("Empate");
     expect(markup).toContain("Desempate para definir quinto puesto (5.e)");
     expect(markup).toContain("Sin premio");
     expect(markup).not.toMatch(/>\s*Empate\s*</);

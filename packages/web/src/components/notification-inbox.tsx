@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Archive, Bell, Check, CheckCheck, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,8 +10,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useStaffRealtimeRefresh } from "@/hooks/use-staff-realtime-refresh";
-import { useToast } from "@/components/ui/toast";
-import { sharedNotificationToastDeduper } from "@/lib/notification-toast-deduper";
 import type { StaffPushMessage } from "@/lib/staff-push-message";
 import { stagedFlowService } from "@/services/staged-flow.service";
 import type { StaffNotification } from "@/types/staged-flow";
@@ -40,86 +38,19 @@ function formatRelativeTime(value: string): string {
   return formatter.format(diffDays, "day");
 }
 
-function getActionLabel(type: string): string {
-  switch (type) {
-    case "PRE_RING_STARTED": return "Ir a Chequeo Veterinario";
-    case "PRE_RING_CLOSED": return "Iniciar Juzgamiento";
-    case "JUDGING_STARTED": return "Ver Juzgamiento";
-    case "JUDGE_FA_CLOSED": return "Ver Gestión";
-    case "FA_CONSOLIDATED": return "Ver Resultados";
-    case "JUDGING_PARTICIPANT_DISQUALIFIED": return "Ver FA";
-    default: return "Ver categoría";
-  }
-}
-
 export function NotificationInbox() {
   const [state, setState] = useState<InboxState>({ unreadCount: 0, notifications: [] });
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { toast } = useToast();
-  const prevIdsRef = useRef<Set<string>>(new Set());
-  const hasInitialLoadedRef = useRef(false);
 
-  const showNotificationToast = useCallback(
-    (input: {
-      id?: string | null;
-      type: string;
-      title: string;
-      body: string;
-      fairName?: string | null;
-      categoryName?: string | null;
-      gaitName?: string | null;
-      deepLink?: string | null;
-    }) => {
-      if (!sharedNotificationToastDeduper.shouldShow(input)) {
-        return false;
-      }
-
-      toast({
-        variant: "notification",
-        notificationType: input.type,
-        title: input.title,
-        description: input.body,
-        fairName: input.fairName ?? undefined,
-        categoryName: input.categoryName ?? undefined,
-        gaitName: input.gaitName ?? undefined,
-        deepLink: input.deepLink ?? undefined,
-        actionLabel: getActionLabel(input.type),
-      });
-      return true;
-    },
-    [toast]
-  );
-
-  const handlePushMessage = useCallback(
-    (message: StaffPushMessage) => {
-      if (message.kind !== "INBOX_NOTIFICATION") return;
-      if (!message.title || !message.body) return;
-
-      const shown = showNotificationToast({
-        id: message.notificationId,
-        type: message.notificationType ?? "UNKNOWN",
-        title: message.title,
-        body: message.body,
-        fairName: message.fairName,
-        categoryName: message.categoryName,
-        gaitName: message.gaitName,
-        deepLink: message.deepLink,
-      });
-
-      if (shown) {
-        if (message.notificationId) {
-          prevIdsRef.current.add(message.notificationId);
-        }
-        setState((prev) => ({
-          ...prev,
-          unreadCount: prev.unreadCount + 1,
-        }));
-      }
-    },
-    [showNotificationToast]
-  );
+  const handlePushMessage = useCallback((message: StaffPushMessage) => {
+    if (message.kind !== "INBOX_NOTIFICATION") return;
+    setState((prev) => ({
+      ...prev,
+      unreadCount: prev.unreadCount + 1,
+    }));
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -127,33 +58,13 @@ export function NotificationInbox() {
     try {
       const response = await stagedFlowService.listNotifications(20);
       const data = response.data ?? { unreadCount: 0, notifications: [] };
-
-      // Toast solo para notificaciones nuevas no cubiertas ya por el push inmediato.
-      if (hasInitialLoadedRef.current) {
-        const incoming = data.notifications.filter((n) => !n.readAt && !prevIdsRef.current.has(n.id));
-        for (const n of incoming) {
-          showNotificationToast({
-            id: n.id,
-            type: n.type,
-            title: n.title,
-            body: n.body,
-            fairName: n.fairName,
-            categoryName: n.categoryName,
-            gaitName: n.gaitName,
-            deepLink: n.deepLink,
-          });
-        }
-      }
-
-      prevIdsRef.current = new Set(data.notifications.map((n) => n.id));
-      hasInitialLoadedRef.current = true;
       setState(data);
     } catch {
       setError("No fue posible cargar la bandeja.");
     } finally {
       setLoading(false);
     }
-  }, [showNotificationToast]);
+  }, []);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {

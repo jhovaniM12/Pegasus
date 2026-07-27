@@ -433,7 +433,7 @@ export default function StaffCategoryPage() {
               toast({
                 title: "Modo offline",
                 description: "Mostrando el FA preparado en este dispositivo.",
-                variant: "notification",
+                variant: "success",
               });
             }
             return;
@@ -504,7 +504,7 @@ export default function StaffCategoryPage() {
                 toast({
                   title: "Modo offline",
                   description: "Mostrando la tarjeta de ronda preparada en este dispositivo.",
-                  variant: "notification",
+                  variant: "success",
                 });
               }
               return;
@@ -612,7 +612,7 @@ export default function StaffCategoryPage() {
               toast({
                 title: "Modo offline",
                 description: "Mostrando la pre-pista preparada en este dispositivo.",
-                variant: "notification",
+                variant: "success",
               });
             }
             return;
@@ -662,7 +662,7 @@ export default function StaffCategoryPage() {
               toast({
                 title: "Modo offline",
                 description: "Mostrando el FA preparado en este dispositivo.",
-                variant: "notification",
+                variant: "success",
               });
             }
             return;
