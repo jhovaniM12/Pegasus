@@ -1987,13 +1987,8 @@ async function getRoundStateForJudge(
       round.roundType === "F2" || round.roundType === "TIE_BREAK"
         ? {
             min: round.roundType === "TIE_BREAK" ? positionBounds.min : MIN_AWARD_POSITION,
-            max:
-              round.roundType === "TIE_BREAK"
-                ? positionBounds.max
-                : Math.min(
-                    MAX_AWARD_POSITIONS,
-                    roster.filter((participant) => participant.status === "ELIGIBLE").length
-                  )
+            // F2 siempre expone los 5 puestos premiables, aunque haya menos ejemplares.
+            max: round.roundType === "TIE_BREAK" ? positionBounds.max : MAX_AWARD_POSITIONS
           }
         : null,
     availableReminders,

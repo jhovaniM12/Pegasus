@@ -188,15 +188,18 @@ export function JudgeRoundWorkspace({
     [eligibleParticipants]
   );
   const allowedPositions = useMemo(() => {
+    // F2 siempre ofrece los 5 puestos premiables, aunque haya menos ejemplares.
+    if (roundType === "F2") {
+      return Array.from({ length: MAX_F2_POSITIONS }, (_, index) => index + 1);
+    }
     if (round.positionRange) {
       return Array.from(
         { length: round.positionRange.max - round.positionRange.min + 1 },
         (_, index) => round.positionRange!.min + index
       );
     }
-    // F2 siempre ofrece los 5 puestos premiables, aunque haya menos ejemplares.
     return Array.from({ length: MAX_F2_POSITIONS }, (_, index) => index + 1);
-  }, [round.positionRange]);
+  }, [round.positionRange, roundType]);
 
   const positionSummaryItems = useMemo(() => {
     const trackByPosition = new Map(
