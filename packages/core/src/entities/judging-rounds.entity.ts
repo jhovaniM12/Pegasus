@@ -210,7 +210,8 @@ export class JudgingRoundDesertedResult extends PegasusBaseEntity {
 
 /**
  * Puestos no adjudicados por consideración mínima insuficiente.
- * Separados de los desiertos: aquí assignedVotes siempre es > 0.
+ * Separados de los desiertos: assignedVotes puede ser cero cuando ningún juez
+ * asigna el puesto y tampoco existe mayoría explícita para declararlo desierto.
  */
 @Unique("UQ_judging_round_unawarded_results_round_position", ["roundId", "finalPosition"])
 @Entity({ name: "judging_round_unawarded_results" })
