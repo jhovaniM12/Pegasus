@@ -251,13 +251,24 @@ export function OfficialResultBoard({
     );
   }
 
-  const sorted = [...results].sort((a, b) => (a.finalPosition ?? 0) - (b.finalPosition ?? 0));
-  const outcomeByPosition = new Map(outcomes.map((row) => [row.finalPosition, row]));
-  const maxPosition = Math.max(
-    0,
-    ...sorted.map((row) => row.finalPosition ?? 0),
-    ...outcomes.map((row) => row.finalPosition)
-  );
+  const sorted = [...results]
+    .filter((row) => {
+      if (!forceOfficialStatus) return true;
+      return row.finalPosition != null && row.finalPosition >= 1 && row.finalPosition <= 5;
+    })
+    .sort((a, b) => (a.finalPosition ?? 0) - (b.finalPosition ?? 0));
+  const awardOutcomes = forceOfficialStatus
+    ? outcomes.filter((row) => row.finalPosition >= 1 && row.finalPosition <= 5)
+    : outcomes;
+  const outcomeByPosition = new Map(awardOutcomes.map((row) => [row.finalPosition, row]));
+  const maxPosition = forceOfficialStatus
+    ? 5
+    : Math.max(
+        0,
+        ...sorted.map((row) => row.finalPosition ?? 0),
+        ...awardOutcomes.map((row) => row.finalPosition)
+      );
+  const positions = Array.from({ length: maxPosition }, (_, index) => index + 1);
 
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -283,12 +294,12 @@ export function OfficialResultBoard({
             </tr>
           </thead>
           <tbody>
-            {Array.from({ length: maxPosition }, (_, index) => index + 1).map((position) => {
+            {positions.map((position) => {
               const row = sorted.find((result) => result.finalPosition === position);
               const outcome = outcomeByPosition.get(position);
               const displayOutcome =
                 row && outcome?.outcomeType === "TIE_BREAK_REQUIRED" ? undefined : outcome;
-              if (!row && !displayOutcome) return null;
+              if (!row && !displayOutcome && !forceOfficialStatus) return null;
 
               const pendingTie = row && !forceOfficialStatus ? unresolvedTieMembership(row) : null;
               const isTiedRow = Boolean(pendingTie);
@@ -296,14 +307,14 @@ export function OfficialResultBoard({
 
               return (
                 <tr
-                  key={row?.id ?? `outcome-${displayOutcome?.outcomeType}-${position}`}
+                  key={row?.id ?? `outcome-${displayOutcome?.outcomeType ?? "empty"}-${position}`}
                   className={cn(
                     "border-b border-slate-100 text-sm last:border-0",
                     pendingTie?.reason === "FIFTH_PLACE_EXCEPTION_5E"
                       ? "bg-violet-50/50"
                       : isTiedRow
                         ? "bg-amber-50/60"
-                        : displayOutcome
+                        : displayOutcome || (!row && forceOfficialStatus)
                           ? "bg-slate-50/70"
                           : "hover:bg-slate-50/40"
                   )}
@@ -340,7 +351,9 @@ export function OfficialResultBoard({
                           </p>
                         )}
                       </>
-                    ) : null}
+                    ) : (
+                      <p className="font-semibold text-slate-500">Puesto desierto</p>
+                    )}
                   </td>
 
                   <td className="py-3 pr-3 align-middle">
@@ -349,7 +362,7 @@ export function OfficialResultBoard({
                         distinctive={
                           row?.awardDistinctive ?? displayOutcome?.awardDistinctive ?? null
                         }
-                        deserted={Boolean(isDeserted && !row)}
+                        deserted={Boolean((isDeserted || (!row && forceOfficialStatus)) && !row)}
                       />
                     </div>
                   </td>

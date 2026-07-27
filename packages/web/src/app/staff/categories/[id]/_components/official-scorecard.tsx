@@ -65,7 +65,7 @@ export function OfficialScorecard({
   className,
 }: OfficialScorecardProps) {
   const rows = [...results]
-    .filter((row) => row.finalPosition != null)
+    .filter((row) => row.finalPosition != null && row.finalPosition >= 1 && row.finalPosition <= 5)
     .sort((a, b) => a.trackPosition - b.trackPosition);
 
   if (rows.length === 0 || forms.length === 0) {

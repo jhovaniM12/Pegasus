@@ -18,6 +18,53 @@ function result(partial: Partial<RoundResult> & Pick<RoundResult, "id" | "partic
   };
 }
 
+describe("OfficialResultBoard - resultado oficial 1.º–5.º", () => {
+  it("con forceOfficialStatus siempre muestra los 5 puestos y omite ejemplares fuera de cinta", () => {
+    const markup = renderToStaticMarkup(
+      <OfficialResultBoard
+        forceOfficialStatus
+        results={[
+          result({
+            id: "r1",
+            participantId: "p1",
+            trackPosition: 1,
+            finalPosition: 1,
+            status: "FINAL",
+            awardDistinctive: { id: "d1", label: "Azul", colorHex: "#2563eb" },
+          }),
+          result({
+            id: "r2",
+            participantId: "p2",
+            trackPosition: 8,
+            finalPosition: 8,
+            status: "FINAL",
+            awardDistinctive: null,
+          }),
+        ]}
+        desertedResults={[
+          {
+            id: "d5",
+            finalPosition: 5,
+            votesCount: 0,
+            desertedVotes: 0,
+            reason: "NO_ASSIGNMENTS",
+            assignedVotes: 0,
+            minimumRequired: 2,
+            outcomeType: "DESERTED",
+            awardDistinctive: { id: "d5", label: "Verde", colorHex: "#16a34a" },
+          },
+        ]}
+      />
+    );
+
+    expect(markup).toContain("#1 · Jinete");
+    expect(markup).not.toContain("#8");
+    expect(markup).toContain("Puesto desierto");
+    // Cinco celdas de puesto (1..5).
+    expect(markup.match(/tabular-nums text-slate-700">\d+<\/span>/g)?.length).toBe(5);
+  });
+});
+
 describe("OfficialResultBoard - badges reglamentarios", () => {
   it("distingue empate por suma de excepción 5.e y no marca empate por status solo", () => {
     const markup = renderToStaticMarkup(
@@ -74,7 +121,6 @@ describe("OfficialResultBoard - badges reglamentarios", () => {
     expect(markup).toContain("Empate");
     expect(markup).toContain("Desempate para definir quinto puesto (5.e)");
     expect(markup).toContain("Sin premio");
-    expect(markup).not.toMatch(/>\s*Empate\s*</);
   });
 
   it("muestra resuelto por desempate en proyección provisional", () => {

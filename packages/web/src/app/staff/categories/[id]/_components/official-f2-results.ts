@@ -56,6 +56,33 @@ function resolvePositionOutcomes(f2: RoundManagementItem): PositionOutcome[] {
   ].sort((a, b) => a.finalPosition - b.finalPosition);
 }
 
+/** Puestos premiables del resultado oficial (siempre 1.º–5.º). */
+export const OFFICIAL_AWARD_POSITIONS = 5;
+
+function isAwardPosition(position: number | null | undefined): boolean {
+  return position != null && position >= 1 && position <= OFFICIAL_AWARD_POSITIONS;
+}
+
+/**
+ * En el resultado oficial solo entran ejemplares con cinta (puestos 1–5)
+ * y los outcomes de esos mismos puestos (incluidos desiertos).
+ */
+function toOfficialAwardSlice(input: {
+  results: RoundResult[];
+  desertedResults: DesertedRoundResult[];
+  unawardedResults: UnawardedRoundResult[];
+  positionOutcomes: PositionOutcome[];
+  forms: RoundManagementForm[];
+}): OfficialF2Results {
+  return {
+    results: input.results.filter((result) => isAwardPosition(result.finalPosition)),
+    desertedResults: input.desertedResults.filter((row) => isAwardPosition(row.finalPosition)),
+    unawardedResults: input.unawardedResults.filter((row) => isAwardPosition(row.finalPosition)),
+    positionOutcomes: input.positionOutcomes.filter((row) => isAwardPosition(row.finalPosition)),
+    forms: input.forms,
+  };
+}
+
 /**
  * Lee el F2 oficial desde la API.
  * Tras el cierre, el backend ya reescribió posiciones/estados a FINAL;
@@ -71,7 +98,7 @@ export function buildOfficialF2Results(rounds: RoundManagementItem[]): OfficialF
 
   const isOfficial = f2.status === "CLOSED" || f2.results.every((result) => result.status === "FINAL");
   if (isOfficial) {
-    return {
+    return toOfficialAwardSlice({
       results: f2.results.map((result) => ({ ...result, resolvedByTieBreak: false })),
       desertedResults: f2.desertedResults ?? [],
       unawardedResults: f2.unawardedResults ?? [],
@@ -79,7 +106,7 @@ export function buildOfficialF2Results(rounds: RoundManagementItem[]): OfficialF
         (outcome) => outcome.outcomeType !== "TIE_BREAK_REQUIRED"
       ),
       forms: f2.forms,
-    };
+    });
   }
 
   const resolvedTieBreaks = rounds

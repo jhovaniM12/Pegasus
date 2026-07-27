@@ -53,6 +53,18 @@ describe("buildOfficialF2Results - cierre oficial sin fusión cliente", () => {
             status: "FINAL",
             awardDistinctive: null,
           },
+          {
+            id: "r6",
+            participantId: "p6",
+            trackPosition: 6,
+            riderName: "F",
+            registrationNumber: "6",
+            scoreValue: 20,
+            firstPlaceVotes: 0,
+            finalPosition: 6,
+            status: "FINAL",
+            awardDistinctive: null,
+          },
         ],
       }),
       baseRound({
@@ -79,6 +91,7 @@ describe("buildOfficialF2Results - cierre oficial sin fusión cliente", () => {
 
     expect(official?.results.find((row) => row.participantId === "p2")?.finalPosition).toBe(2);
     expect(official?.results.every((row) => row.status === "FINAL")).toBe(true);
+    expect(official?.results.map((row) => row.participantId)).toEqual(["p1", "p2"]);
   });
 });
 
