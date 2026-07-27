@@ -153,16 +153,17 @@ describe("escenarios integrados del dominio FA → F1/F2 → desempate", () => {
       3
     );
 
-    // Adjudicación por puesto: 1.º=p1 (2 votos), 3.º=p2 (2), 5.º=p7 (2).
-    // 2.º y 4.º desiertos (sin consideración mínima). La suma no compacta.
+    // Consideración por tarjetas + suma: p1 mayoría de 1.º; p4 suma 11; p2/p3/p5 empatan a 12.
+    // Un solo vacío en el 2.º no es mayoría de desierto.
     expect(f2.participants.find((p) => p.participantId === "p1")?.finalPosition).toBe(1);
-    expect(f2.participants.find((p) => p.participantId === "p2")?.finalPosition).toBe(3);
-    expect(f2.participants.find((p) => p.participantId === "p7")?.finalPosition).toBe(5);
-    expect(f2.desertedResults.map((row) => row.finalPosition).sort()).toEqual([2, 4]);
+    expect(f2.participants.find((p) => p.participantId === "p4")?.finalPosition).toBe(2);
+    expect(f2.desertedResults).toEqual([]);
     expect(f2.tiedGroups.some((group) => group.reason === "FIFTH_PLACE_EXCEPTION_5E")).toBe(false);
-    expect(f2.hasBlockingTie).toBe(false);
+    expect(f2.hasBlockingTie).toBe(true);
+    const sumTie = f2.tiedGroups.find((group) => group.reason === "SUM_EQUALITY");
+    expect(sumTie?.participantIds.sort()).toEqual(["p2", "p3", "p5"]);
+    expect([sumTie?.startPosition, sumTie?.endPosition]).toEqual([3, 5]);
 
-    // Un desempate sobre puestos 3–5 (escenario legacy) sigue resolviendo por suma relativa.
     const resolved = officialTieBreakPositions(
       [
         rankingCard("j1", [["p2", 3], ["p3", 4], ["p5", 5]], ["p2", "p3", "p5"]),

@@ -93,9 +93,9 @@ function desertedReasonDescription(outcome: PositionOutcome): string {
       const assigned = outcome.assignedVotes;
       const required = outcome.minimumRequired;
       if (required != null) {
-        return `Ningún ejemplar alcanzó la consideración mínima (${assigned}/${required})`;
+        return `Ningún ejemplar alcanzó la consideración mínima por tarjetas (${assigned}/${required})`;
       }
-      return "Ningún ejemplar alcanzó la consideración mínima";
+      return "Ningún ejemplar alcanzó la consideración mínima por tarjetas";
     }
     default:
       return "Ningún juez asignó este puesto con consideración suficiente";

@@ -18,12 +18,30 @@ function card(judgeUserId: string, orderedParticipantIds: string[], extraEligibl
   };
 }
 
+function rankingCard(
+  judgeUserId: string,
+  positions: Array<[participantId: string, position: number]>,
+  eligible: string[],
+  desertedPositions: number[] = []
+): JudgeCard {
+  return {
+    judgeUserId,
+    positions: positions.map(([participantId, position]) => ({ participantId, position })),
+    desertedPositions,
+    eligibleParticipantIds: eligible
+  };
+}
+
 function positionOf(result: ReturnType<typeof computeF2>, participantId: string): number | undefined {
   return result.participants.find((p) => p.participantId === participantId)?.finalPosition;
 }
 
 function sumOf(result: ReturnType<typeof computeF2>, participantId: string): number | undefined {
   return result.participants.find((p) => p.participantId === participantId)?.positionSum;
+}
+
+function cardsOf(result: ReturnType<typeof computeF2>, participantId: string): number | undefined {
+  return result.participants.find((p) => p.participantId === participantId)?.cardsCount;
 }
 
 function desertedAt(result: ReturnType<typeof computeF2>, finalPosition: number) {
@@ -39,148 +57,203 @@ describe("majorityThreshold", () => {
   });
 });
 
-describe("computeF2 - adjudicación por puesto", () => {
-  it("adjudica cuando hay consideración mínima por puesto (orden coincidente)", () => {
+describe("QA-F2-002 - consideración por tarjetas y suma", () => {
+  it("consolida el escenario QA-F2-002 sin desiertos ni desempate", () => {
+    // Tarjetas coherentes del defecto de producción (planilla del juez):
+    // #1: 1,6,1=8 (2/3, mayoría de 1.º) · #2: 2,1,2=5 · #3: 3,2,3=8 · #4: 5,3,4=12 · #5: 4,4,5=13
+    const eligible = ["h1", "h2", "h3", "h4", "h5"];
+    const cards: JudgeCard[] = [
+      rankingCard(
+        "j1",
+        [
+          ["h1", 1],
+          ["h2", 2],
+          ["h3", 3],
+          ["h5", 4],
+          ["h4", 5]
+        ],
+        eligible
+      ),
+      rankingCard(
+        "j2",
+        [
+          ["h2", 1],
+          ["h3", 2],
+          ["h4", 3],
+          ["h5", 4]
+        ],
+        eligible
+      ),
+      rankingCard(
+        "j3",
+        [
+          ["h1", 1],
+          ["h2", 2],
+          ["h3", 3],
+          ["h4", 4],
+          ["h5", 5]
+        ],
+        eligible
+      )
+    ];
+
+    const result = computeF2(cards, 3);
+
+    expect(result.majorityWinnerId).toBe("h1");
+    expect(positionOf(result, "h1")).toBe(1);
+    expect(positionOf(result, "h2")).toBe(2);
+    expect(positionOf(result, "h3")).toBe(3);
+    expect(positionOf(result, "h4")).toBe(4);
+    expect(positionOf(result, "h5")).toBe(5);
+
+    expect(sumOf(result, "h1")).toBe(8);
+    expect(sumOf(result, "h2")).toBe(5);
+    expect(sumOf(result, "h3")).toBe(8);
+    expect(sumOf(result, "h4")).toBe(12);
+    expect(sumOf(result, "h5")).toBe(13);
+
+    expect(cardsOf(result, "h1")).toBe(2);
+    expect(cardsOf(result, "h2")).toBe(3);
+    expect(cardsOf(result, "h3")).toBe(3);
+    expect(cardsOf(result, "h4")).toBe(3);
+    expect(cardsOf(result, "h5")).toBe(3);
+
+    expect(result.desertedResults).toEqual([]);
+    expect(result.hasBlockingTie).toBe(false);
+    expect(result.hasTie).toBe(false);
+  });
+});
+
+describe("computeF2 - consideración mínima por tarjetas", () => {
+  it("consideración 2 de 3 en posiciones diferentes sigue siendo premiable", () => {
+    const eligible = ["A", "B"];
+    const cards: JudgeCard[] = [
+      rankingCard("j1", [["A", 3], ["B", 1]], eligible),
+      rankingCard("j2", [["A", 4], ["B", 2]], eligible),
+      rankingCard("j3", [["B", 1]], eligible, [3, 4, 5])
+    ];
+    // A: 3+4+6=13, cards=2 → premiable; B: 1+2+1=4, cards=3, firsts=2 → mayoría
+    const result = computeF2(cards, 3);
+    expect(cardsOf(result, "A")).toBe(2);
+    expect(positionOf(result, "B")).toBe(1);
+    expect(positionOf(result, "A")).toBe(2);
+    expect(desertedAt(result, 1)).toBeUndefined();
+  });
+
+  it("consideración 3 de 5 en posiciones diferentes sigue siendo premiable", () => {
+    const eligible = ["A"];
+    const cards: JudgeCard[] = [
+      rankingCard("j1", [["A", 1]], eligible),
+      rankingCard("j2", [["A", 3]], eligible),
+      rankingCard("j3", [["A", 5]], eligible),
+      rankingCard("j4", [], eligible, [1, 2, 3, 4, 5]),
+      rankingCard("j5", [], eligible, [1, 2, 3, 4, 5])
+    ];
+    // A: cards=3 ≥ 3 → premiable; puestos 1 y 2 no tienen mayoría de desierto (2/5)
+    const result = computeF2(cards, 5);
+    expect(cardsOf(result, "A")).toBe(3);
+    expect(positionOf(result, "A")).toBe(1);
+    expect(desertedAt(result, 1)).toBeUndefined();
+  });
+
+  it("ejemplar considerado por un solo juez no es premiable", () => {
+    const result = computeF2(
+      [
+        rankingCard("j1", [["X", 1]], ["X"]),
+        rankingCard("j2", [], ["X"]),
+        rankingCard("j3", [], ["X"])
+      ],
+      3
+    );
+    expect(cardsOf(result, "X")).toBe(1);
+    expect(positionOf(result, "X")).toBe(6);
+    expect(desertedAt(result, 1)?.reason).toBe("INSUFFICIENT_CONSIDERATION");
+    expect(desertedAt(result, 1)?.assignedVotes).toBe(1);
+    expect(desertedAt(result, 1)?.minimumRequired).toBe(2);
+  });
+
+  it("adjudica por suma cuando hay consideración suficiente aunque no coincidan en el mismo puesto", () => {
     const cards = [
       card("j1", ["A", "B", "C"]),
       card("j2", ["A", "B", "C"]),
       card("j3", ["A", "B", "C"])
     ];
     const result = computeF2(cards, 3);
-
     expect(positionOf(result, "A")).toBe(1);
     expect(positionOf(result, "B")).toBe(2);
     expect(positionOf(result, "C")).toBe(3);
     expect(desertedAt(result, 4)?.reason).toBe("NO_ASSIGNMENTS");
     expect(desertedAt(result, 5)?.reason).toBe("NO_ASSIGNMENTS");
-    
-    expect(result.hasTie).toBe(false);
   });
+});
 
-  it("no compacta por suma: un ejemplar en 2.º no asciende si el 1.º quedó desierto", () => {
-    // Caso 1 del doc AJUSTE_LOGICA_PUESTOS_DESIERTOS_PEGASUS.md
-    const allEligible = ["h1", "h2", "h3", "h4"];
+describe("computeF2 - puestos desiertos por mayoría explícita", () => {
+  it("puesto vacío por un solo juez con tres jueces: no hay mayoría de desierto", () => {
+    const eligible = ["A", "B"];
     const cards: JudgeCard[] = [
-      {
-        judgeUserId: "j1",
-        positions: [{ participantId: "h1", position: 2 }],
-        desertedPositions: [1, 3, 4, 5],
-        eligibleParticipantIds: allEligible
-      },
-      {
-        judgeUserId: "j2",
-        positions: [{ participantId: "h1", position: 2 }],
-        desertedPositions: [1, 3, 4, 5],
-        eligibleParticipantIds: allEligible
-      },
-      {
-        judgeUserId: "j3",
-        positions: [],
-        desertedPositions: [1, 2, 3, 4, 5],
-        eligibleParticipantIds: allEligible
-      }
+      rankingCard("j1", [["A", 2], ["B", 3]], eligible, [1]),
+      rankingCard("j2", [["A", 1], ["B", 2]], eligible),
+      rankingCard("j3", [["A", 1], ["B", 2]], eligible)
     ];
-
     const result = computeF2(cards, 3);
-
-    expect(desertedAt(result, 1)?.reason).toBe("EXPLICIT_MAJORITY");
-    expect(positionOf(result, "h1")).toBe(2);
-    expect(sumOf(result, "h1")).toBe(10);
-    expect(result.participants.find((p) => p.participantId === "h1")?.cardsCount).toBe(2);
-    expect(desertedAt(result, 3)).toBeDefined();
-    expect(desertedAt(result, 4)).toBeDefined();
-    expect(desertedAt(result, 5)).toBeDefined();
-    expect(result.hasBlockingTie).toBe(false);
-  });
-
-  it("caso 2: un juez deja vacío y dos coinciden → adjudica el puesto", () => {
-    const cards: JudgeCard[] = [
-      {
-        judgeUserId: "j1",
-        positions: [],
-        desertedPositions: [1],
-        eligibleParticipantIds: ["h2", "h3"]
-      },
-      {
-        judgeUserId: "j2",
-        positions: [{ participantId: "h2", position: 1 }],
-        desertedPositions: [],
-        eligibleParticipantIds: ["h2", "h3"]
-      },
-      {
-        judgeUserId: "j3",
-        positions: [{ participantId: "h2", position: 1 }],
-        desertedPositions: [],
-        eligibleParticipantIds: ["h2", "h3"]
-      }
-    ];
-
-    const result = computeF2(cards, 3);
-    expect(positionOf(result, "h2")).toBe(1);
     expect(desertedAt(result, 1)).toBeUndefined();
+    expect(positionOf(result, "A")).toBe(1);
+    expect(positionOf(result, "B")).toBe(2);
   });
 
-  it("caso 3: tres asignaciones distintas sin mayoría → puesto desierto", () => {
-    const cards: JudgeCard[] = [
-      {
-        judgeUserId: "j1",
-        positions: [{ participantId: "h1", position: 3 }],
-        desertedPositions: [],
-        eligibleParticipantIds: ["h1", "h2", "h3"]
-      },
-      {
-        judgeUserId: "j2",
-        positions: [{ participantId: "h2", position: 3 }],
-        desertedPositions: [],
-        eligibleParticipantIds: ["h1", "h2", "h3"]
-      },
-      {
-        judgeUserId: "j3",
-        positions: [{ participantId: "h3", position: 3 }],
-        desertedPositions: [],
-        eligibleParticipantIds: ["h1", "h2", "h3"]
-      }
-    ];
-
-    const result = computeF2(cards, 3);
-    expect(desertedAt(result, 3)?.reason).toBe("INSUFFICIENT_CONSIDERATION");
-    
+  it("puesto vacío por dos de tres jueces: queda desierto EXPLICIT_MAJORITY", () => {
+    const eligible = ["A", "B", "C", "D", "E"];
+    const result = computeF2(
+      [
+        rankingCard("j1", [["A", 1], ["B", 2], ["C", 3], ["D", 4]], eligible, [5]),
+        rankingCard("j2", [["A", 1], ["B", 2], ["C", 3], ["D", 4]], eligible, [5]),
+        rankingCard("j3", [["A", 1], ["B", 2], ["C", 3], ["D", 4], ["E", 5]], eligible)
+      ],
+      3
+    );
+    expect(desertedAt(result, 5)).toEqual({
+      finalPosition: 5,
+      reason: "EXPLICIT_MAJORITY",
+      assignedVotes: 1,
+      minimumRequired: 2,
+      desertedVotes: 2
+    });
+    expect(positionOf(result, "E")).toBe(6);
   });
 
-  it("caso 4: todos dejan vacío → desierto con votos derivados", () => {
-    const cards: JudgeCard[] = [
-      {
-        judgeUserId: "j1",
-        positions: [
-          { participantId: "A", position: 1 },
-          { participantId: "B", position: 2 },
-          { participantId: "C", position: 3 }
-        ],
-        desertedPositions: [4, 5],
-        eligibleParticipantIds: ["A", "B", "C"]
-      },
-      {
-        judgeUserId: "j2",
-        positions: [
-          { participantId: "A", position: 1 },
-          { participantId: "B", position: 2 },
-          { participantId: "C", position: 3 }
-        ],
-        desertedPositions: [4, 5],
-        eligibleParticipantIds: ["A", "B", "C"]
-      },
-      {
-        judgeUserId: "j3",
-        positions: [
-          { participantId: "A", position: 1 },
-          { participantId: "B", position: 2 },
-          { participantId: "C", position: 3 }
-        ],
-        desertedPositions: [4, 5],
-        eligibleParticipantIds: ["A", "B", "C"]
-      }
-    ];
+  it("puesto vacío por tres de cinco jueces: queda desierto EXPLICIT_MAJORITY", () => {
+    const eligible = ["A"];
+    const result = computeF2(
+      [
+        rankingCard("j1", [["A", 1]], eligible),
+        rankingCard("j2", [["A", 1]], eligible),
+        rankingCard("j3", [], eligible, [1]),
+        rankingCard("j4", [], eligible, [1]),
+        rankingCard("j5", [], eligible, [1])
+      ],
+      5
+    );
+    expect(desertedAt(result, 1)).toMatchObject({
+      reason: "EXPLICIT_MAJORITY",
+      desertedVotes: 3,
+      assignedVotes: 2,
+      minimumRequired: 3
+    });
+    expect(cardsOf(result, "A")).toBe(2);
+    expect(positionOf(result, "A")).toBe(6);
+  });
 
+  it("todos dejan vacío → desierto con votos derivados", () => {
+    const cards: JudgeCard[] = [1, 2, 3].map((n) => ({
+      judgeUserId: `j${n}`,
+      positions: [
+        { participantId: "A", position: 1 },
+        { participantId: "B", position: 2 },
+        { participantId: "C", position: 3 }
+      ],
+      desertedPositions: [4, 5],
+      eligibleParticipantIds: ["A", "B", "C"]
+    }));
     const result = computeF2(cards, 3);
     expect(desertedAt(result, 4)).toEqual({
       finalPosition: 4,
@@ -191,51 +264,80 @@ describe("computeF2 - adjudicación por puesto", () => {
     });
   });
 
-  it("caso 6: con 5 jueces, 3 votos adjudican y 2 no alcanzan", () => {
-    const allEligible = ["A", "B"];
-    const awardCards: JudgeCard[] = [
-      { judgeUserId: "j1", positions: [{ participantId: "A", position: 1 }], desertedPositions: [], eligibleParticipantIds: allEligible },
-      { judgeUserId: "j2", positions: [{ participantId: "A", position: 1 }], desertedPositions: [], eligibleParticipantIds: allEligible },
-      { judgeUserId: "j3", positions: [{ participantId: "A", position: 1 }], desertedPositions: [], eligibleParticipantIds: allEligible },
-      { judgeUserId: "j4", positions: [], desertedPositions: [1], eligibleParticipantIds: allEligible },
-      { judgeUserId: "j5", positions: [], desertedPositions: [1], eligibleParticipantIds: allEligible }
+  it("no compacta alrededor de un puesto con mayoría de desierto", () => {
+    const allEligible = ["h1", "h2", "h3", "h4"];
+    const cards: JudgeCard[] = [
+      rankingCard("j1", [["h1", 2]], allEligible, [1, 3, 4, 5]),
+      rankingCard("j2", [["h1", 2]], allEligible, [1, 3, 4, 5]),
+      rankingCard("j3", [], allEligible, [1, 2, 3, 4, 5])
     ];
-    expect(positionOf(computeF2(awardCards, 5), "A")).toBe(1);
-
-    const desertCards: JudgeCard[] = [
-      { judgeUserId: "j1", positions: [{ participantId: "A", position: 1 }], desertedPositions: [], eligibleParticipantIds: allEligible },
-      { judgeUserId: "j2", positions: [{ participantId: "A", position: 1 }], desertedPositions: [], eligibleParticipantIds: allEligible },
-      { judgeUserId: "j3", positions: [], desertedPositions: [1], eligibleParticipantIds: allEligible },
-      { judgeUserId: "j4", positions: [], desertedPositions: [1], eligibleParticipantIds: allEligible },
-      { judgeUserId: "j5", positions: [], desertedPositions: [1], eligibleParticipantIds: allEligible }
-    ];
-    const deserted = computeF2(desertCards, 5);
-    expect(desertedAt(deserted, 1)?.reason).toBe("EXPLICIT_MAJORITY");
-    expect(positionOf(deserted, "A")).toBe(6);
+    const result = computeF2(cards, 3);
+    expect(desertedAt(result, 1)?.reason).toBe("EXPLICIT_MAJORITY");
+    expect(positionOf(result, "h1")).toBe(2);
+    expect(sumOf(result, "h1")).toBe(10);
+    expect(cardsOf(result, "h1")).toBe(2);
+    expect(result.desertedResults.map((row) => row.finalPosition)).toEqual([1, 3, 4, 5]);
+    expect(result.hasBlockingTie).toBe(false);
   });
 });
 
-describe("computeF2 - mayoría de primeros puestos", () => {
-  it("la mayoría de primeros puestos adjudica el 1.º por votos de ese puesto", () => {
+describe("computeF2 - puestos vacíos sin premiables", () => {
+  it("puesto vacío sin ejemplares premiables disponibles → NO_ASSIGNMENTS", () => {
+    const result = computeF2(
+      [
+        rankingCard("j1", [["A", 1]], ["A"]),
+        rankingCard("j2", [["A", 1]], ["A"]),
+        rankingCard("j3", [["A", 1]], ["A"])
+      ],
+      3
+    );
+    expect(positionOf(result, "A")).toBe(1);
+    expect(desertedAt(result, 4)).toMatchObject({
+      reason: "NO_ASSIGNMENTS",
+      assignedVotes: 0,
+      minimumRequired: 2
+    });
+    expect(desertedAt(result, 5)?.reason).toBe("NO_ASSIGNMENTS");
+  });
+
+  it("cinco puestos visibles con menos de cinco participantes", () => {
+    const result = computeF2([card("j1", ["A", "B"])], 1);
+    expect(positionOf(result, "A")).toBe(1);
+    expect(positionOf(result, "B")).toBe(2);
+    expect(result.desertedResults.map((row) => row.finalPosition)).toEqual([3, 4, 5]);
+    expect(result.desertedResults.every((row) => row.reason === "NO_ASSIGNMENTS")).toBe(true);
+  });
+});
+
+describe("computeF2 - mayoría de primeros y empates", () => {
+  it("mayoría de primeros prevalece sobre la suma", () => {
     const cards = [
       card("j1", ["A", "B", "C"]),
       card("j2", ["A", "B", "C"]),
       card("j3", ["B", "C", "A"])
     ];
+    // A: 1+1+3=5, firsts=2; B: 2+2+1=5 — A gana el 1.º por mayoría aunque la suma empate
     const result = computeF2(cards, 3);
     expect(result.majorityWinnerId).toBe("A");
     expect(positionOf(result, "A")).toBe(1);
+    expect(positionOf(result, "B")).toBe(2);
   });
 
-  it("sin mayoría clara en un puesto, el puesto queda desierto", () => {
+  it("empate por suma entre premiables requiere desempate", () => {
     const cards = [card("j1", ["A", "B"]), card("j2", ["B", "A"])];
     const result = computeF2(cards, 2);
     expect(result.majorityWinnerId).toBeNull();
-    expect(desertedAt(result, 1)?.reason).toBe("INSUFFICIENT_CONSIDERATION");
-    expect(desertedAt(result, 2)?.reason).toBe("INSUFFICIENT_CONSIDERATION");
-    // Misma suma residual fuera del top 5: empate no bloqueante.
-    expect(result.hasTie).toBe(true);
-    expect(result.hasBlockingTie).toBe(false);
+    expect(result.hasBlockingTie).toBe(true);
+    expect(result.tiedGroups).toEqual([
+      expect.objectContaining({
+        reason: "SUM_EQUALITY",
+        participantIds: expect.arrayContaining(["A", "B"]),
+        positionSum: 3,
+        startPosition: 1,
+        endPosition: 2,
+        blocksClosure: true
+      })
+    ]);
   });
 });
 
@@ -247,56 +349,44 @@ describe("computeF2 - voto de castigo y suma", () => {
       card("j3", ["A", "B", "C"])
     ];
     const result = computeF2(cards, 3);
-
     expect(positionOf(result, "A")).toBe(1);
     expect(positionOf(result, "B")).toBe(2);
     expect(sumOf(result, "A")).toBe(3);
     expect(sumOf(result, "B")).toBe(6);
-    // C: 6+3+3=12; solo 2 votos en 3.º → no alcanza umbral 2? Wait 2 votes at pos 3 from j2,j3
     expect(sumOf(result, "C")).toBe(12);
+    expect(cardsOf(result, "C")).toBe(2);
     expect(positionOf(result, "C")).toBe(3);
   });
 
-  it("conserva sumas del escenario con 8 ejemplares sin compactar por mérito residual", () => {
+  it("ordena por suma a premiables aunque no coincidan en el mismo puesto exacto", () => {
     const allEligible = ["p5", "p6", "p3", "p7", "p1", "p8", "p14", "p2"];
     const cards: JudgeCard[] = [
-      {
-        judgeUserId: "j1",
-        positions: [
-          { participantId: "p7", position: 1 },
-          { participantId: "p8", position: 3 }
+      rankingCard("j1", [["p7", 1], ["p8", 3]], allEligible),
+      rankingCard(
+        "j2",
+        [
+          ["p5", 1],
+          ["p6", 2],
+          ["p3", 3],
+          ["p1", 4],
+          ["p2", 5]
         ],
-        desertedPositions: [],
-        eligibleParticipantIds: allEligible
-      },
-      {
-        judgeUserId: "j2",
-        positions: [
-          { participantId: "p5", position: 1 },
-          { participantId: "p6", position: 2 },
-          { participantId: "p3", position: 3 },
-          { participantId: "p1", position: 4 },
-          { participantId: "p2", position: 5 }
+        allEligible
+      ),
+      rankingCard(
+        "j3",
+        [
+          ["p5", 1],
+          ["p6", 2],
+          ["p3", 3],
+          ["p14", 4],
+          ["p1", 5]
         ],
-        desertedPositions: [],
-        eligibleParticipantIds: allEligible
-      },
-      {
-        judgeUserId: "j3",
-        positions: [
-          { participantId: "p5", position: 1 },
-          { participantId: "p6", position: 2 },
-          { participantId: "p3", position: 3 },
-          { participantId: "p14", position: 4 },
-          { participantId: "p1", position: 5 }
-        ],
-        desertedPositions: [],
-        eligibleParticipantIds: allEligible
-      }
+        allEligible
+      )
     ];
 
     const result = computeF2(cards, 3);
-
     expect(sumOf(result, "p5")).toBe(8);
     expect(sumOf(result, "p6")).toBe(10);
     expect(sumOf(result, "p3")).toBe(12);
@@ -304,10 +394,10 @@ describe("computeF2 - voto de castigo y suma", () => {
     expect(positionOf(result, "p5")).toBe(1);
     expect(positionOf(result, "p6")).toBe(2);
     expect(positionOf(result, "p3")).toBe(3);
-    // 4.º: p1 y p14 empatan a 1 voto → desierto; 5.º: p2 y p1 a 1 → desierto.
-    expect(desertedAt(result, 4)?.reason).toBe("INSUFFICIENT_CONSIDERATION");
+    expect(positionOf(result, "p1")).toBe(4);
+    // p7/p8/p14/p2 solo tienen 1 tarjeta → no premiables; el 5.º queda insuficiente.
     expect(desertedAt(result, 5)?.reason).toBe("INSUFFICIENT_CONSIDERATION");
-    
+    expect(desertedAt(result, 5)?.assignedVotes).toBe(1);
     expect(result.hasBlockingTie).toBe(false);
   });
 
@@ -316,62 +406,12 @@ describe("computeF2 - voto de castigo y suma", () => {
       [card("j1", ["A", "B"], ["C"]), card("j2", ["A", "C", "B"]), card("j3", ["A", "B", "C"])],
       3
     );
-    expect(result.participants.find((p) => p.participantId === "A")?.cardsCount).toBe(3);
-    expect(result.participants.find((p) => p.participantId === "C")?.cardsCount).toBe(2);
+    expect(cardsOf(result, "A")).toBe(3);
+    expect(cardsOf(result, "C")).toBe(2);
   });
 });
 
-describe("computeF2 - desiertos explícitos y 5.e", () => {
-  it("Nota 5.b: mayoría explícita de desierto prevalece aunque un juez asigne el puesto", () => {
-    const allEligible = ["A", "B", "C", "D", "E"];
-    const cards: JudgeCard[] = [
-      {
-        judgeUserId: "j1",
-        positions: [
-          { participantId: "A", position: 1 },
-          { participantId: "B", position: 2 },
-          { participantId: "C", position: 3 },
-          { participantId: "D", position: 4 }
-        ],
-        desertedPositions: [5],
-        eligibleParticipantIds: allEligible
-      },
-      {
-        judgeUserId: "j2",
-        positions: [
-          { participantId: "A", position: 1 },
-          { participantId: "B", position: 2 },
-          { participantId: "C", position: 3 },
-          { participantId: "D", position: 4 }
-        ],
-        desertedPositions: [5],
-        eligibleParticipantIds: allEligible
-      },
-      {
-        judgeUserId: "j3",
-        positions: [
-          { participantId: "A", position: 1 },
-          { participantId: "B", position: 2 },
-          { participantId: "C", position: 3 },
-          { participantId: "D", position: 4 },
-          { participantId: "E", position: 5 }
-        ],
-        desertedPositions: [],
-        eligibleParticipantIds: allEligible
-      }
-    ];
-
-    const result = computeF2(cards, 3);
-    expect(desertedAt(result, 5)).toEqual({
-      finalPosition: 5,
-      desertedVotes: 2,
-      assignedVotes: 1,
-      minimumRequired: 2,
-      reason: "EXPLICIT_MAJORITY"
-    });
-    expect(positionOf(result, "E")).toBe(6);
-  });
-
+describe("computeF2 - excepción 5.e", () => {
   it("declara DESERTED el quinto cuando todos lo dejan vacío", () => {
     const allEligible = ["A", "B", "C", "D", "E"];
     const cards: JudgeCard[] = [1, 2, 3].map((n) => ({
@@ -385,7 +425,6 @@ describe("computeF2 - desiertos explícitos y 5.e", () => {
       desertedPositions: [5],
       eligibleParticipantIds: allEligible
     }));
-
     const result = computeF2(cards, 3);
     expect(desertedAt(result, 5)).toEqual({
       finalPosition: 5,
@@ -406,11 +445,11 @@ describe("computeF2 - desiertos explícitos y 5.e", () => {
       ],
       3
     );
-
     expect(positionOf(result, "A")).toBe(1);
-    // Quinto: F tiene 2 votos (j2, j3) frente a 1 de E → adjudicado; E queda residual.
-    expect(positionOf(result, "F")).toBe(5);
-    expect(positionOf(result, "E")).toBe(6);
+    // Por suma: G=14, E=15, F=16 → G 4.º, E 5.º, F residual.
+    expect(positionOf(result, "G")).toBe(4);
+    expect(positionOf(result, "E")).toBe(5);
+    expect(positionOf(result, "F")).toBe(6);
     expect(result.tiedGroups).toHaveLength(0);
     expect(result.hasBlockingTie).toBe(false);
   });
@@ -426,7 +465,6 @@ describe("computeF2 - desiertos explícitos y 5.e", () => {
       3
     );
     const fifthTie = result.tiedGroups.find((group) => group.reason === "FIFTH_PLACE_EXCEPTION_5E");
-
     expect(fifthTie).toBeDefined();
     expect(fifthTie!.participantIds.sort()).toEqual(["E", "F", "G"]);
     expect(fifthTie!.blocksClosure).toBe(true);
@@ -436,47 +474,42 @@ describe("computeF2 - desiertos explícitos y 5.e", () => {
   it("DECISIÓN_OPERATIVA: excluye del 5.e a quienes ya tienen 1º–4º provisional", () => {
     const allEligible = ["A", "B", "C", "D", "E", "F", "G"];
     const cards: JudgeCard[] = [
-      {
-        judgeUserId: "j1",
-        positions: [
-          { participantId: "A", position: 1 },
-          { participantId: "B", position: 2 },
-          { participantId: "C", position: 3 },
-          { participantId: "D", position: 4 },
-          { participantId: "E", position: 5 }
+      rankingCard(
+        "j1",
+        [
+          ["A", 1],
+          ["B", 2],
+          ["C", 3],
+          ["D", 4],
+          ["E", 5]
         ],
-        desertedPositions: [],
-        eligibleParticipantIds: allEligible
-      },
-      {
-        judgeUserId: "j2",
-        positions: [
-          { participantId: "A", position: 1 },
-          { participantId: "B", position: 2 },
-          { participantId: "E", position: 3 },
-          { participantId: "D", position: 4 },
-          { participantId: "F", position: 5 }
+        allEligible
+      ),
+      rankingCard(
+        "j2",
+        [
+          ["A", 1],
+          ["B", 2],
+          ["E", 3],
+          ["D", 4],
+          ["F", 5]
         ],
-        desertedPositions: [],
-        eligibleParticipantIds: allEligible
-      },
-      {
-        judgeUserId: "j3",
-        positions: [
-          { participantId: "A", position: 1 },
-          { participantId: "B", position: 2 },
-          { participantId: "E", position: 3 },
-          { participantId: "D", position: 4 },
-          { participantId: "G", position: 5 }
+        allEligible
+      ),
+      rankingCard(
+        "j3",
+        [
+          ["A", 1],
+          ["B", 2],
+          ["E", 3],
+          ["D", 4],
+          ["G", 5]
         ],
-        desertedPositions: [],
-        eligibleParticipantIds: allEligible
-      }
+        allEligible
+      )
     ];
-
     const result = computeF2(cards, 3);
     const fifthTie = result.tiedGroups.find((group) => group.reason === "FIFTH_PLACE_EXCEPTION_5E");
-
     expect(positionOf(result, "E")).toBe(3);
     expect(fifthTie!.participantIds.sort()).toEqual(["F", "G"]);
     expect(fifthTie!.participantIds).not.toContain("E");
@@ -525,52 +558,15 @@ describe("computeF2 - casos borde", () => {
     expect(desertedAt(result, 5)?.reason).toBe("NO_ASSIGNMENTS");
   });
 
-  it("puestos sin asignación suficiente se reportan como DESERTED (no UNAWARDED)", () => {
-    const result = computeF2(
-      [card("j1", ["A", "B", "C"]), card("j2", ["A", "B", "C"]), card("j3", ["A", "B", "C"])],
-      3
-    );
-    
-    expect(result.desertedResults.map((row) => row.finalPosition)).toEqual([4, 5]);
-  });
-
-  it("consideración insuficiente en un puesto produce DESERTED con reason INSUFFICIENT_CONSIDERATION", () => {
-    const cards: JudgeCard[] = [
-      {
-        judgeUserId: "j1",
-        positions: [{ participantId: "X", position: 1 }],
-        desertedPositions: [],
-        eligibleParticipantIds: ["X"]
-      },
-      {
-        judgeUserId: "j2",
-        positions: [],
-        desertedPositions: [],
-        eligibleParticipantIds: ["X"]
-      },
-      {
-        judgeUserId: "j3",
-        positions: [],
-        desertedPositions: [],
-        eligibleParticipantIds: ["X"]
-      }
-    ];
-    const result = computeF2(cards, 3);
-    expect(desertedAt(result, 1)?.reason).toBe("INSUFFICIENT_CONSIDERATION");
-    
-    expect(positionOf(result, "X")).toBe(6);
-  });
-
-  it("con 5 jueces exige 3 votos para desierto explícito y para adjudicación", () => {
+  it("con 5 jueces: 3 votos de tarjeta adjudican aunque el puesto tenga 2 vacíos", () => {
     const allEligible = ["A", "B", "C", "D"];
     const cards: JudgeCard[] = [
-      { judgeUserId: "j1", positions: [{ participantId: "A", position: 1 }], desertedPositions: [2], eligibleParticipantIds: allEligible },
-      { judgeUserId: "j2", positions: [{ participantId: "A", position: 1 }], desertedPositions: [2], eligibleParticipantIds: allEligible },
-      { judgeUserId: "j3", positions: [{ participantId: "A", position: 1 }], desertedPositions: [2], eligibleParticipantIds: allEligible },
-      { judgeUserId: "j4", positions: [{ participantId: "C", position: 1 }], desertedPositions: [], eligibleParticipantIds: allEligible },
-      { judgeUserId: "j5", positions: [{ participantId: "C", position: 1 }], desertedPositions: [], eligibleParticipantIds: allEligible }
+      rankingCard("j1", [["A", 1]], allEligible, [2]),
+      rankingCard("j2", [["A", 1]], allEligible, [2]),
+      rankingCard("j3", [["A", 1]], allEligible, [2]),
+      rankingCard("j4", [["C", 1]], allEligible),
+      rankingCard("j5", [["C", 1]], allEligible)
     ];
-
     const result = computeF2(cards, 5);
     expect(positionOf(result, "A")).toBe(1);
     expect(desertedAt(result, 2)).toEqual({
@@ -580,8 +576,21 @@ describe("computeF2 - casos borde", () => {
       minimumRequired: 3,
       reason: "EXPLICIT_MAJORITY"
     });
-    expect(desertedAt(result, 3)?.reason).toBe("NO_ASSIGNMENTS");
+    // C solo tiene 2 tarjetas < 3 → no premiable.
+    expect(cardsOf(result, "C")).toBe(2);
     expect(positionOf(result, "C")).toBe(6);
+  });
+
+  it("idempotencia: consolidar dos veces produce el mismo resultado", () => {
+    const cards = [
+      rankingCard("j1", [["A", 2]], ["A"], [1, 3, 4, 5]),
+      rankingCard("j2", [["A", 2]], ["A"], [1, 3, 4, 5]),
+      rankingCard("j3", [], ["A"], [1, 2, 3, 4, 5])
+    ];
+    const first = computeF2(cards, 3);
+    const second = computeF2(cards, 3);
+    expect(second.desertedResults).toEqual(first.desertedResults);
+    expect(second.participants).toEqual(first.participants);
   });
 });
 
@@ -592,7 +601,6 @@ describe("computeF2 - empates residuales por suma", () => {
       [card("j1", ["A", "B", "C", "D", "E", "F", "G"]), card("j2", ["A", "B", "C", "D", "E", "G", "F"])],
       2
     );
-
     expect(positionOf(result, "A")).toBe(1);
     expect(positionOf(result, "E")).toBe(5);
     expect(result.hasTie).toBe(true);
@@ -602,13 +610,12 @@ describe("computeF2 - empates residuales por suma", () => {
     expect(tieGroup!.blocksClosure).toBe(false);
   });
 
-  it("ejemplares adjudicados por votos no abren empate por suma aunque compartan total", () => {
+  it("mayoría de primeros no abre empate por suma con quien comparte total", () => {
     const cards = [
       card("j1", ["A", "B", "C"]),
       card("j2", ["A", "B", "C"]),
       card("j3", ["B", "A", "C"])
     ];
-    // A: 1+1+2=4, B: 2+2+1=5 — distintos; sin empate.
     const result = computeF2(cards, 3);
     expect(positionOf(result, "A")).toBe(1);
     expect(positionOf(result, "B")).toBe(2);

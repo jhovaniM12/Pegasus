@@ -218,7 +218,10 @@ describe("E2E dominio: pre-pista → FA → F1 → F2 → desempate → oficial"
     ).toEqual([]);
     expect(official.every((r) => r.status === "FINAL")).toBe(true);
     expect(official.find((r) => r.participantId === "p1")?.finalPosition).toBe(1);
-    expect(f2.desertedResults.some((row) => row.finalPosition === 2)).toBe(true);
+    // Con consideración por tarjetas, los cinco premiables llenan 1..5; sin mayoría de vacío no hay desierto.
+    expect(f2.desertedResults).toEqual([]);
+    expect(official.find((r) => r.participantId === "p4")?.finalPosition).toBe(4);
+    expect(official.find((r) => r.participantId === "p5")?.finalPosition).toBe(5);
   });
 
   it("5 jueces: 5.e con quintos distintos → desempate → oficial", () => {

@@ -14,16 +14,20 @@ export type { DesertedReason };
  * 3. Regla de voto de castigo: si un juez NO asigna posición a un participante, ese
  *    participante recibe automáticamente la posición N+1 (donde N = MAX_AWARD_POSITIONS),
  *    es decir, posición 6. La suma se conserva para auditoría y desempates.
- * 4. Consolidación por puesto: un ejemplar solo ocupa un puesto si alcanza la
- *    consideración mínima (mayoría) de asignaciones a ESE puesto. La suma no compacta
- *    ni asciende ejemplares hacia puestos superiores desiertos.
- * 5. Si ninguna asignación alcanza la consideración mínima, el puesto queda DESERTED
- *    (incluye cero asignaciones y consideración insuficiente).
- * 6. Excepción de "mayoría de primeros puestos": si un ejemplar recibe el primer
- *    puesto en la mayoría de las tarjetas, queda adjudicado en el 1.º.
- * 7. Igualdad de suma: si dos o más ejemplares con consideración mínima comparten
- *    suma y no tienen puesto premiable adjudicado por votos, forman un grupo de empate.
- * 8. Excepción 5.e: si todos los jueces asignan quinto, nadie lo declara desierto y
+ * 4. Consideración mínima: se calcula por la cantidad de tarjetas en las que el ejemplar
+ *    aparece (cardsCount), independientemente de la posición exacta en cada tarjeta.
+ *    Umbral = mayoría simple (2/3, 3/5, 1/1). Quienes no lo alcanzan no son premiables.
+ * 5. Un puesto oficial queda desierto solo si la mayoría reglamentaria lo dejó vacío
+ *    (EXPLICIT_MAJORITY), o si no hay ejemplares premiables disponibles para llenarlo
+ *    (NO_ASSIGNMENTS / INSUFFICIENT_CONSIDERATION). La falta de coincidencia exacta
+ *    en un puesto NO equivale a desierto.
+ * 6. Los ejemplares premiables se ordenan por suma (respetando mayoría de primeros) y
+ *    ocupan los puestos disponibles 1..5, sin rellenar los bloqueados por mayoría de
+ *    desierto. Siempre existen las cinco posiciones oficiales.
+ * 7. Excepción de "mayoría de primeros puestos": si un ejemplar recibe el primer
+ *    puesto en la mayoría de las tarjetas, queda primero entre los premiables.
+ * 8. Igualdad de suma entre premiables abre desempate reglamentario.
+ * 9. Excepción 5.e: si todos los jueces asignan quinto, nadie lo declara desierto y
  *    cada juez escoge un ejemplar diferente, esos ejemplares forman un bloque especial
  *    independiente de las sumas y de la consideración mínima ordinaria.
  *    DECISIÓN_OPERATIVA (R-F2-5E-EXCL): se excluyen del bloque quienes ya tienen
@@ -65,13 +69,17 @@ export type PositionOutcomeType =
   | "UNAWARDED_INSUFFICIENT_CONSIDERATION"
   | "TIE_BREAK_REQUIRED";
 
-/** Modo de consolidación: P2 por puesto absoluto; desempate por ranking relativo de suma. */
+/** Modo de consolidación: P2 por puestos absolutos; desempate por ranking relativo de suma. */
 export type ScoringMode = "P2" | "TIE_BREAK";
 
 export type DesertedPositionResult = {
   finalPosition: number;
   reason: DesertedReason;
-  /** Máximo de votos de asignación que alcanzó un ejemplar en ese puesto. */
+  /**
+   * Para EXPLICIT_MAJORITY: máximo de asignaciones exactas a ese puesto.
+   * Para INSUFFICIENT_CONSIDERATION: máximo cardsCount entre ejemplares no premiables.
+   * Para NO_ASSIGNMENTS: 0.
+   */
   assignedVotes: number;
   minimumRequired: number;
   /** Votos de puesto desierto (explícitos o derivados al cerrar). */
@@ -106,8 +114,8 @@ export type TiedGroup = {
 export type ScoringResult = {
   participants: ScoredParticipant[];
   /**
-   * Puestos oficiales desiertos: sin asignación suficiente para ese puesto
-   * (cero asignaciones, consideración insuficiente o mayoría explícita de desierto).
+   * Puestos oficiales desiertos (mayoría explícita, sin premiables disponibles
+   * o con ejemplares que no alcanzaron consideración mínima por tarjetas).
    */
   desertedResults: DesertedPositionResult[];
   /** True si existe al menos un grupo empatado (incluye no bloqueantes). */
@@ -154,12 +162,44 @@ function buildDesertedResult(input: {
   };
 }
 
+function compareBySumMerit(a: Aggregate, b: Aggregate, majorityWinnerId: string | null): number {
+  if (majorityWinnerId) {
+    if (a.participantId === majorityWinnerId) return -1;
+    if (b.participantId === majorityWinnerId) return 1;
+  }
+  if (a.positionSum !== b.positionSum) return a.positionSum - b.positionSum;
+  if (a.firstPlaceVotes !== b.firstPlaceVotes) return b.firstPlaceVotes - a.firstPlaceVotes;
+  return a.participantId.localeCompare(b.participantId);
+}
+
+function maxExactAssignmentVotes(
+  cards: JudgeCard[],
+  position: number
+): number {
+  const votesByHorse = new Map<string, number>();
+  for (const card of cards) {
+    const seen = new Set<string>();
+    for (const entry of card.positions) {
+      if (entry.position !== position) continue;
+      if (seen.has(entry.participantId)) continue;
+      seen.add(entry.participantId);
+      votesByHorse.set(entry.participantId, (votesByHorse.get(entry.participantId) ?? 0) + 1);
+    }
+  }
+  let best = 0;
+  for (const votes of votesByHorse.values()) {
+    if (votes > best) best = votes;
+  }
+  return best;
+}
+
 /**
  * Calcula el resultado oficial de una tarjeta F2 o de desempate.
  *
  * @param cards Tarjetas de cada juez (una por juez) con los puestos asignados.
  * @param judgeCount Número total de jueces de la feria (para el umbral de mayoría).
- * @param mode `P2` adjudica por votos de puesto absoluto; `TIE_BREAK` ordena por suma relativa 1..n.
+ * @param mode `P2` adjudica puestos absolutos con consideración por tarjetas;
+ *             `TIE_BREAK` ordena por suma relativa 1..n.
  */
 export function computeF2(
   cards: JudgeCard[],
@@ -189,7 +229,7 @@ export function computeF2(
 
   if (rosterIds.size === 0) return empty;
 
-  // Agregación: voto de castigo afecta la suma pero no el cardsCount real.
+  // 1–2. Completar castigos y agregar por ejemplar.
   const aggregates: Aggregate[] = [];
   for (const participantId of rosterIds) {
     let positionSum = 0;
@@ -208,6 +248,7 @@ export function computeF2(
     aggregates.push({ participantId, positionSum, firstPlaceVotes, cardsCount: realCardsCount });
   }
 
+  // 4. Excepción de mayoría de primeros.
   const majorityWinner = aggregates.find((agg) => agg.firstPlaceVotes >= threshold) ?? null;
   const majorityWinnerId = majorityWinner?.participantId ?? null;
 
@@ -215,7 +256,7 @@ export function computeF2(
     return computeRelativeBySumRanking(aggregates, majorityWinnerId, threshold);
   }
 
-  // Conteo de votos de desierto y de asignaciones por puesto / ejemplar.
+  // 5. Votos de desierto por puesto.
   const desertedVoteCountByPosition = new Map<number, number>();
   for (const card of cards) {
     const uniqueDeserted = new Set(card.desertedPositions);
@@ -225,40 +266,33 @@ export function computeF2(
     }
   }
 
-  const assignmentVotesByPosition = new Map<number, Map<string, number>>();
-  for (const card of cards) {
-    const seenPositions = new Set<number>();
-    for (const entry of card.positions) {
-      if (!Number.isInteger(entry.position) || entry.position < 1 || entry.position > MAX_AWARD_POSITIONS) {
-        continue;
-      }
-      if (seenPositions.has(entry.position)) continue;
-      seenPositions.add(entry.position);
-      const byHorse = assignmentVotesByPosition.get(entry.position) ?? new Map<string, number>();
-      byHorse.set(entry.participantId, (byHorse.get(entry.participantId) ?? 0) + 1);
-      assignmentVotesByPosition.set(entry.position, byHorse);
+  const explicitDesertedPositions = new Set<number>();
+  for (let position = 1; position <= MAX_AWARD_POSITIONS; position += 1) {
+    if ((desertedVoteCountByPosition.get(position) ?? 0) >= threshold) {
+      explicitDesertedPositions.add(position);
     }
   }
 
-  // Adjudicación por puesto: la suma no compacta ni asciende ejemplares.
+  // 3. Excluir no premiables (consideración global por tarjetas).
+  const awardable = aggregates
+    .filter((agg) => agg.cardsCount >= threshold)
+    .sort((a, b) => compareBySumMerit(a, b, majorityWinnerId));
+
+  // 6–7. Asignar premiables a puestos disponibles sin rellenar mayoría de desierto.
   const ranked: Array<Aggregate & { finalPosition: number }> = [];
   const awardedIds = new Set<string>();
   const desertedResults: DesertedPositionResult[] = [];
+  let awardableIndex = 0;
 
   for (let position = 1; position <= MAX_AWARD_POSITIONS; position += 1) {
     const desertedVotes = desertedVoteCountByPosition.get(position) ?? 0;
-    const votesByHorse = assignmentVotesByPosition.get(position) ?? new Map<string, number>();
-    let bestVotes = 0;
-    for (const votes of votesByHorse.values()) {
-      if (votes > bestVotes) bestVotes = votes;
-    }
 
-    if (desertedVotes >= threshold) {
+    if (explicitDesertedPositions.has(position)) {
       desertedResults.push(
         buildDesertedResult({
           finalPosition: position,
           reason: "EXPLICIT_MAJORITY",
-          assignedVotes: bestVotes,
+          assignedVotes: maxExactAssignmentVotes(cards, position),
           minimumRequired: threshold,
           desertedVotes
         })
@@ -266,41 +300,35 @@ export function computeF2(
       continue;
     }
 
-    const leaders = [...votesByHorse.entries()].filter(([, votes]) => votes === bestVotes);
-    const winnerId = leaders.length === 1 ? leaders[0]?.[0] ?? null : null;
+    if (awardableIndex >= awardable.length) {
+      const remaining = aggregates.filter((agg) => !awardedIds.has(agg.participantId));
+      const remainingConsidered = remaining.filter((agg) => agg.cardsCount > 0);
+      const maxCards = remainingConsidered.reduce((max, agg) => Math.max(max, agg.cardsCount), 0);
+      const reason: DesertedReason =
+        remainingConsidered.length > 0 ? "INSUFFICIENT_CONSIDERATION" : "NO_ASSIGNMENTS";
 
-    if (winnerId != null && bestVotes >= threshold && !awardedIds.has(winnerId)) {
-      const aggregate = aggregates.find((agg) => agg.participantId === winnerId);
-      if (aggregate) {
-        ranked.push({ ...aggregate, finalPosition: position });
-        awardedIds.add(winnerId);
-        continue;
-      }
+      desertedResults.push(
+        buildDesertedResult({
+          finalPosition: position,
+          reason,
+          assignedVotes: reason === "INSUFFICIENT_CONSIDERATION" ? maxCards : 0,
+          minimumRequired: threshold,
+          desertedVotes
+        })
+      );
+      continue;
     }
 
-    desertedResults.push(
-      buildDesertedResult({
-        finalPosition: position,
-        reason: bestVotes === 0 ? "NO_ASSIGNMENTS" : "INSUFFICIENT_CONSIDERATION",
-        assignedVotes: bestVotes,
-        minimumRequired: threshold,
-        desertedVotes
-      })
-    );
+    const next = awardable[awardableIndex]!;
+    ranked.push({ ...next, finalPosition: position });
+    awardedIds.add(next.participantId);
+    awardableIndex += 1;
   }
 
-  // Ejemplares sin puesto premiable adjudicado: ranking residual desde el 6.º por suma.
-  const deferred = [...aggregates]
+  // 9–10. Restantes (premiables sobrantes y no premiables) fuera del top 5.
+  const deferred = aggregates
     .filter((agg) => !awardedIds.has(agg.participantId))
-    .sort((a, b) => {
-      if (majorityWinnerId) {
-        if (a.participantId === majorityWinnerId) return -1;
-        if (b.participantId === majorityWinnerId) return 1;
-      }
-      if (a.positionSum !== b.positionSum) return a.positionSum - b.positionSum;
-      if (a.firstPlaceVotes !== b.firstPlaceVotes) return b.firstPlaceVotes - a.firstPlaceVotes;
-      return a.participantId.localeCompare(b.participantId);
-    });
+    .sort((a, b) => compareBySumMerit(a, b, majorityWinnerId));
 
   let nextNonAwardPosition = MAX_AWARD_POSITIONS + 1;
   for (const participant of deferred) {
@@ -314,17 +342,15 @@ export function computeF2(
     firstPlaceVotes: agg.firstPlaceVotes,
     cardsCount: agg.cardsCount,
     finalPosition: agg.finalPosition,
-    tied: false // se actualiza abajo
+    tied: false
   }));
   const positionById = new Map(participants.map((p) => [p.participantId, p.finalPosition]));
 
-  // Empates por suma: solo entre ejemplares SIN puesto premiable adjudicado por votos.
-  // Si ya ocupan un puesto concreto por consideración, la suma no los desplaza ni abre desempate.
+  // Empates por suma entre ejemplares con consideración mínima (excluye mayoría de 1.º).
   const sumGroups = new Map<number, string[]>();
   for (const agg of aggregates) {
     if (agg.participantId === majorityWinnerId) continue;
     if (agg.cardsCount < threshold) continue;
-    if (awardedIds.has(agg.participantId)) continue;
     const group = sumGroups.get(agg.positionSum) ?? [];
     group.push(agg.participantId);
     sumGroups.set(agg.positionSum, group);
@@ -378,8 +404,6 @@ export function computeF2(
     ];
 
     if (fifthDisputants.length >= 2) {
-      // El quinto queda reservado al desempate 5.e: retirar outcomes contradictorios
-      // y reubicar disputantes en 5..(5+n-1).
       for (let i = desertedResults.length - 1; i >= 0; i -= 1) {
         if (desertedResults[i]?.finalPosition === MAX_AWARD_POSITIONS) {
           desertedResults.splice(i, 1);
@@ -432,13 +456,11 @@ export function computeF2(
     p.tied = tiedIds.has(p.participantId);
   }
 
-  const hasBlockingTie = tiedGroups.some((g) => g.blocksClosure);
-
   return {
     participants,
     desertedResults: desertedResults.sort((a, b) => a.finalPosition - b.finalPosition),
     hasTie: tiedGroups.length > 0,
-    hasBlockingTie,
+    hasBlockingTie: tiedGroups.some((g) => g.blocksClosure),
     tiedGroups,
     majorityWinnerId
   };
@@ -454,15 +476,7 @@ function computeRelativeBySumRanking(
   majorityWinnerId: string | null,
   threshold: number
 ): ScoringResult {
-  const ordered = [...aggregates].sort((a, b) => {
-    if (majorityWinnerId) {
-      if (a.participantId === majorityWinnerId) return -1;
-      if (b.participantId === majorityWinnerId) return 1;
-    }
-    if (a.positionSum !== b.positionSum) return a.positionSum - b.positionSum;
-    if (a.firstPlaceVotes !== b.firstPlaceVotes) return b.firstPlaceVotes - a.firstPlaceVotes;
-    return a.participantId.localeCompare(b.participantId);
-  });
+  const ordered = [...aggregates].sort((a, b) => compareBySumMerit(a, b, majorityWinnerId));
 
   const participants: ScoredParticipant[] = ordered.map((agg, index) => ({
     participantId: agg.participantId,

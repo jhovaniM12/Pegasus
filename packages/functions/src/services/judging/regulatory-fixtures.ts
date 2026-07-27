@@ -44,8 +44,7 @@ export const REGULATORY_FIXTURES: RegulatoryFixture[] = [
     ruleId: "R-F2-SUM",
     status: "CONFIRMADA",
     judgeCount: 3,
-    // Consolidación por puesto: A/B/C coinciden en 1.º/2.º/3.º (≥2 votos cada uno).
-    // La suma se conserva para auditoría, pero no compacta puestos.
+    // Premiables por consideración de tarjetas; orden final por suma.
     cards: [
       card("j1", ["A", "B", "C"]),
       card("j2", ["A", "B", "C"]),
@@ -95,12 +94,11 @@ export const REGULATORY_FIXTURES: RegulatoryFixture[] = [
     ruleId: "R-F2-TIE-SUM",
     status: "CONFIRMADA",
     judgeCount: 2,
-    // Sin mayoría por puesto (1-1), ambos puestos quedan desiertos.
-    // La igualdad de suma residual queda fuera del top 5 y no bloquea cierre.
+    // Ambos premiables (2/2) con la misma suma → empate bloqueante por suma.
     cards: [card("j1", ["A", "B"]), card("j2", ["B", "A"])],
     expect: {
       majorityWinnerId: null,
-      hasBlockingTie: false,
+      hasBlockingTie: true,
       tieReasons: ["SUM_EQUALITY"]
     }
   },

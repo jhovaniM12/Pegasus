@@ -12,12 +12,13 @@ import { computeF2, type JudgeCard } from "./scoring.js";
 function rankingCard(
   judgeUserId: string,
   positions: Array<[participantId: string, position: number]>,
-  eligible: string[]
+  eligible: string[],
+  desertedPositions: number[] = []
 ): JudgeCard {
   return {
     judgeUserId,
     positions: positions.map(([participantId, position]) => ({ participantId, position })),
-    desertedPositions: [],
+    desertedPositions,
     eligibleParticipantIds: eligible
   };
 }
@@ -111,13 +112,13 @@ describe("pipeline closeResults (integración de dominio)", () => {
     expect(official.find((row) => row.participantId === "F")?.finalPosition).toBe(5);
   });
 
-  it("expone puestos desiertos en el contrato cuando no hay consideración mínima", () => {
+  it("expone puestos desiertos en el contrato cuando hay mayoría de desierto", () => {
     const eligible = ["A", "B", "C", "D"];
     const f2 = computeF2(
       [
-        rankingCard("j1", [["A", 2]], eligible),
-        rankingCard("j2", [["A", 2]], eligible),
-        rankingCard("j3", [], eligible)
+        rankingCard("j1", [["A", 2]], eligible, [1, 3, 4, 5]),
+        rankingCard("j2", [["A", 2]], eligible, [1, 3, 4, 5]),
+        rankingCard("j3", [], eligible, [1, 2, 3, 4, 5])
       ],
       3
     );
@@ -132,6 +133,6 @@ describe("pipeline closeResults (integración de dominio)", () => {
     });
     expect(outcomes.every((row) => row.outcomeType === "DESERTED")).toBe(true);
     expect(outcomes.map((row) => row.finalPosition)).toEqual([1, 3, 4, 5]);
-    expect(outcomes.find((row) => row.finalPosition === 1)?.reason).toBe("NO_ASSIGNMENTS");
+    expect(outcomes.find((row) => row.finalPosition === 1)?.reason).toBe("EXPLICIT_MAJORITY");
   });
 });

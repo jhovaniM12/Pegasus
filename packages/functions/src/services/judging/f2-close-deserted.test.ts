@@ -23,11 +23,9 @@ describe("cierre F2 — materialización de puestos omitidos", () => {
   const allowed = f2AllowedPositions(1, 5);
 
   it("deriva omitidos únicamente al cerrar (no en el payload de autosave)", () => {
-    // Autosave: el cliente envía desertedPositions vacío aunque haya puestos sin ejemplar.
     const autosaveDeserted: number[] = [];
     expect(autosaveDeserted).toEqual([]);
 
-    // Cierre: el backend deriva los omitidos contra 1..5.
     expect(
       deriveImplicitDesertedPositions({
         allowedPositions: allowed,
@@ -38,10 +36,8 @@ describe("cierre F2 — materialización de puestos omitidos", () => {
   });
 
   it("autosave no materializa: no hay derivados si no se invoca derive al editar", () => {
-    // Contrato del autosave: solo persiste lo enviado por el cliente.
     const clientPayloadDeserted: number[] = [];
     const assignedDuringEdit = [1, 3];
-    // Sin llamada a deriveImplicitDesertedPositions, los vacíos permanecen vacíos.
     expect(clientPayloadDeserted).toEqual([]);
     expect(assignedDuringEdit).not.toContain(2);
   });
@@ -64,7 +60,7 @@ describe("cierre F2 — materialización de puestos omitidos", () => {
 });
 
 describe("cierre F2 — consolidación con causa persistible", () => {
-  it("cero asignaciones → NO_ASSIGNMENTS", () => {
+  it("cero asignaciones con mayoría vacía → EXPLICIT_MAJORITY", () => {
     const eligible = ["A", "B"];
     const result = computeF2(
       [
@@ -83,9 +79,13 @@ describe("cierre F2 — consolidación con causa persistible", () => {
     });
   });
 
-  it("cero asignaciones sin votos explícitos → NO_ASSIGNMENTS", () => {
+  it("puestos sin premiables disponibles → NO_ASSIGNMENTS", () => {
     const result = computeF2(
-      [rankingCard("j1", [["A", 1]], ["A"]), rankingCard("j2", [["A", 1]], ["A"]), rankingCard("j3", [["A", 1]], ["A"])],
+      [
+        rankingCard("j1", [["A", 1]], ["A"]),
+        rankingCard("j2", [["A", 1]], ["A"]),
+        rankingCard("j3", [["A", 1]], ["A"])
+      ],
       3
     );
     expect(result.desertedResults.find((row) => row.finalPosition === 4)).toMatchObject({
@@ -96,7 +96,7 @@ describe("cierre F2 — consolidación con causa persistible", () => {
     });
   });
 
-  it("una asignación sin consideración mínima → INSUFFICIENT_CONSIDERATION", () => {
+  it("ejemplares evaluados sin consideración mínima global → INSUFFICIENT_CONSIDERATION", () => {
     const result = computeF2(
       [
         rankingCard("j1", [["X", 1]], ["X"]),
@@ -114,7 +114,7 @@ describe("cierre F2 — consolidación con causa persistible", () => {
     });
   });
 
-  it("2 de 3 jueces adjudican el puesto", () => {
+  it("2 de 3 tarjetas hacen premiable al ejemplar aunque el puesto tenga un vacío", () => {
     const result = computeF2(
       [
         rankingCard("j1", [["A", 1]], ["A", "B"]),
@@ -127,7 +127,7 @@ describe("cierre F2 — consolidación con causa persistible", () => {
     expect(result.desertedResults.find((row) => row.finalPosition === 1)).toBeUndefined();
   });
 
-  it("3 de 5 jueces adjudican; 2 de 5 no alcanzan", () => {
+  it("3 de 5 tarjetas adjudican; mayoría de vacíos con 5 jueces sí desierta", () => {
     const eligible = ["A"];
     const award = computeF2(
       [
@@ -178,7 +178,7 @@ describe("cierre F2 — consolidación con causa persistible", () => {
     });
   });
 
-  it("preserva posiciones sin compactar (1.º desierto, ejemplar en 2.º)", () => {
+  it("preserva posiciones sin compactar (1.º desierto por mayoría, ejemplar en 2.º)", () => {
     const eligible = ["h1", "h2", "h3", "h4"];
     const result = computeF2(
       [
@@ -196,7 +196,7 @@ describe("cierre F2 — consolidación con causa persistible", () => {
     expect(result.desertedResults.map((row) => row.finalPosition)).toEqual([1, 3, 4, 5]);
   });
 
-  it("tres asignaciones distintas → INSUFFICIENT con assignedVotes=1", () => {
+  it("tres asignaciones en puestos distintos sin consideración global no son premiables", () => {
     const result = computeF2(
       [
         rankingCard("j1", [["h1", 3]], ["h1", "h2", "h3"]),
@@ -205,6 +205,8 @@ describe("cierre F2 — consolidación con causa persistible", () => {
       ],
       3
     );
+    // Cada ejemplar solo aparece en 1 tarjeta → no premiables.
+    expect(result.participants.every((p) => (p.finalPosition ?? 0) > 5)).toBe(true);
     expect(result.desertedResults.find((row) => row.finalPosition === 3)).toEqual({
       finalPosition: 3,
       reason: "INSUFFICIENT_CONSIDERATION",
@@ -230,6 +232,8 @@ describe("cierre F2 — consolidación con causa persistible", () => {
       [...first.desertedResults, ...second.desertedResults].map((row) => [row.finalPosition, row])
     );
     expect(mergedByPosition.size).toBe(first.desertedResults.length);
-    expect(mergedByPosition.get(1)?.reason).toBe(first.desertedResults.find((r) => r.finalPosition === 1)?.reason);
+    expect(mergedByPosition.get(1)?.reason).toBe(
+      first.desertedResults.find((r) => r.finalPosition === 1)?.reason
+    );
   });
 });
