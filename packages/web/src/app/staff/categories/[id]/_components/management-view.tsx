@@ -124,6 +124,9 @@ function VetCheckRow({ check }: { check: ManagementVetCheck }) {
       <td className="py-3 pl-4 pr-2 font-semibold text-slate-800 tabular-nums w-12">{check.trackPosition}</td>
       <td className="py-3 pr-3 font-medium text-slate-900" title={check.horseName || undefined}>
         {check.horseName || "Sin nombre"}
+        {check.status === "REJECTED" && check.rejectionReason && (
+          <p className="mt-1 text-xs font-normal text-red-600">{check.rejectionReason.name}</p>
+        )}
       </td>
       <td className="py-3 pr-3">
         <span className="font-mono text-xs text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200/40">

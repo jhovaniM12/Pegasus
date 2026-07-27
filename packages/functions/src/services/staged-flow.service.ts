@@ -21,6 +21,7 @@ import {
   type JudgingRoundFormStatus,
   type JudgingRoundType,
   type VeterinaryCheckStatus,
+  type DisqualificationReasonScope,
   VeterinaryCheck,
   WorkflowEvent
 } from "@pegasus/core";
@@ -120,6 +121,7 @@ async function ensureVeterinaryChecks(manager: EntityManager, stage: FairCategor
         veterinarianUserId: null,
         status: "PENDING",
         notes: null,
+        rejectionReasonId: null,
         checkedAt: null
       })
     );
@@ -601,7 +603,7 @@ async function listVeterinaryChecksForStage(manager: EntityManager, stage: FairC
 
   const checks = await manager.getRepository(VeterinaryCheck).find({
     where: { fairCategoryStageId: stage.id },
-    relations: { fairEntry: { horse: true } },
+    relations: { fairEntry: { horse: true }, rejectionReason: true },
     order: { fairEntry: { trackPosition: "ASC" } }
   });
 
@@ -614,7 +616,16 @@ async function listVeterinaryChecksForStage(manager: EntityManager, stage: FairC
     riderName: check.fairEntry.riderName,
     registrationNumber: check.fairEntry.registrationNumber,
     status: check.status,
-    notes: check.notes
+    notes: check.notes,
+    rejectionReason: check.rejectionReason
+      ? {
+          id: check.rejectionReason.id,
+          code: check.rejectionReason.code,
+          name: check.rejectionReason.name,
+          description: check.rejectionReason.description,
+          category: check.rejectionReason.category
+        }
+      : null
   }));
 }
 
@@ -623,12 +634,16 @@ export async function updateVeterinaryCheck(
   stageId: string,
   fairEntryId: string,
   input:
-    | { status: VeterinaryCheckStatus; notes?: string | null }
+    | { status: VeterinaryCheckStatus; notes?: string | null; rejectionReasonId?: string | null }
     | {
         operationId: string;
         baseRevision: number;
         clientUpdatedAt: string;
-        payload: { status: VeterinaryCheckStatus; notes?: string | null };
+        payload: {
+          status: VeterinaryCheckStatus;
+          notes?: string | null;
+          rejectionReasonId?: string | null;
+        };
       }
 ): Promise<{ checks: Awaited<ReturnType<typeof listVeterinaryChecksForStage>>; sync?: MutationSyncMeta }> {
   assertUserRole(user, ["VETERINARIAN"]);
@@ -657,6 +672,24 @@ export async function updateVeterinaryCheck(
       throw new NotFoundError("No se encontro el participante para checkeo veterinario.");
     }
 
+    let rejectionReasonId: string | null = null;
+    if (payload.status === "REJECTED") {
+      if (!payload.rejectionReasonId) {
+        throw new BadRequestError("Debes seleccionar un motivo de rechazo en prepista.");
+      }
+      const reason = await manager.getRepository(DisqualificationReason).findOne({
+        where: {
+          id: payload.rejectionReasonId,
+          scope: "PRE_RING",
+          isActive: true
+        }
+      });
+      if (!reason) {
+        throw new BadRequestError("El motivo de rechazo de prepista no es valido.");
+      }
+      rejectionReasonId = reason.id;
+    }
+
     const applyUpdate = async () => {
       if (isOfflineEnvelope) {
         assertExpectedRevision(input.baseRevision, check.revision, {
@@ -666,6 +699,7 @@ export async function updateVeterinaryCheck(
             fairEntryId: check.fairEntryId,
             status: check.status,
             notes: check.notes,
+            rejectionReasonId: check.rejectionReasonId,
             revision: check.revision
           },
           resolution: "CAN_REAPPLY_LOCAL_DRAFT"
@@ -674,6 +708,7 @@ export async function updateVeterinaryCheck(
 
       check.status = payload.status;
       check.notes = payload.notes ?? null;
+      check.rejectionReasonId = rejectionReasonId;
       check.veterinarianUserId = user.id;
       check.checkedAt = payload.status === "PENDING" ? null : new Date();
       const saved = await manager.getRepository(VeterinaryCheck).save(check);
@@ -1009,7 +1044,7 @@ async function getFaForStage(manager: EntityManager, user: User, stage: FairCate
         relations: { disqualificationReason: true }
       }),
       manager.getRepository(DisqualificationReason).find({
-        where: { isActive: true },
+        where: { isActive: true, scope: "COMPETITION" },
         order: { code: "ASC" }
       }),
       manager.getRepository(FaConsolidatedResult).find({
@@ -1144,7 +1179,9 @@ async function getFaForStage(manager: EntityManager, user: User, stage: FairCate
       id: reason.id,
       code: reason.code,
       name: reason.name,
-      description: reason.description
+      description: reason.description,
+      category: reason.category,
+      scope: reason.scope
     }))
   };
 }
@@ -1376,10 +1413,10 @@ export async function updateFaDecisions(
   });
 }
 
-export async function listDisqualificationReasons() {
+export async function listDisqualificationReasons(scope: DisqualificationReasonScope = "COMPETITION") {
   const dataSource = await getDataSource();
   const reasons = await dataSource.getRepository(DisqualificationReason).find({
-    where: { isActive: true },
+    where: { isActive: true, scope },
     order: { code: "ASC" }
   });
 
@@ -1387,7 +1424,9 @@ export async function listDisqualificationReasons() {
     id: reason.id,
     code: reason.code,
     name: reason.name,
-    description: reason.description
+    description: reason.description,
+    category: reason.category,
+    scope: reason.scope
   }));
 }
 
@@ -1418,7 +1457,7 @@ export async function disqualifyParticipant(
         relations: { fairEntry: true }
       }),
       manager.getRepository(DisqualificationReason).findOne({
-        where: { id: reasonId, isActive: true }
+        where: { id: reasonId, isActive: true, scope: "COMPETITION" }
       })
     ]);
 
@@ -1615,7 +1654,7 @@ async function getManagementForStage(manager: EntityManager, stage: FairCategory
       buildStageSummary(manager, stage),
       manager.getRepository(VeterinaryCheck).find({
         where: { fairCategoryStageId: stage.id },
-        relations: { fairEntry: { horse: true } }
+        relations: { fairEntry: { horse: true }, rejectionReason: true }
       }),
       manager.getRepository(FaJudgeForm).find({
         where: { fairCategoryStageId: stage.id },
@@ -1658,7 +1697,16 @@ async function getManagementForStage(manager: EntityManager, stage: FairCategory
         horseName: check.fairEntry.horse?.name?.trim() || "",
         riderName: check.fairEntry.riderName,
         registrationNumber: check.fairEntry.registrationNumber,
-        status: check.status
+        status: check.status,
+        rejectionReason: check.rejectionReason
+          ? {
+              id: check.rejectionReason.id,
+              code: check.rejectionReason.code,
+              name: check.rejectionReason.name,
+              description: check.rejectionReason.description,
+              category: check.rejectionReason.category
+            }
+          : null
       })),
       judgeForms: forms.map((form) => {
         const formDecisions = decisions.filter((d) => d.faJudgeFormId === form.id);

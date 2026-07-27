@@ -2,11 +2,23 @@ import { z } from "zod";
 import { offlineMutationEnvelopeSchema } from "./offline-mutation.schema.js";
 
 export const veterinaryCheckStatusSchema = z.enum(["PENDING", "APPROVED", "REJECTED", "ABSENT"]);
+export const disqualificationReasonScopeSchema = z.enum(["COMPETITION", "PRE_RING"]);
 
-export const updateVeterinaryCheckPayloadSchema = z.object({
-  status: veterinaryCheckStatusSchema,
-  notes: z.string().trim().max(1000).optional().nullable()
-});
+export const updateVeterinaryCheckPayloadSchema = z
+  .object({
+    status: veterinaryCheckStatusSchema,
+    notes: z.string().trim().max(1000).optional().nullable(),
+    rejectionReasonId: z.string().uuid().optional().nullable()
+  })
+  .superRefine((value, ctx) => {
+    if (value.status === "REJECTED" && !value.rejectionReasonId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Debes seleccionar un motivo de rechazo en prepista.",
+        path: ["rejectionReasonId"]
+      });
+    }
+  });
 
 export const updateVeterinaryCheckSchema = z.union([
   updateVeterinaryCheckPayloadSchema,

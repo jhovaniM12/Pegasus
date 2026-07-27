@@ -12,6 +12,8 @@ import type {
   StaffNotification,
   StagedCategory,
   TieBreakTestType,
+  DisqualificationReason,
+  DisqualificationReasonScope,
   VeterinaryCheck,
   VeterinaryCheckStatus,
 } from "@/types/staged-flow";
@@ -37,12 +39,25 @@ class StagedFlowService extends ApiService {
     return this.get<ApiResponse<VeterinaryCheck[]>>(`/api/staff/fair-categories/${stageId}/veterinary-checks`);
   }
 
+  async listDisqualificationReasons(
+    stageId: string,
+    scope: DisqualificationReasonScope = "COMPETITION"
+  ): Promise<ApiResponse<DisqualificationReason[]>> {
+    return this.get<ApiResponse<DisqualificationReason[]>>(
+      `/api/staff/fair-categories/${stageId}/fa/disqualification-reasons?scope=${scope}`
+    );
+  }
+
   async updateVeterinaryCheck(
     stageId: string,
     fairEntryId: string,
     body:
-      | { status: VeterinaryCheckStatus; notes?: string | null }
-      | OfflineMutationEnvelope<{ status: VeterinaryCheckStatus; notes?: string | null }>
+      | { status: VeterinaryCheckStatus; notes?: string | null; rejectionReasonId?: string | null }
+      | OfflineMutationEnvelope<{
+          status: VeterinaryCheckStatus;
+          notes?: string | null;
+          rejectionReasonId?: string | null;
+        }>
   ): Promise<ApiResponse<VeterinaryCheck[]>> {
     return this.patch<ApiResponse<VeterinaryCheck[]>>(
       `/api/staff/fair-categories/${stageId}/veterinary-checks/${fairEntryId}`,

@@ -20,6 +20,9 @@ export type FairCategoryStageStatus =
 
 export type VeterinaryCheckStatus = "PENDING" | "APPROVED" | "REJECTED" | "ABSENT";
 
+/** Ámbito del motivo: competencia (FA/P1/P2) o rechazo veterinario en prepista. */
+export type DisqualificationReasonScope = "COMPETITION" | "PRE_RING";
+
 export type JudgeFormStatus = "PENDING" | "STARTED" | "CLOSED";
 
 export type JudgingParticipantStatus = "ELIGIBLE" | "DISQUALIFIED";
@@ -124,6 +127,13 @@ export class VeterinaryCheck extends PegasusBaseEntity {
   @Column({ name: "notes", type: "text", nullable: true })
   notes!: string | null;
 
+  @Column({ name: "rejection_reason_id", type: "uuid", nullable: true })
+  rejectionReasonId!: string | null;
+
+  @ManyToOne(() => DisqualificationReason, { nullable: true })
+  @JoinColumn({ name: "rejection_reason_id" })
+  rejectionReason!: DisqualificationReason | null;
+
   @Column({ name: "checked_at", type: "timestamp", nullable: true })
   checkedAt!: Date | null;
 }
@@ -139,6 +149,13 @@ export class DisqualificationReason extends SyncableEntity {
 
   @Column({ name: "description", type: "text", nullable: true })
   description!: string | null;
+
+  /** Agrupación visual (prepista); null en motivos de competencia. */
+  @Column({ name: "category", type: "varchar", nullable: true })
+  category!: string | null;
+
+  @Column({ name: "scope", type: "varchar", default: "COMPETITION" })
+  scope!: DisqualificationReasonScope;
 
   @Column({ name: "is_active", type: "boolean", default: true })
   isActive!: boolean;

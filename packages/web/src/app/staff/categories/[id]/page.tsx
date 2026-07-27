@@ -22,6 +22,7 @@ import { getTrustedOfflineDevice, hasBlockingMutationsForStage } from "@/offline
 import { readRoundStageSnapshot } from "@/offline/round-cache";
 import { SummaryHeader } from "./_components/summary-header";
 import { VetCheckCard } from "./_components/vet-check-card";
+import { VetRejectDialog, type VetRejectTarget } from "./_components/vet-reject-dialog";
 import { FaParticipantCard } from "./_components/fa-participant-card";
 import { FaActionsLegend } from "./_components/fa-actions-legend";
 import { FaDisqualifyDialog } from "./_components/fa-disqualify-dialog";
@@ -44,6 +45,7 @@ import { ActivateRoundDialog } from "./_components/activate-round-dialog";
 import { StartRoundDialog } from "./_components/start-round-dialog";
 import type { ActivateRoundConfig } from "./_components/activate-round-card";
 import type {
+  DisqualificationReason,
   FaState,
   FaParticipant,
   JudgeFormat,
@@ -53,6 +55,7 @@ import type {
   RoundsManagement,
   StagedCategory,
   TieBreakTestType,
+  VeterinaryCheck,
 } from "@/types/staged-flow";
 
 const JUDGE_ROUND_STATUSES: StagedCategory["status"][] = [
@@ -242,6 +245,9 @@ export default function StaffCategoryPage() {
   const [sessionExpired, setSessionExpired] = useState(false);
   const [disqualifyTarget, setDisqualifyTarget] = useState<FaParticipant | null>(null);
   const [disqualifyBusy, setDisqualifyBusy] = useState(false);
+  const [vetRejectTarget, setVetRejectTarget] = useState<VetRejectTarget | null>(null);
+  const [vetRejectBusy, setVetRejectBusy] = useState(false);
+  const [vetRejectionReasons, setVetRejectionReasons] = useState<DisqualificationReason[]>([]);
   const [repeatTrackTarget, setRepeatTrackTarget] = useState<FaParticipant | null>(null);
   const [repeatTrackBusy, setRepeatTrackBusy] = useState(false);
   const sessionExpiredRef = useRef(false);
@@ -566,9 +572,10 @@ export default function StaffCategoryPage() {
 
       if (user.role === "VETERINARIAN") {
         try {
-          const [categoryResponse, checksResponse] = await Promise.all([
+          const [categoryResponse, checksResponse, reasonsResponse] = await Promise.all([
             stagedFlowService.getCategory(stageId),
             stagedFlowService.listVeterinaryChecks(stageId),
+            stagedFlowService.listDisqualificationReasons(stageId, "PRE_RING"),
           ]);
           const current = categoryResponse.data ?? null;
           if (!current) {
@@ -585,6 +592,7 @@ export default function StaffCategoryPage() {
 
           setSummary(current);
           await setChecks(checksResponse.data ?? [], current);
+          setVetRejectionReasons(reasonsResponse.data ?? []);
           setFa(null);
           setRound(null);
           setRoundsManagement(null);
@@ -1066,6 +1074,13 @@ export default function StaffCategoryPage() {
                   editable={summary.status === "PRE_RING_STARTED"}
                   isUpdating={Boolean(updatingVetByEntryId[check.fairEntryId])}
                   onUpdate={handleVetCheckUpdate}
+                  onRequestReject={(selected: VeterinaryCheck) =>
+                    setVetRejectTarget({
+                      fairEntryId: selected.fairEntryId,
+                      trackPosition: selected.trackPosition,
+                      horseName: selected.horseName,
+                    })
+                  }
                 />
               ))}
             </div>
@@ -1341,6 +1356,27 @@ export default function StaffCategoryPage() {
           if (!open && !disqualifyBusy) setDisqualifyTarget(null);
         }}
         onConfirm={confirmFaDisqualify}
+      />
+
+      <VetRejectDialog
+        open={vetRejectTarget !== null}
+        target={vetRejectTarget}
+        reasons={vetRejectionReasons}
+        busy={vetRejectBusy}
+        onOpenChange={(open) => {
+          if (!open && !vetRejectBusy) setVetRejectTarget(null);
+        }}
+        onConfirm={async (fairEntryId, reasonId) => {
+          const reason = vetRejectionReasons.find((item) => item.id === reasonId) ?? null;
+          if (!reason) return;
+          setVetRejectBusy(true);
+          try {
+            await handleVetCheckUpdate(fairEntryId, "REJECTED", reason);
+            setVetRejectTarget(null);
+          } finally {
+            setVetRejectBusy(false);
+          }
+        }}
       />
 
       <FaRepeatTrackDialog

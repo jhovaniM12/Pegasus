@@ -161,7 +161,10 @@ export async function updateFaDecisionsController(c: Context) {
 }
 
 export async function listDisqualificationReasonsController(c: Context) {
-  return c.json(success(await listDisqualificationReasons()));
+  const scopeParam = c.req.query("scope");
+  const scope =
+    scopeParam === "PRE_RING" || scopeParam === "COMPETITION" ? scopeParam : "COMPETITION";
+  return c.json(success(await listDisqualificationReasons(scope)));
 }
 
 export async function disqualifyParticipantController(c: Context) {

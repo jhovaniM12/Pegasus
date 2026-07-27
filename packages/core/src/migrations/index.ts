@@ -36,3 +36,4 @@ export { AddTieBreakTestTraceability1717430400034 } from "./1717430400034-AddTie
 export { RemoveTieBreakTestVotesAndDrawColumns1717430400035 } from "./1717430400035-RemoveTieBreakTestVotesAndDrawColumns.js";
 export { AllowZeroAssignedVotesInUnawardedResults1717430400036 } from "./1717430400036-AllowZeroAssignedVotesInUnawardedResults.js";
 export { AddDesertedResultReasonMetadata1717430400037 } from "./1717430400037-AddDesertedResultReasonMetadata.js";
+export { AddPreRingRejectionReasons1717430400038 } from "./1717430400038-AddPreRingRejectionReasons.js";

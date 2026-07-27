@@ -27,6 +27,7 @@ export type TieBreakTestType =
   | "MOUNT";
 
 export type VeterinaryCheckStatus = "PENDING" | "APPROVED" | "REJECTED" | "ABSENT";
+export type DisqualificationReasonScope = "COMPETITION" | "PRE_RING";
 export type JudgeFormStatus = "PENDING" | "STARTED" | "CLOSED";
 export type JudgeFormatKey = "FA" | "F1" | "F2" | "TIE_BREAK";
 export type JudgeFormatStatus = "NOT_AVAILABLE" | "PENDING" | "STARTED" | "CLOSED";
@@ -71,6 +72,15 @@ export type StagedCategory = {
   };
 };
 
+export type DisqualificationReason = {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  category?: string | null;
+  scope?: DisqualificationReasonScope;
+};
+
 export type VeterinaryCheck = {
   id: string;
   revision: number;
@@ -81,13 +91,7 @@ export type VeterinaryCheck = {
   registrationNumber: string;
   status: VeterinaryCheckStatus;
   notes: string | null;
-};
-
-export type DisqualificationReason = {
-  id: string;
-  code: string;
-  name: string;
-  description: string | null;
+  rejectionReason: DisqualificationReason | null;
 };
 
 export type FaParticipant = {
@@ -151,6 +155,7 @@ export type ManagementVetCheck = {
   riderName: string;
   registrationNumber: string;
   status: VeterinaryCheckStatus;
+  rejectionReason: DisqualificationReason | null;
 };
 
 export type ManagementJudgeForm = {

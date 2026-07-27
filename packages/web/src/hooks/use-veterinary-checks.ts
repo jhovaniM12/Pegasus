@@ -2,7 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useNetworkStatus } from "@/components/network-status";
 import { ApiError } from "@/services/api.service";
-import type { StagedCategory, VeterinaryCheck, VeterinaryCheckStatus } from "@/types/staged-flow";
+import type {
+  DisqualificationReason,
+  StagedCategory,
+  VeterinaryCheck,
+  VeterinaryCheckStatus,
+} from "@/types/staged-flow";
 import {
   countBlockingMutationsForStage,
   getTrustedOfflineDevice,
@@ -143,19 +148,36 @@ export function useVeterinaryChecks({
   }, [refreshPendingState, stageId, userId]);
 
   const handleVetCheckUpdate = useCallback(
-    async (fairEntryId: string, status: VeterinaryCheckStatus) => {
+    async (
+      fairEntryId: string,
+      status: VeterinaryCheckStatus,
+      rejectionReason: DisqualificationReason | null = null
+    ) => {
       if (!userId) return;
       const currentSummary = summaryRef.current;
       if (!currentSummary) return;
 
       const currentCheck = checksRef.current.find((check) => check.fairEntryId === fairEntryId);
-      if (!currentCheck || currentCheck.status === status) return;
+      if (!currentCheck) return;
+      const rejectionReasonId = status === "REJECTED" ? rejectionReason?.id ?? null : null;
+      if (
+        currentCheck.status === status &&
+        (status !== "REJECTED" || (currentCheck.rejectionReason?.id ?? null) === rejectionReasonId)
+      ) {
+        return;
+      }
 
       const nextVersion = (requestVersionByEntryRef.current[fairEntryId] ?? 0) + 1;
       requestVersionByEntryRef.current[fairEntryId] = nextVersion;
 
       const optimisticChecks = checksRef.current.map((check) =>
-        check.fairEntryId === fairEntryId ? { ...check, status } : check
+        check.fairEntryId === fairEntryId
+          ? {
+              ...check,
+              status,
+              rejectionReason: status === "REJECTED" ? rejectionReason : null,
+            }
+          : check
       );
       setChecksState(optimisticChecks);
       setUpdatingVetByEntryId((prev) => ({ ...prev, [fairEntryId]: true }));
@@ -165,6 +187,7 @@ export function useVeterinaryChecks({
           fairEntryId,
           status,
           notes: currentCheck.notes,
+          rejectionReasonId,
         };
 
         await queueOfflineMutation({

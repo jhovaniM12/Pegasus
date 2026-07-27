@@ -93,6 +93,7 @@ export type VetCheckMutationPayload = {
   fairEntryId: string;
   status: VeterinaryCheckStatus;
   notes?: string | null;
+  rejectionReasonId?: string | null;
 };
 
 export type FaSelectionMutationPayload = {
@@ -174,6 +175,7 @@ async function syncVeterinaryMutation(
   const envelope: OfflineMutationEnvelope<{
     status: VeterinaryCheckStatus;
     notes?: string | null;
+    rejectionReasonId?: string | null;
   }> = {
     operationId: mutation.operationId,
     baseRevision: mutation.baseRevision,
@@ -181,6 +183,7 @@ async function syncVeterinaryMutation(
     payload: {
       status: mutation.payload.status,
       notes: mutation.payload.notes ?? null,
+      rejectionReasonId: mutation.payload.rejectionReasonId ?? null,
     },
   };
 

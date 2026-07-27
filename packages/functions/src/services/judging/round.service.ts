@@ -144,14 +144,16 @@ async function loadParticipantStatusMap(
 
 async function loadActiveDisqualificationReasons(manager: EntityManager) {
   const reasons = await manager.getRepository(DisqualificationReason).find({
-    where: { isActive: true },
+    where: { isActive: true, scope: "COMPETITION" },
     order: { code: "ASC" }
   });
   return reasons.map((reason) => ({
     id: reason.id,
     code: reason.code,
     name: reason.name,
-    description: reason.description
+    description: reason.description,
+    category: reason.category,
+    scope: reason.scope
   }));
 }
 
@@ -705,7 +707,7 @@ export async function disqualifyRoundParticipant(
         relations: { fairEntry: true }
       }),
       manager.getRepository(DisqualificationReason).findOne({
-        where: { id: reasonId, isActive: true }
+        where: { id: reasonId, isActive: true, scope: "COMPETITION" }
       }),
       manager.getRepository(JudgingRoundEntry).findOne({
         where: { roundFormId: form.id, judgingParticipantId }
