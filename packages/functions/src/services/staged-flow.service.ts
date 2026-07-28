@@ -70,7 +70,8 @@ export type StagedCategoryDto = {
   status: FairCategoryStageStatus;
   fair: { id: string; name: string | null; startDate: string | null; endDate: string | null };
   category: { id: string; name: string | null; minAgeMonths: number; maxAgeMonths: number };
-  gait: { id: string; name: string | null };
+  gait: { id: string; name: string | null; externalId: string | null };
+  sex: { id: string; name: string | null; externalId: string | null };
   totalEntries: number;
   veterinary: { pending: number; approved: number; rejected: number; absent: number };
   judging: { totalJudges: number; closedForms: number; selected: number; discarded: number; disqualified: number };
@@ -237,7 +238,13 @@ async function buildStageSummaries(
       },
       gait: {
         id: stage.category.gait.id,
-        name: stage.category.gait.name
+        name: stage.category.gait.name,
+        externalId: stage.category.gait.externalId
+      },
+      sex: {
+        id: stage.category.sex.id,
+        name: stage.category.sex.name,
+        externalId: stage.category.sex.externalId
       },
       totalEntries: entryCountByPair.get(`${stage.fairId}:${stage.categoryId}`) ?? 0,
       veterinary: {
@@ -290,7 +297,7 @@ export async function listStagesFromFairEntries(
 
   const existing = await manager.getRepository(FairCategoryStage).find({
     where: rows.map((row) => ({ fairId: row.fairId, categoryId: row.categoryId })),
-    relations: { fair: true, category: { gait: true } }
+    relations: { fair: true, category: { gait: true, sex: true } }
   });
   const existingKeys = new Set(existing.map((stage) => `${stage.fairId}:${stage.categoryId}`));
   const missing = rows.filter((row) => !existingKeys.has(`${row.fairId}:${row.categoryId}`));
@@ -322,7 +329,7 @@ export async function listStagesFromFairEntries(
 
   const stages = await manager.getRepository(FairCategoryStage).find({
     where: rows.map((row) => ({ fairId: row.fairId, categoryId: row.categoryId })),
-    relations: { fair: true, category: { gait: true } }
+    relations: { fair: true, category: { gait: true, sex: true } }
   });
   const byKey = new Map(stages.map((stage) => [`${stage.fairId}:${stage.categoryId}`, stage]));
   return rows
@@ -342,6 +349,7 @@ export async function listStagesForAssignedStaff(
     .innerJoinAndSelect("stage.fair", "fair")
     .innerJoinAndSelect("stage.category", "category")
     .innerJoinAndSelect("category.gait", "gait")
+    .innerJoinAndSelect("category.sex", "sex")
     .innerJoin(FairStaff, "staff", "staff.fair_id = stage.fair_id")
     .innerJoin(Role, "role", "role.id = staff.role_id")
     .where("staff.person_id = :personId", { personId })

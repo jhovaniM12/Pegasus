@@ -60,7 +60,8 @@ export type StagedCategory = {
   status: StageStatus;
   fair: { id: string; name: string | null; startDate: string | null; endDate: string | null };
   category: { id: string; name: string | null; minAgeMonths: number; maxAgeMonths: number };
-  gait: { id: string; name: string | null };
+  gait: { id: string; name: string | null; externalId: string | null };
+  sex: { id: string; name: string | null; externalId: string | null };
   totalEntries: number;
   veterinary: { pending: number; approved: number; rejected: number; absent: number };
   judging: { totalJudges: number; closedForms: number; selected: number; discarded: number; disqualified: number };

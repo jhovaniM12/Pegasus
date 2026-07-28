@@ -98,11 +98,19 @@ function F1RemindersDialogBody({
               key={reminder.id}
               className={cn(
                 "flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5",
-                isSelected ? "border-blue-200 bg-blue-50/60" : "border-slate-200 bg-white"
+                isSelected
+                  ? effect === "SUMA"
+                    ? "border-blue-200 bg-blue-50/60"
+                    : "border-red-200 bg-red-50/60"
+                  : "border-slate-200 bg-white"
               )}
             >
               <div className="flex items-center gap-2">
-                <ReminderIcon icon={reminder.icon} className="size-4 text-slate-600" />
+                <ReminderIcon
+                  icon={reminder.icon}
+                  effect={effect}
+                  className={cn("size-4", !effect && "text-slate-600")}
+                />
                 <span className="text-sm font-medium text-slate-800">{reminder.name}</span>
               </div>
               <div className="flex items-center gap-1.5">
@@ -126,7 +134,7 @@ function F1RemindersDialogBody({
                   className={cn(
                     "rounded-md border px-2.5 py-1 text-xs font-semibold transition-colors",
                     effect === "SUMA"
-                      ? "border-emerald-500 bg-emerald-500 text-white"
+                      ? "border-blue-500 bg-blue-500 text-white"
                       : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
                   )}
                 >

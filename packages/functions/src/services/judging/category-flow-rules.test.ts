@@ -51,7 +51,7 @@ describe("reglas de categorías individuales", () => {
     );
     expect(findOne).toHaveBeenCalledWith({
       where: { id: "stage-id" },
-      relations: { fair: { grade: true }, category: { gait: true } }
+      relations: { fair: { grade: true }, category: { gait: true, sex: true } }
     });
   });
 });

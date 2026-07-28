@@ -75,7 +75,7 @@ export function roleExternalIdForUser(user: User): string {
 export async function getStageOrThrow(manager: EntityManager, stageId: string): Promise<FairCategoryStage> {
   const stage = await manager.getRepository(FairCategoryStage).findOne({
     where: { id: stageId },
-    relations: { fair: { grade: true }, category: { gait: true } }
+    relations: { fair: { grade: true }, category: { gait: true, sex: true } }
   });
 
   if (!stage) {

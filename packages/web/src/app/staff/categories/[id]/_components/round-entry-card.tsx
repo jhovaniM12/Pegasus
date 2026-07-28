@@ -3,7 +3,7 @@
 import { FileText, Plus, RotateCcw, X } from "lucide-react";
 
 import { getPositionActiveStyle } from "@/lib/award-distinctive-cinta";
-import { ReminderIcon } from "@/components/reminder-icon";
+import { ReminderIcon, reminderEffectToneClass } from "@/components/reminder-icon";
 import { cn } from "@/lib/utils";
 import type { AwardDistinctive } from "@/types/award-distinctives";
 import type { RoundParticipant } from "@/types/staged-flow";
@@ -167,13 +167,11 @@ export function RoundEntryCard(props: RoundEntryCardProps) {
                 key={`${participant.id}-${reminder.reminderId}`}
                 className={cn(
                   "inline-flex size-6 items-center justify-center rounded-md border",
-                  reminder.effect === "SUMA"
-                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                    : "border-red-200 bg-red-50 text-red-700"
+                  reminderEffectToneClass(reminder.effect)
                 )}
                 title={`${reminder.name} (${reminder.effect})`}
               >
-                <ReminderIcon icon={reminder.icon} className="size-3.5" />
+                <ReminderIcon icon={reminder.icon} effect={reminder.effect} className="size-3.5" />
               </span>
             ))}
           </div>
@@ -357,13 +355,11 @@ export function RoundEntryCard(props: RoundEntryCardProps) {
               key={`${participant.id}-${reminder.reminderId}`}
               className={cn(
                 "inline-flex size-6 items-center justify-center rounded-md border",
-                reminder.effect === "SUMA"
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                  : "border-red-200 bg-red-50 text-red-700"
+                reminderEffectToneClass(reminder.effect)
               )}
               title={`${reminder.name} (${reminder.effect})`}
             >
-              <ReminderIcon icon={reminder.icon} className="size-3.5" />
+              <ReminderIcon icon={reminder.icon} effect={reminder.effect} className="size-3.5" />
             </span>
           ))}
         </div>

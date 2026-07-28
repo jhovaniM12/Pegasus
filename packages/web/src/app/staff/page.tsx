@@ -49,6 +49,49 @@ import type { JudgeFormat, StageStatus, StagedCategory } from "@/types/staged-fl
 
 const ALL_STATUS_VALUE = "all";
 const ALL_GAIT_VALUE = "all";
+const ALL_SEX_VALUE = "all";
+
+/** Orden regulatorio de modalidades Fedequinas. */
+const GAIT_EXTERNAL_ORDER = ["P1", "P2", "P3", "P4", "P5"] as const;
+
+function gaitSortRank(externalId: string | null | undefined): number {
+  const index = GAIT_EXTERNAL_ORDER.indexOf(
+    (externalId ?? "").toUpperCase() as (typeof GAIT_EXTERNAL_ORDER)[number]
+  );
+  return index === -1 ? GAIT_EXTERNAL_ORDER.length : index;
+}
+
+/** 1 = macho primero, 2 = hembra después; desconocidos al final. */
+function sexSortRank(externalId: string | null | undefined): number {
+  if (externalId === "1") return 0;
+  if (externalId === "2") return 1;
+  return 2;
+}
+
+function sexDisplayLabel(sex: StagedCategory["sex"] | null | undefined): string {
+  if (!sex) return "Sin sexo";
+  if (sex.externalId === "1") return "Macho";
+  if (sex.externalId === "2") return "Hembra";
+  const name = sex.name?.trim();
+  if (!name) return "Sin sexo";
+  return name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
+}
+
+function compareStagedCategories(a: StagedCategory, b: StagedCategory): number {
+  const byGait = gaitSortRank(a.gait.externalId) - gaitSortRank(b.gait.externalId);
+  if (byGait !== 0) return byGait;
+
+  const bySex = sexSortRank(a.sex?.externalId) - sexSortRank(b.sex?.externalId);
+  if (bySex !== 0) return bySex;
+
+  const byMinAge = a.category.minAgeMonths - b.category.minAgeMonths;
+  if (byMinAge !== 0) return byMinAge;
+
+  const byMaxAge = a.category.maxAgeMonths - b.category.maxAgeMonths;
+  if (byMaxAge !== 0) return byMaxAge;
+
+  return (a.category.name ?? "").localeCompare(b.category.name ?? "", "es");
+}
 
 function categoryGaitLabel(category: StagedCategory): string {
   return `${category.gait.name ?? "Sin andar"} - ${category.category.minAgeMonths} a ${category.category.maxAgeMonths} meses`;
@@ -229,15 +272,19 @@ function CategoryFilters({
   categories,
   statusFilter,
   gaitFilter,
+  sexFilter,
   onStatusChange,
   onGaitChange,
+  onSexChange,
   onClear,
 }: {
   categories: StagedCategory[];
   statusFilter: string;
   gaitFilter: string;
+  sexFilter: string;
   onStatusChange: (value: string) => void;
   onGaitChange: (value: string) => void;
+  onSexChange: (value: string) => void;
   onClear: () => void;
 }) {
   const availableStatuses = useMemo(() => {
@@ -246,15 +293,34 @@ function CategoryFilters({
   }, [categories]);
 
   const availableGaits = useMemo(() => {
-    const byId = new Map<string, string>();
+    const byId = new Map<string, { name: string; externalId: string | null }>();
     for (const item of categories) {
       if (!byId.has(item.gait.id)) {
-        byId.set(item.gait.id, item.gait.name ?? "Sin modalidad");
+        byId.set(item.gait.id, {
+          name: item.gait.name ?? "Sin modalidad",
+          externalId: item.gait.externalId,
+        });
       }
     }
     return Array.from(byId.entries())
-      .map(([id, name]) => ({ id, name }))
-      .sort((a, b) => a.name.localeCompare(b.name, "es"));
+      .map(([id, gait]) => ({ id, name: gait.name, externalId: gait.externalId }))
+      .sort((a, b) => {
+        const byCode = gaitSortRank(a.externalId) - gaitSortRank(b.externalId);
+        if (byCode !== 0) return byCode;
+        return a.name.localeCompare(b.name, "es");
+      });
+  }, [categories]);
+
+  const availableSexes = useMemo(() => {
+    const byExternalId = new Map<string, string>();
+    for (const item of categories) {
+      const externalId = item.sex?.externalId;
+      if (!externalId || byExternalId.has(externalId)) continue;
+      byExternalId.set(externalId, sexDisplayLabel(item.sex));
+    }
+    return Array.from(byExternalId.entries())
+      .map(([externalId, label]) => ({ externalId, label }))
+      .sort((a, b) => sexSortRank(a.externalId) - sexSortRank(b.externalId));
   }, [categories]);
 
   const statusLabel =
@@ -267,7 +333,15 @@ function CategoryFilters({
       ? "Modalidad"
       : availableGaits.find((gait) => gait.id === gaitFilter)?.name ?? "Modalidad";
 
-  const hasActiveFilters = statusFilter !== ALL_STATUS_VALUE || gaitFilter !== ALL_GAIT_VALUE;
+  const sexLabel =
+    sexFilter === ALL_SEX_VALUE
+      ? "Sexo"
+      : availableSexes.find((sex) => sex.externalId === sexFilter)?.label ?? "Sexo";
+
+  const hasActiveFilters =
+    statusFilter !== ALL_STATUS_VALUE ||
+    gaitFilter !== ALL_GAIT_VALUE ||
+    sexFilter !== ALL_SEX_VALUE;
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -339,6 +413,40 @@ function CategoryFilters({
         </DropdownMenuContent>
       </DropdownMenu>
 
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button
+              type="button"
+              variant="outline"
+              className={`h-9 gap-2 rounded-md bg-white ${sexFilter !== ALL_SEX_VALUE ? "border-slate-400" : ""}`}
+            >
+              <ListFilter className="size-3.5" />
+              <span className="max-w-[140px] truncate">{sexLabel}</span>
+              <ChevronDown className="size-3.5 text-slate-500" />
+            </Button>
+          }
+        />
+        <DropdownMenuContent align="start" className="w-48">
+          <DropdownMenuItem
+            className="cursor-pointer"
+            onClick={() => onSexChange(ALL_SEX_VALUE)}
+          >
+            Todos los sexos
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          {availableSexes.map((sex) => (
+            <DropdownMenuItem
+              key={sex.externalId}
+              className="cursor-pointer"
+              onClick={() => onSexChange(sex.externalId)}
+            >
+              {sex.label}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
       {hasActiveFilters && (
         <Button
           type="button"
@@ -369,6 +477,7 @@ export default function StaffPage() {
   const [startRoundTarget, setStartRoundTarget] = useState<StartRoundTarget | null>(null);
   const [statusFilter, setStatusFilter] = useState(ALL_STATUS_VALUE);
   const [gaitFilter, setGaitFilter] = useState(ALL_GAIT_VALUE);
+  const [sexFilter, setSexFilter] = useState(ALL_SEX_VALUE);
   const [activeTab, setActiveTab] = useState<"pending" | "in_progress" | "closed">("pending");
 
   /** Solo el DT separa “sin iniciar” vs “en flujo”; vet/juez ven todo lo no cerrado en Pendientes. */
@@ -434,16 +543,21 @@ export default function StaffPage() {
   }, [categories, effectiveTab, showInProgressTab]);
 
   const filteredCategories = useMemo(() => {
-    return tabCategories.filter((item) => {
-      const matchesStatus = statusFilter === ALL_STATUS_VALUE || item.status === statusFilter;
-      const matchesGait = gaitFilter === ALL_GAIT_VALUE || item.gait.id === gaitFilter;
-      return matchesStatus && matchesGait;
-    });
-  }, [tabCategories, statusFilter, gaitFilter]);
+    return tabCategories
+      .filter((item) => {
+        const matchesStatus = statusFilter === ALL_STATUS_VALUE || item.status === statusFilter;
+        const matchesGait = gaitFilter === ALL_GAIT_VALUE || item.gait.id === gaitFilter;
+        const matchesSex =
+          sexFilter === ALL_SEX_VALUE || item.sex?.externalId === sexFilter;
+        return matchesStatus && matchesGait && matchesSex;
+      })
+      .sort(compareStagedCategories);
+  }, [tabCategories, statusFilter, gaitFilter, sexFilter]);
 
   const clearFilters = () => {
     setStatusFilter(ALL_STATUS_VALUE);
     setGaitFilter(ALL_GAIT_VALUE);
+    setSexFilter(ALL_SEX_VALUE);
   };
 
   const handleTabChange = (value: string) => {
@@ -633,8 +747,10 @@ export default function StaffPage() {
                   categories={tabCategories}
                   statusFilter={statusFilter}
                   gaitFilter={gaitFilter}
+                  sexFilter={sexFilter}
                   onStatusChange={setStatusFilter}
                   onGaitChange={setGaitFilter}
+                  onSexChange={setSexFilter}
                   onClear={clearFilters}
                 />
               </div>
@@ -679,9 +795,14 @@ export default function StaffPage() {
                         </h2>
                         <StageStatusBadge status={item.status} className="mt-2" />
                       </div>
-                      <Badge variant="secondary" className="w-fit shrink-0 rounded-md">
-                        {item.gait.name ?? "Sin andar"}
-                      </Badge>
+                      <div className="flex w-fit shrink-0 flex-col items-end gap-1.5 sm:items-end">
+                        <Badge variant="secondary" className="w-fit rounded-md">
+                          {item.gait.name ?? "Sin andar"}
+                        </Badge>
+                        <Badge variant="outline" className="w-fit rounded-md">
+                          {sexDisplayLabel(item.sex)}
+                        </Badge>
+                      </div>
                     </div>
 
                     <div
