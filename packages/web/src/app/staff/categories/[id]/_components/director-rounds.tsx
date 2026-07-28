@@ -2,7 +2,6 @@
 
 import type { ReactNode } from "react";
 import { CheckCheck, CheckCircle2, Clock, Flag, Gavel, Trophy } from "lucide-react";
-import { tieBlockKey, typedTieBlockKey } from "@pegasus/core/judging/tie-blocks";
 import { Button } from "@/components/ui/button";
 import { stagedFlowService } from "@/services/staged-flow.service";
 import type {
@@ -13,6 +12,7 @@ import type {
 import { buildOfficialF2Results } from "./official-f2-results";
 import { OfficialResultBoard } from "./official-result-board";
 import { OfficialScorecard } from "./official-scorecard";
+import { findPendingTieBlock } from "./pending-tie-block";
 import { TieBreakPanel, type TieBlockInfo } from "./tie-break-panel";
 
 type DirectorRoundsProps = {
@@ -35,35 +35,6 @@ function latestOfType(rounds: RoundManagementItem[], type: RoundManagementItem["
 
 function allFormsClosed(round: RoundManagementItem | null): boolean {
   return Boolean(round && round.forms.length > 0 && round.forms.every((form) => form.status === "CLOSED"));
-}
-
-function getResolvedTieBlockKeys(rounds: RoundManagementItem[]): {
-  typed: Set<string>;
-  legacy: Set<string>;
-} {
-  const resolved = {
-    typed: new Set<string>(),
-    legacy: new Set<string>(),
-  };
-  for (const round of rounds) {
-    if (round.roundType !== "TIE_BREAK" || round.status !== "CONSOLIDATED") continue;
-    if (round.results.some((result) => result.status === "TIED")) continue;
-
-    const participantIds = new Set<string>();
-    for (const form of round.forms) {
-      for (const entry of form.entries) {
-        participantIds.add(entry.participantId);
-      }
-    }
-    if (participantIds.size > 1) {
-      if (round.tieBreakReason) {
-        resolved.typed.add(typedTieBlockKey(round.tieBreakReason, [...participantIds]));
-      } else {
-        resolved.legacy.add(tieBlockKey([...participantIds]));
-      }
-    }
-  }
-  return resolved;
 }
 
 function roundFormStatusBadge(status: RoundManagementItem["forms"][number]["status"]) {
@@ -258,29 +229,14 @@ export function DirectorRounds({
       );
     }
 
-    const resolvedTieBlockKeys = getResolvedTieBlockKeys(rounds);
-    const pendingTieBlock =
-      f2.tieBlocks.find((block) => {
-        if (block.resolved === true) return false;
-        if (block.resolved === false) return true;
-        return (
-          !resolvedTieBlockKeys.typed.has(typedTieBlockKey(block.reason, block.participantIds)) &&
-          !resolvedTieBlockKeys.legacy.has(tieBlockKey(block.participantIds))
-        );
-      }) ?? null;
+    const pendingTieBlock = findPendingTieBlock(rounds);
 
     const blockInfo: TieBlockInfo | null = pendingTieBlock
       ? {
           reason: pendingTieBlock.reason,
           startPosition: pendingTieBlock.startPosition,
           endPosition: pendingTieBlock.endPosition,
-          trackPositions: pendingTieBlock.participantIds
-            .map(
-              (participantId) =>
-                f2.results.find((result) => result.participantId === participantId)?.trackPosition
-            )
-            .filter((trackPosition): trackPosition is number => trackPosition != null)
-            .sort((a, b) => a - b),
+          trackPositions: pendingTieBlock.trackPositions,
         }
       : null;
 

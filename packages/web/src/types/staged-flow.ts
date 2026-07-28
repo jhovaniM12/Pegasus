@@ -290,6 +290,20 @@ export type RoundState = {
   } | null;
   maxSelections: number | null;
   positionRange: { min: number; max: number } | null;
+  /**
+   * Empate pendiente de F2 para anunciar a jueces cuando la ronda ya consolidó.
+   * Null/undefined si no hay bloque por resolver o el payload es antiguo.
+   */
+  pendingTieBreak?: {
+    reason: TieBreakReason;
+    startPosition: number;
+    endPosition: number;
+    entries: Array<{
+      participantId: string;
+      trackPosition: number;
+      horseName: string | null;
+    }>;
+  } | null;
   availableReminders: RoundAvailableReminder[];
   reminderHistory: RoundReminderHistoryItem[];
   disqualificationReasons: DisqualificationReason[];

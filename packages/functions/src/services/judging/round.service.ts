@@ -36,7 +36,7 @@ import {
 } from "../offline-idempotency.service.js";
 import type { MutationSyncMeta } from "../../lib/http.js";
 import { assertRoundMutationIdentity, resolveRoundTieBlockIdentity } from "./round-identity.js";
-import { buildStageSummary, type StagedCategoryDto } from "../staged-flow.service.js";
+import { buildStageSummary, enrichForJudge, type StagedCategoryDto } from "../staged-flow.service.js";
 import { resolveAwardDistinctiveForPosition } from "./award-distinctives.js";
 import {
   recordDisqualificationReport,
@@ -1315,6 +1315,77 @@ async function getNextPendingTieBlock(manager: EntityManager, f2: JudgingRound):
   return blocks.find((block) => !isTieBlockResolved(block, resolvedKeys)) ?? null;
 }
 
+type PendingTieBreakAnnouncementDto = {
+  reason: TieBreakReason;
+  startPosition: number;
+  endPosition: number;
+  entries: Array<{
+    participantId: string;
+    trackPosition: number;
+    horseName: string | null;
+  }>;
+};
+
+async function resolvePendingTieBreakAnnouncement(
+  manager: EntityManager,
+  stage: FairCategoryStage,
+  round: JudgingRound
+): Promise<PendingTieBreakAnnouncementDto | null> {
+  if (round.status === "OPEN") {
+    return null;
+  }
+  if (round.roundType !== "F2" && round.roundType !== "TIE_BREAK") {
+    return null;
+  }
+
+  let f2: JudgingRound | null = round.roundType === "F2" ? round : null;
+  if (!f2 && round.parentRoundId) {
+    f2 = await manager.getRepository(JudgingRound).findOne({
+      where: { id: round.parentRoundId }
+    });
+  }
+  if (!f2) {
+    f2 = await manager.getRepository(JudgingRound).findOne({
+      where: { fairCategoryStageId: stage.id, roundType: "F2" },
+      order: { createdAt: "DESC" }
+    });
+  }
+  if (!f2 || f2.status === "OPEN") {
+    return null;
+  }
+
+  const pending = await getNextPendingTieBlock(manager, f2);
+  if (!pending) {
+    return null;
+  }
+
+  const participants = await loadParticipants(manager, pending.participantIds);
+  const byId = new Map(participants.map((participant) => [participant.id, participant]));
+  const entries = pending.participantIds
+    .map((participantId) => {
+      const participant = byId.get(participantId);
+      if (!participant) return null;
+      return {
+        participantId,
+        trackPosition: participant.fairEntry.trackPosition,
+        horseName: participant.fairEntry.horse?.name?.trim() || null
+      };
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+    .sort((a, b) => a.trackPosition - b.trackPosition);
+
+  if (entries.length === 0) {
+    return null;
+  }
+
+  return {
+    reason: pending.reason,
+    startPosition: pending.startPosition,
+    endPosition: pending.endPosition,
+    entries
+  };
+}
+
 async function consolidateRankingRound(
   manager: EntityManager,
   round: JudgingRound,
@@ -1981,8 +2052,12 @@ async function getRoundStateForJudge(
     entries.map((entry) => entry.judgingParticipantId)
   );
 
+  const stageSummary = await buildStageSummary(manager, stage);
+  const [enrichedStage] = await enrichForJudge(manager, [stageSummary], user);
+  const pendingTieBreak = await resolvePendingTieBreakAnnouncement(manager, stage, round);
+
   return {
-    stage: await buildStageSummary(manager, stage),
+    stage: enrichedStage,
     round: {
       id: round.id,
       roundType: round.roundType,
@@ -2019,6 +2094,7 @@ async function getRoundStateForJudge(
             max: round.roundType === "TIE_BREAK" ? positionBounds.max : MAX_AWARD_POSITIONS
           }
         : null,
+    pendingTieBreak,
     availableReminders,
     reminderHistory,
     disqualificationReasons,

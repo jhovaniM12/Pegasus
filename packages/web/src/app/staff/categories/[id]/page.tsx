@@ -124,8 +124,30 @@ async function loadJudgeWorkspace(
   const view = resolveJudgeView(viewParam);
   const judgeHasClosedFa = current.judge?.faFormStatus === "CLOSED";
 
-  const withJudgeMeta = (summary: StagedCategory): StagedCategory =>
-    summary.judge ? summary : { ...summary, judge: current.judge };
+  const withJudgeMeta = (summary: StagedCategory): StagedCategory => {
+    const base = current.judge;
+    const next = summary.judge;
+    if (!base && !next) return summary;
+
+    const seat = next?.seat ?? base?.seat ?? null;
+    const label =
+      next?.label ?? base?.label ?? (seat != null ? `Juez ${seat}` : null);
+
+    return {
+      ...summary,
+      judge: {
+        faFormStatus: next?.faFormStatus ?? base?.faFormStatus ?? null,
+        roundFormStatus: next?.roundFormStatus ?? base?.roundFormStatus ?? null,
+        currentRoundType: next?.currentRoundType ?? base?.currentRoundType ?? null,
+        seat,
+        label,
+        formats:
+          next?.formats && next.formats.length > 0
+            ? next.formats
+            : base?.formats ?? [],
+      },
+    };
+  };
 
   if (view === "FA") {
     const response = await stagedFlowService.getFa(stageId);
@@ -142,7 +164,9 @@ async function loadJudgeWorkspace(
     const round = response.data ?? null;
     const summary = withJudgeMeta(round?.stage ?? current);
     const shouldLoadRoundsManagement =
-      view === "F1" && round != null && round.round.status !== "OPEN";
+      round != null &&
+      round.round.status !== "OPEN" &&
+      (view === "F1" || view === "F2" || view === "TIE_BREAK");
     const roundsManagement = shouldLoadRoundsManagement
       ? ((await stagedFlowService.getRoundsManagement(stageId)).data ?? null)
       : null;
@@ -199,7 +223,11 @@ async function loadJudgeWorkspace(
     const round = response.data ?? null;
     const summary = withJudgeMeta(round?.stage ?? current);
     const shouldLoadRoundsManagement =
-      round?.round.roundType === "F1" && round.round.status !== "OPEN";
+      round != null &&
+      round.round.status !== "OPEN" &&
+      (round.round.roundType === "F1" ||
+        round.round.roundType === "F2" ||
+        round.round.roundType === "TIE_BREAK");
     const roundsManagement = shouldLoadRoundsManagement
       ? ((await stagedFlowService.getRoundsManagement(stageId)).data ?? null)
       : null;
@@ -956,7 +984,14 @@ export default function StaffCategoryPage() {
                 currentUser
                   ? {
                       ...currentUser,
-                      roleLabel: summary?.judge?.label ?? currentUser.roleLabel,
+                      roleLabel:
+                        summary?.judge?.label ??
+                        (summary?.judge?.seat != null
+                          ? `Juez ${summary.judge.seat}`
+                          : null) ??
+                        round?.stage.judge?.label ??
+                        fa?.stage.judge?.label ??
+                        currentUser.roleLabel,
                     }
                   : null
               }
@@ -971,7 +1006,14 @@ export default function StaffCategoryPage() {
               currentUser
                 ? {
                     ...currentUser,
-                    roleLabel: summary?.judge?.label ?? currentUser.roleLabel,
+                    roleLabel:
+                      summary?.judge?.label ??
+                      (summary?.judge?.seat != null
+                        ? `Juez ${summary.judge.seat}`
+                        : null) ??
+                      round?.stage.judge?.label ??
+                      fa?.stage.judge?.label ??
+                      currentUser.roleLabel,
                   }
                 : null
             }
@@ -1350,6 +1392,7 @@ export default function StaffCategoryPage() {
               busy={busy}
               onLocalUpdate={setRound}
               syncUnavailable={sessionExpired}
+              managementRounds={roundsManagement?.rounds ?? []}
               runAction={runAction}
             />
           )

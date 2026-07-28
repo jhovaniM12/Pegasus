@@ -448,7 +448,7 @@ function buildFaFormatDto(
   return { key: "FA", formStatus, isActive, participantCount: null };
 }
 
-async function enrichForJudge(
+export async function enrichForJudge(
   manager: EntityManager,
   items: StagedCategoryDto[],
   user: User
@@ -1102,9 +1102,11 @@ async function getFaForStage(manager: EntityManager, user: User, stage: FairCate
     stageDisqualifyDecisions.map((decision) => [decision.judgingParticipantId, decision.faJudgeForm.judgeUser])
   );
   const activeJudgeCount = (await getActiveJudgesForStage(manager, stage)).length;
+  const stageSummary = await buildStageSummary(manager, stage);
+  const [enrichedStage] = await enrichForJudge(manager, [stageSummary], user);
 
   return {
-    stage: await buildStageSummary(manager, stage),
+    stage: enrichedStage,
     form: {
       id: form.id,
       revision: form.revision,

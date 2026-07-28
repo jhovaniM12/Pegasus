@@ -7,11 +7,13 @@ import { useToast } from "@/components/ui/toast";
 import { useRoundForm } from "@/hooks/use-round-form";
 import { hasBlockingMutationsForStage } from "@/offline/offline-repository";
 import { stagedFlowService } from "@/services/staged-flow.service";
-import type { RoundParticipant, RoundState, RoundType } from "@/types/staged-flow";
+import type { RoundManagementItem, RoundParticipant, RoundState, RoundType } from "@/types/staged-flow";
 import { F2PositionBoard } from "./f2-position-board";
 import { F2PositionSummary } from "./f2-position-summary";
 import { F1SelectionBoard } from "./f1-selection-board";
 import { FaDisqualifyDialog } from "./fa-disqualify-dialog";
+import { findPendingTieBlock } from "./pending-tie-block";
+import { TieBreakAnnouncement } from "./tie-break-announcement";
 
 const ROUND_TITLES: Record<RoundType, string> = {
   F1: "Prueba individual P1 — Cabeza de lote",
@@ -54,6 +56,8 @@ type JudgeRoundWorkspaceProps = {
   busy: boolean;
   onLocalUpdate: (round: RoundState) => void;
   syncUnavailable?: boolean;
+  /** Rondas de gestión para detectar empate pendiente tras consolidar F2. */
+  managementRounds?: RoundManagementItem[];
   runAction: (
     title: string,
     description: string,
@@ -119,6 +123,7 @@ export function JudgeRoundWorkspace({
   busy,
   onLocalUpdate,
   syncUnavailable = false,
+  managementRounds = [],
   runAction,
 }: JudgeRoundWorkspaceProps) {
   const { toast } = useToast();
@@ -433,6 +438,15 @@ export function JudgeRoundWorkspace({
   const stageStatus = round.stage.status;
   const officialResultPublished =
     stageStatus === "JUDGING_CLOSED" || stageStatus === "JUDGING_DESERTED";
+  const pendingTieBlock = useMemo(() => {
+    if (round.pendingTieBreak && round.pendingTieBreak.entries.length > 0) {
+      return round.pendingTieBreak;
+    }
+    if (roundType !== "F2" && roundType !== "TIE_BREAK") {
+      return null;
+    }
+    return findPendingTieBlock(managementRounds);
+  }, [managementRounds, round.pendingTieBreak, roundType]);
   const consolidatedWaitingMessage = officialResultPublished
     ? "El Director Técnico ya cerró el resultado oficial de la categoría."
     : stageStatus === "TIE_BREAK_IN_PROGRESS" && roundType !== "TIE_BREAK"
@@ -465,6 +479,28 @@ export function JudgeRoundWorkspace({
                 ))}
               </div>
             )}
+          </div>
+        ) : pendingTieBlock && pendingTieBlock.entries.length > 0 ? (
+          <div className="mt-4">
+            <TieBreakAnnouncement
+              reason={pendingTieBlock.reason}
+              startPosition={pendingTieBlock.startPosition}
+              endPosition={pendingTieBlock.endPosition}
+              entries={pendingTieBlock.entries}
+              phase={
+                stageStatus === "TIE_BREAK_IN_PROGRESS" ? "tie_break_open" : "awaiting_director"
+              }
+            />
+            {syncUnavailable ? (
+              <p className="mt-3 text-center text-xs font-medium text-red-600">
+                Sesión expirada. Vuelve a ingresar para actualizar la categoría.
+              </p>
+            ) : stageStatus !== "TIE_BREAK_IN_PROGRESS" ? (
+              <p className="mt-3 flex items-center justify-center gap-1.5 text-xs italic text-slate-400">
+                <Loader2 className="size-3.5 animate-spin" />
+                Sincronizando en tiempo real...
+              </p>
+            ) : null}
           </div>
         ) : (
           <div className="mt-4 flex flex-col items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50/40 px-6 py-8 text-center">
