@@ -306,6 +306,7 @@ export async function consolidateRoundController(c: Context) {
   const stageId = requiredParam(c, "id");
   const result = await consolidateRound(user, stageId);
   dispatchNotificationsAfterAction(stageId);
+  await sendStageRefreshSignal(stageId, "2");
   return c.json(success(result));
 }
 
@@ -315,6 +316,7 @@ export async function openTieBreakController(c: Context) {
   const stageId = requiredParam(c, "id");
   const result = await openTieBreak(user, stageId, body);
   dispatchNotificationsAfterAction(stageId);
+  await sendStageRefreshSignal(stageId, "2");
   return c.json(success(result));
 }
 
