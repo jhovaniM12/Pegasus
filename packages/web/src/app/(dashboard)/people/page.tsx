@@ -41,12 +41,6 @@ type RemoteAvailability = {
   message: string;
 };
 
-function roleHint(person: Person): string | null {
-  if (!person.accessRole) return null;
-  const prefix = ROLE_PREFIX[person.accessRole];
-  return prefix ? `Secuencia ${prefix}001…` : null;
-}
-
 function localValidationMessage(draft: string): string | null {
   const normalized = draft.trim().toUpperCase();
   if (!normalized) return null;
@@ -303,14 +297,7 @@ export default function PeoplePage() {
                     </TableCell>
                     <TableCell>{person.email || "—"}</TableCell>
                     <TableCell>{person.documentNumber || "—"}</TableCell>
-                    <TableCell>
-                      <div className="space-y-0.5">
-                        <div>{person.accessRoleLabel || "Sin rol habilitado"}</div>
-                        {roleHint(person) && (
-                          <div className="text-xs text-muted-foreground">{roleHint(person)}</div>
-                        )}
-                      </div>
-                    </TableCell>
+                    <TableCell>{person.accessRoleLabel || "Sin rol habilitado"}</TableCell>
                     <TableCell>
                       {person.accessCode ? (
                         <span className="font-mono text-sm font-semibold tracking-wider">

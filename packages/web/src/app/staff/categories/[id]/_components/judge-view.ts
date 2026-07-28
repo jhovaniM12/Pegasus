@@ -5,7 +5,7 @@ export type JudgePinnedView = "FA" | "F1" | "F2" | "TIE_BREAK";
 /**
  * Fases en las que una vista fijada por query param (?view=FA|F1|F2|TIE_BREAK) sigue
  * siendo válida. Si el estado real avanzó más allá, el juez debe redirigirse a la
- * fase vigente (p. ej. de P1 consolidado a "Iniciar tarjeta" de P2).
+ * fase vigente (p. ej. de P1 consolidado a "Iniciar Prueba Individual" de P2).
  *
  * JUDGING_CLOSED / JUDGING_DESERTED permiten consulta histórica en solo lectura.
  * No incluir estados de rondas posteriores activas: el push refresca datos, pero si

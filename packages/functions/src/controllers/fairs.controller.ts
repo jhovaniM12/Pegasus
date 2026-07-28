@@ -8,12 +8,17 @@ import { toFairStaffDto } from "../mappers/fair-staff.mapper.js";
 import { toFairDto } from "../mappers/fair.mapper.js";
 import { uuidParamSchema } from "../schemas/common.schema.js";
 import {
+  fairStaffParamsSchema,
+  updateFairStaffJudgeSeatSchema
+} from "../schemas/fair-staff.schema.js";
+import {
   getFairEntriesSummary,
   getFairById,
   listFairEntries,
   listFairResults,
   listFairs,
-  listFairStaff
+  listFairStaff,
+  updateFairStaffJudgeSeat
 } from "../services/fairs.service.js";
 
 const fairEntriesQuerySchema = z.object({
@@ -78,4 +83,11 @@ export async function listFairStaffController(c: Context) {
     (pagination) => listFairStaff(id, pagination),
     toFairStaffDto
   );
+}
+
+export async function updateFairStaffJudgeSeatController(c: Context) {
+  const { id, staffId } = fairStaffParamsSchema.parse(c.req.param());
+  const { judgeSeat } = updateFairStaffJudgeSeatSchema.parse(await c.req.json());
+  const staff = await updateFairStaffJudgeSeat(id, staffId, judgeSeat);
+  return c.json(success(toFairStaffDto(staff)));
 }

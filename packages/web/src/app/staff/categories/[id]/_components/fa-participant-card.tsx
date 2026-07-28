@@ -118,7 +118,7 @@ export function FaParticipantCard({
           </span>
           <span
             className={cn(
-              "mt-1.5 w-full truncate text-center text-xs font-semibold",
+              "mt-1.5 w-full px-1 text-center text-xs font-semibold leading-snug break-words whitespace-normal",
               disqualified
                 ? "text-slate-400"
                 : !editable && selected
@@ -127,7 +127,6 @@ export function FaParticipantCard({
                     ? "text-amber-900/80"
                     : "text-slate-500"
             )}
-            title={participant.horseName || undefined}
           >
             {participant.horseName || "Sin nombre"}
           </span>

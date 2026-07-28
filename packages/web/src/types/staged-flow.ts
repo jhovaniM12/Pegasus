@@ -68,6 +68,10 @@ export type StagedCategory = {
     faFormStatus: JudgeFormStatus | null;
     roundFormStatus: RoundFormStatus | null;
     currentRoundType: RoundType | null;
+    /** Asiento fijo en el panel de la feria (1–5). */
+    seat: number | null;
+    /** Etiqueta visible, p. ej. "Juez 2". */
+    label: string | null;
     formats: JudgeFormat[];
   };
 };
@@ -222,6 +226,14 @@ export type RoundParticipant = {
   } | null;
   disqualificationReason: DisqualificationReason | null;
   disqualifiedBy: { id: string; name: string } | null;
+  /** Solicitud de repetir pista hecha en FA; se conserva visible en P1/P2. */
+  repeatTrackRequest: {
+    id: string;
+    status: FaRepeatTrackRequestStatus;
+    requestedAt: string;
+    executedAt: string | null;
+    requestedBy: { id: string; name: string } | null;
+  } | null;
   selected: boolean;
   position: number | null;
   privateNote: string | null;

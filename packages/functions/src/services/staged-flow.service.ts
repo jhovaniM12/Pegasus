@@ -43,6 +43,7 @@ import {
   assertUserRole,
   formatStaffDisplayName,
   getActiveJudgesForStage,
+  getJudgeSeatForUser,
   getStageOrThrow,
   getUsersByFairRole,
   queueRoleNotifications,
@@ -77,10 +78,13 @@ export type StagedCategoryDto = {
     faFormStatus: "PENDING" | "STARTED" | "CLOSED" | null;
     roundFormStatus: JudgingRoundFormStatus | null;
     currentRoundType: JudgingRoundType | null;
+    /** Asiento fijo en el panel de la feria (1–5). */
+    seat: number | null;
+    /** Etiqueta visible, p. ej. "Juez 2". */
+    label: string | null;
     formats: JudgeFormatDto[];
   };
 };
-
 const JUDGING_PHASE_STATUSES: FairCategoryStageStatus[] = [
   "JUDGING_STARTED",
   "FA_CONSOLIDATED",
@@ -439,8 +443,9 @@ function buildFaFormatDto(
 async function enrichForJudge(
   manager: EntityManager,
   items: StagedCategoryDto[],
-  userId: string
+  user: User
 ): Promise<StagedCategoryDto[]> {
+  const userId = user.id;
   if (items.length === 0) {
     return [];
   }
@@ -464,6 +469,7 @@ async function enrichForJudge(
     }
   }
 
+  const seatByFairId = new Map<string, number | null>();
   const enriched: StagedCategoryDto[] = [];
   for (const item of items) {
     const faForm = faFormByStageId.get(item.stageId) ?? null;
@@ -486,6 +492,11 @@ async function enrichForJudge(
       });
     }
 
+    if (!seatByFairId.has(item.fair.id)) {
+      seatByFairId.set(item.fair.id, await getJudgeSeatForUser(manager, item.fair.id, user));
+    }
+    const seat = seatByFairId.get(item.fair.id) ?? null;
+
     const faFormat = buildFaFormatDto(item.status, faForm);
     const formats: JudgeFormatDto[] = [faFormat, f1Format, f2Format];
     if (tieBreakFormat.formStatus !== "NOT_AVAILABLE") {
@@ -498,6 +509,8 @@ async function enrichForJudge(
         faFormStatus: faForm?.status ?? null,
         roundFormStatus: roundForm?.status ?? null,
         currentRoundType: activeRound?.roundType ?? null,
+        seat,
+        label: seat != null ? `Juez ${seat}` : null,
         formats
       }
     });
@@ -522,7 +535,7 @@ export async function listStagedCategories(user: User): Promise<StagedCategoryDt
     const summaries = await buildStageSummaries(manager, stages);
 
     if (user.role === "JUDGE") {
-      return enrichForJudge(manager, summaries, user.id);
+      return enrichForJudge(manager, summaries, user);
     }
 
     return summaries;
@@ -543,7 +556,7 @@ export async function getStagedCategory(user: User, stageId: string): Promise<St
     let summary = await buildStageSummary(manager, stage);
 
     if (user.role === "JUDGE") {
-      const [enriched] = await enrichForJudge(manager, [summary], user.id);
+      const [enriched] = await enrichForJudge(manager, [summary], user);
       summary = enriched;
     }
 

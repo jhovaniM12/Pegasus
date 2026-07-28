@@ -37,3 +37,4 @@ export { RemoveTieBreakTestVotesAndDrawColumns1717430400035 } from "./1717430400
 export { AllowZeroAssignedVotesInUnawardedResults1717430400036 } from "./1717430400036-AllowZeroAssignedVotesInUnawardedResults.js";
 export { AddDesertedResultReasonMetadata1717430400037 } from "./1717430400037-AddDesertedResultReasonMetadata.js";
 export { AddPreRingRejectionReasons1717430400038 } from "./1717430400038-AddPreRingRejectionReasons.js";
+export { AddFairStaffJudgeSeat1717430400039 } from "./1717430400039-AddFairStaffJudgeSeat.js";

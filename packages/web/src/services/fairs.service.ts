@@ -65,6 +65,16 @@ export class FairsService extends ApiService {
 
     return this.get<PaginatedResponse<FairStaff>>(`/api/fairs/${fairId}/staff?${query}`);
   }
+
+  async updateStaffJudgeSeat(
+    fairId: string,
+    staffId: string,
+    judgeSeat: number | null
+  ): Promise<ApiResponse<FairStaff>> {
+    return this.patch<ApiResponse<FairStaff>>(`/api/fairs/${fairId}/staff/${staffId}`, {
+      judgeSeat,
+    });
+  }
 }
 
 export const fairsService = new FairsService();

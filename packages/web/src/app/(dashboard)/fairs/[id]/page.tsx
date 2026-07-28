@@ -24,12 +24,25 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from "@/components/ui/select";
+import { useToast } from "@/components/ui/toast";
 import { useFairDetail, useFairEntries, useFairResults, useFairStaff } from "@/hooks/use-fairs";
 import { ContentReveal, FairDetailSkeleton, TableRowsSkeleton } from "@/components/loaders";
+import { ApiError } from "@/services/api.service";
+import { fairsService } from "@/services/fairs.service";
+import type { FairStaff } from "@/types/fairs";
 
 const ENTRIES_PAGE_SIZE = 20;
 const RESULTS_PAGE_SIZE = 20;
 const STAFF_PAGE_SIZE = 20;
+const JUDGE_ROLE_EXTERNAL_ID = "2";
+const JUDGE_SEATS = [1, 2, 3, 4, 5] as const;
+const EMPTY_SEAT_VALUE = "none";
 
 function formatDate(value: string | null): string {
   if (!value) {
@@ -79,6 +92,77 @@ function EntriesStepBadge({
   );
 }
 
+function isJudgeStaff(staff: FairStaff): boolean {
+  return staff.role.externalId === JUDGE_ROLE_EXTERNAL_ID;
+}
+
+function JudgeSeatSelect({
+  fairId,
+  staffMember,
+  onUpdated,
+}: {
+  fairId: string;
+  staffMember: FairStaff;
+  onUpdated: () => void;
+}) {
+  const { toast } = useToast();
+  const [saving, setSaving] = useState(false);
+  const value =
+    staffMember.judgeSeat != null ? String(staffMember.judgeSeat) : EMPTY_SEAT_VALUE;
+
+  const handleChange = async (nextValue: string | null) => {
+    if (!nextValue || saving) {
+      return;
+    }
+
+    const nextSeat =
+      nextValue === EMPTY_SEAT_VALUE ? null : Number.parseInt(nextValue, 10);
+    if (nextSeat === staffMember.judgeSeat) {
+      return;
+    }
+    if (nextSeat != null && !JUDGE_SEATS.includes(nextSeat as (typeof JUDGE_SEATS)[number])) {
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await fairsService.updateStaffJudgeSeat(fairId, staffMember.id, nextSeat);
+      onUpdated();
+      toast({
+        title: nextSeat != null ? `Asignado como Juez ${nextSeat}` : "Asiento liberado",
+        variant: "success",
+      });
+    } catch (error) {
+      toast({
+        title: "No se pudo actualizar el asiento",
+        description:
+          error instanceof ApiError ? error.message : "Intenta de nuevo en unos segundos.",
+        variant: "error",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Select value={value} onValueChange={handleChange} disabled={saving}>
+      <SelectTrigger className="h-8 min-w-28 bg-white">
+        <span className="text-sm">
+          {staffMember.judgeSeat != null ? `Juez ${staffMember.judgeSeat}` : "Sin asiento"}
+        </span>
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={EMPTY_SEAT_VALUE}>Sin asiento</SelectItem>
+        {JUDGE_SEATS.map((seat) => (
+          <SelectItem key={seat} value={String(seat)}>
+            Juez {seat}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 function EntriesSteps({
   current,
   gaitName,
@@ -115,7 +199,14 @@ export default function FairDetailPage({ params }: { params: Promise<{ id: strin
     limit: RESULTS_PAGE_SIZE,
     categoryId: selectedCategoryId,
   });
-  const { staff, meta: staffMeta, loading: staffLoading, page: staffPage, setPage: setStaffPage } = useFairStaff(id, {
+  const {
+    staff,
+    meta: staffMeta,
+    loading: staffLoading,
+    page: staffPage,
+    setPage: setStaffPage,
+    reload: reloadStaff,
+  } = useFairStaff(id, {
     limit: STAFF_PAGE_SIZE,
   });
 
@@ -545,7 +636,8 @@ export default function FairDetailPage({ params }: { params: Promise<{ id: strin
             <CardHeader>
               <CardTitle>Personal de la Feria</CardTitle>
               <CardDescription>
-                Consulta los datos de contacto y el rol del personal asignado al evento.
+                Consulta los datos de contacto y el rol del personal asignado al evento. En jueces,
+                asigna el asiento fijo del panel (Juez 1–5).
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -558,14 +650,15 @@ export default function FairDetailPage({ params }: { params: Promise<{ id: strin
                     <TableHead>Celular</TableHead>
                     <TableHead>Correo</TableHead>
                     <TableHead>Rol</TableHead>
+                    <TableHead>Asiento</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {staffLoading ? (
-                    <TableRowsSkeleton columns={6} />
+                    <TableRowsSkeleton columns={7} />
                   ) : staff.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center">
+                      <TableCell colSpan={7} className="text-center">
                         No hay personal registrado para esta feria
                       </TableCell>
                     </TableRow>
@@ -578,6 +671,19 @@ export default function FairDetailPage({ params }: { params: Promise<{ id: strin
                         <TableCell>{staffMember.person.phone || "—"}</TableCell>
                         <TableCell>{staffMember.person.email || "—"}</TableCell>
                         <TableCell>{staffMember.role.name || "—"}</TableCell>
+                        <TableCell>
+                          {isJudgeStaff(staffMember) ? (
+                            <JudgeSeatSelect
+                              fairId={id}
+                              staffMember={staffMember}
+                              onUpdated={() => {
+                                reloadStaff();
+                              }}
+                            />
+                          ) : (
+                            "—"
+                          )}
+                        </TableCell>
                       </TableRow>
                     ))
                   )}

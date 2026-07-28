@@ -51,11 +51,38 @@ function PrivateNoteBadge({ className }: { className?: string }) {
   );
 }
 
+function RepeatTrackBadge({
+  request,
+  compact = false,
+}: {
+  request: NonNullable<RoundParticipant["repeatTrackRequest"]>;
+  compact?: boolean;
+}) {
+  const executed = request.status === "EXECUTED";
+  return (
+    <div
+      className={cn(
+        "rounded-lg text-center font-semibold",
+        compact ? "mt-1 px-2 py-1.5 text-[10px]" : "mt-2 px-3 py-2 text-xs",
+        executed ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
+      )}
+    >
+      {executed ? "Repetición ejecutada" : "Solicitó repetir pista"}
+      {request.requestedBy && (
+        <span className={cn("block font-medium opacity-80", compact ? "mt-0.5" : "mt-1")}>
+          Por: {request.requestedBy.name}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function RoundEntryCard(props: RoundEntryCardProps) {
   const { participant, editable, onOpenReminders, onOpenNote, onOpenDisqualify, variant } = props;
 
   const hasNote = Boolean(participant.privateNote?.trim());
   const disqualified = participant.status === "DISQUALIFIED";
+  const repeatRequest = participant.repeatTrackRequest;
 
   if (variant === "f2") {
     const { assignedPosition, occupiedPositions, allowedPositions, awardDistinctives, onAssignToPosition, onUnassign } = props;
@@ -124,10 +151,9 @@ export function RoundEntryCard(props: RoundEntryCardProps) {
           </span>
           <span
             className={cn(
-              "mt-2 max-w-full truncate px-1 text-center text-xs font-semibold",
+              "mt-2 w-full px-1 text-center text-xs font-semibold leading-snug break-words whitespace-normal",
               disqualified ? "text-slate-400" : "text-slate-500"
             )}
-            title={participant.horseName || undefined}
           >
             {participant.horseName || "Sin nombre"}
           </span>
@@ -152,6 +178,8 @@ export function RoundEntryCard(props: RoundEntryCardProps) {
             ))}
           </div>
         )}
+
+        {repeatRequest && !disqualified && <RepeatTrackBadge request={repeatRequest} />}
 
         {/* Reset button */}
         {editable && (
@@ -302,14 +330,13 @@ export function RoundEntryCard(props: RoundEntryCardProps) {
         </span>
         <span
           className={cn(
-            "mt-2 max-w-full truncate px-1 text-center text-xs font-semibold",
+            "mt-2 w-full px-1 text-center text-xs font-semibold leading-snug break-words whitespace-normal",
             disqualified
               ? "text-slate-400"
               : selected
                 ? "text-white/85"
                 : "text-slate-500"
           )}
-          title={participant.horseName || undefined}
         >
           {participant.horseName || "Sin nombre"}
         </span>
@@ -358,6 +385,7 @@ export function RoundEntryCard(props: RoundEntryCardProps) {
           {participant.provisionalDisqualification.requiredReports} votos
         </p>
       )}
+      {repeatRequest && !disqualified && <RepeatTrackBadge request={repeatRequest} compact />}
     </div>
   );
 }

@@ -2,6 +2,7 @@ import {
   AwardDistinctive,
   DisqualificationReason,
   FaConsolidatedResult,
+  FaRepeatTrackRequest,
   FairCategoryStage,
   getDataSource,
   JudgingDisqualificationReport,
@@ -1850,6 +1851,13 @@ type RoundParticipantDto = {
     description: string | null;
   } | null;
   disqualifiedBy: { id: string; name: string } | null;
+  repeatTrackRequest: {
+    id: string;
+    status: "PENDING" | "EXECUTED";
+    requestedAt: string;
+    executedAt: string | null;
+    requestedBy: { id: string; name: string } | null;
+  } | null;
   selected: boolean;
   position: number | null;
   privateNote: string | null;
@@ -1892,6 +1900,16 @@ async function getRoundStateForJudge(
           relations: { disqualificationReason: true }
         });
   const activeJudgeCount = (await getActiveJudgesForStage(manager, stage)).length;
+  const repeatTrackRequests =
+    participants.length === 0
+      ? []
+      : await manager.getRepository(FaRepeatTrackRequest).find({
+          where: { fairCategoryStageId: stage.id },
+          relations: { requestedByUser: { person: true } }
+        });
+  const repeatRequestByParticipantId = new Map(
+    repeatTrackRequests.map((request) => [request.judgingParticipantId, request])
+  );
 
   const roster: RoundParticipantDto[] = entries
     .map((entry) => {
@@ -1900,6 +1918,7 @@ async function getRoundStateForJudge(
         (report) => report.judgingParticipantId === entry.judgingParticipantId
       );
       const provisionalReason = participantReports[0]?.disqualificationReason ?? null;
+      const repeatTrackRequest = repeatRequestByParticipantId.get(entry.judgingParticipantId) ?? null;
       return {
         id: entry.judgingParticipantId,
         trackPosition: participant?.fairEntry.trackPosition ?? 0,
@@ -1934,6 +1953,15 @@ async function getRoundStateForJudge(
             }
           : null,
         disqualifiedBy: toDisqualifiedByDto(participant?.disqualifiedByUser),
+        repeatTrackRequest: repeatTrackRequest
+          ? {
+              id: repeatTrackRequest.id,
+              status: repeatTrackRequest.status,
+              requestedAt: repeatTrackRequest.requestedAt.toISOString(),
+              executedAt: repeatTrackRequest.executedAt?.toISOString() ?? null,
+              requestedBy: toDisqualifiedByDto(repeatTrackRequest.requestedByUser)
+            }
+          : null,
         selected: entry.selected,
         position: entry.position,
         privateNote: entry.privateNote,

@@ -5,7 +5,8 @@ import {
   listFairEntriesController,
   listFairResultsController,
   listFairsController,
-  listFairStaffController
+  listFairStaffController,
+  updateFairStaffJudgeSeatController
 } from "../controllers/fairs.controller.js";
 
 export const fairsRoutes = new Hono();
@@ -16,3 +17,4 @@ fairsRoutes.get("/fairs/:id/entries/summary", getFairEntriesSummaryController);
 fairsRoutes.get("/fairs/:id/entries", listFairEntriesController);
 fairsRoutes.get("/fairs/:id/results", listFairResultsController);
 fairsRoutes.get("/fairs/:id/staff", listFairStaffController);
+fairsRoutes.patch("/fairs/:id/staff/:staffId", updateFairStaffJudgeSeatController);

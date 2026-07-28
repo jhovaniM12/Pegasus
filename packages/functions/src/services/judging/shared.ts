@@ -8,6 +8,7 @@ import {
   type UserRole
 } from "@pegasus/core";
 import type { EntityManager } from "typeorm";
+import { In } from "typeorm";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { assertIndividualJudgingCategory } from "./category-flow-rules.js";
 import { activeJudgeIndexes } from "./workflow-guards.js";
@@ -86,6 +87,69 @@ export async function getStageOrThrow(manager: EntityManager, stageId: string): 
 }
 
 /**
+ * Jueces de la feria ordenados por asiento fijo (1–5) y luego por id.
+ * El asiento proviene de `fair_staff.judge_seat`.
+ */
+export async function getConfiguredJudgesForFair(
+  manager: EntityManager,
+  fairId: string
+): Promise<Array<{ user: User; seat: number | null }>> {
+  const staffRows = await manager
+    .getRepository(FairStaff)
+    .createQueryBuilder("staff")
+    .innerJoinAndSelect("staff.role", "role")
+    .where("staff.fair_id = :fairId", { fairId })
+    .andWhere("role.external_id = :roleExternalId", { roleExternalId: "2" })
+    .orderBy("staff.judge_seat", "ASC", "NULLS LAST")
+    .addOrderBy("staff.created_at", "ASC")
+    .addOrderBy("staff.id", "ASC")
+    .getMany();
+
+  if (staffRows.length === 0) {
+    return [];
+  }
+
+  const users = await manager.getRepository(User).find({
+    where: {
+      personId: In(staffRows.map((row) => row.personId)),
+      isActive: true
+    }
+  });
+  const userByPersonId = new Map(
+    users.filter((user) => user.personId).map((user) => [user.personId as string, user])
+  );
+
+  return staffRows
+    .map((row) => {
+      const user = userByPersonId.get(row.personId);
+      if (!user) return null;
+      return { user, seat: row.judgeSeat };
+    })
+    .filter((row): row is { user: User; seat: number | null } => row !== null);
+}
+
+export async function getJudgeSeatForUser(
+  manager: EntityManager,
+  fairId: string,
+  user: User
+): Promise<number | null> {
+  if (!user.personId || user.role !== "JUDGE") {
+    return null;
+  }
+
+  const staff = await manager
+    .getRepository(FairStaff)
+    .createQueryBuilder("staff")
+    .innerJoin("staff.role", "role")
+    .where("staff.fair_id = :fairId", { fairId })
+    .andWhere("staff.person_id = :personId", { personId: user.personId })
+    .andWhere("role.external_id = :roleExternalId", { roleExternalId: "2" })
+    .getOne();
+
+  return staff?.judgeSeat ?? null;
+}
+
+/**
  * Panel efectivo de una categoría. Con dos jueces en Grado B alterna uno por
  * categoría; nunca devuelve ambos para una consolidación conjunta.
  */
@@ -93,9 +157,8 @@ export async function getActiveJudgesForStage(
   manager: EntityManager,
   stage: FairCategoryStage
 ): Promise<User[]> {
-  const configured = (await getUsersByFairRole(manager, stage.fairId, "2")).sort((a, b) =>
-    a.id.localeCompare(b.id)
-  );
+  const configuredRows = await getConfiguredJudgesForFair(manager, stage.fairId);
+  const configured = configuredRows.map((row) => row.user);
   const fairStages = await manager.getRepository(FairCategoryStage).find({
     where: { fairId: stage.fairId },
     order: { createdAt: "ASC", id: "ASC" }

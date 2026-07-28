@@ -14,6 +14,8 @@ export type FairStaffDto = SyncableDto & {
   fairId: string;
   person: PersonSummaryDto;
   role: RoleSummaryDto;
+  /** Asiento fijo del juez (1–5). Null si no aplica o no está asignado. */
+  judgeSeat: number | null;
 };
 
 function toPersonSummaryDto(person: Person): PersonSummaryDto {
@@ -32,6 +34,7 @@ export function toFairStaffDto(staff: FairStaff): FairStaffDto {
     ...toSyncableDto(staff),
     fairId: staff.fairId,
     person: toPersonSummaryDto(staff.person),
-    role: toRoleSummaryDto(staff.role)
+    role: toRoleSummaryDto(staff.role),
+    judgeSeat: staff.judgeSeat ?? null
   };
 }

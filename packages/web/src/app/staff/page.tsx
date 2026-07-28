@@ -11,10 +11,8 @@ import {
   Gavel,
   LayoutDashboard,
   ListFilter,
-  LogOut,
   Play,
   Stethoscope,
-  UserCircle,
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -28,14 +26,13 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { NotificationInbox } from "@/components/notification-inbox";
 import { PushNotificationPrompt } from "@/components/push-notification-prompt";
 import { PegasoLogo } from "@/components/brand/pegaso-logo";
+import { StaffUserMenu } from "@/components/staff-user-menu";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/components/ui/toast";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -226,56 +223,6 @@ function getCardAction(role: string | undefined, item: StagedCategory): CardActi
   return { kind: "navigate", color: "secondary", icon: Eye, href, label: "Ver categoría" };
 }
 
-// ─── StaffUserMenu ────────────────────────────────────────────────────────────
-
-function StaffUserMenu({
-  currentUser,
-  onLogout,
-  className = "",
-}: {
-  currentUser: CurrentUser | null;
-  onLogout: () => void;
-  className?: string;
-}) {
-  const displayName = currentUser?.personName ?? currentUser?.email ?? "Usuario";
-  const roleLabel = currentUser?.roleLabel ?? "Staff";
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <button
-            type="button"
-            className={`flex min-w-0 items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-left transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 ${className}`}
-          >
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-white text-slate-500">
-              <UserCircle className="size-5" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-slate-950">{displayName}</p>
-              <p className="text-xs text-slate-500">{roleLabel}</p>
-            </div>
-            <ChevronDown className="size-4 shrink-0 text-slate-500" />
-          </button>
-        }
-      />
-      <DropdownMenuContent align="end" className="w-64">
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>
-            <span className="block truncate text-sm font-semibold text-slate-950">{displayName}</span>
-            <span className="mt-1 block text-xs font-normal text-slate-500">{roleLabel}</span>
-          </DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem className="cursor-pointer" variant="destructive" onClick={onLogout}>
-            <LogOut className="size-4" />
-            Cerrar sesión
-          </DropdownMenuItem>
-        </DropdownMenuGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
 // ─── CategoryFilters ──────────────────────────────────────────────────────────
 
 function CategoryFilters({
@@ -426,6 +373,16 @@ export default function StaffPage() {
 
   /** Solo el DT separa “sin iniciar” vs “en flujo”; vet/juez ven todo lo no cerrado en Pendientes. */
   const showInProgressTab = currentUser?.role === "TECHNICAL_DIRECTOR";
+  const judgeMenuLabel =
+    currentUser?.role === "JUDGE"
+      ? categories.find((item) => item.judge?.label)?.judge?.label ?? null
+      : null;
+  const menuUser = currentUser
+    ? {
+        ...currentUser,
+        roleLabel: judgeMenuLabel ?? currentUser.roleLabel,
+      }
+    : null;
   const effectiveTab =
     !showInProgressTab && activeTab === "in_progress" ? "pending" : activeTab;
 
@@ -609,7 +566,7 @@ export default function StaffPage() {
             <SyncIndicator />
             <NotificationInbox />
             <ConnectionIndicator />
-            <StaffUserMenu currentUser={currentUser} onLogout={logout} className="max-w-72" />
+            <StaffUserMenu currentUser={menuUser} onLogout={logout} className="max-w-72" />
           </div>
         </div>
       </header>
@@ -622,7 +579,7 @@ export default function StaffPage() {
             <SyncIndicator className="shrink-0" />
             <NotificationInbox />
             <ConnectionIndicator className="shrink-0" />
-            <StaffUserMenu currentUser={currentUser} onLogout={logout} className="w-full bg-card" />
+            <StaffUserMenu currentUser={menuUser} onLogout={logout} className="w-full bg-card" />
           </div>
         </div>
 
@@ -698,11 +655,12 @@ export default function StaffPage() {
                 showCategoryAction &&
                 currentUser?.role === "JUDGE" &&
                 item.judge?.formats?.some((format) => format.formStatus !== "NOT_AVAILABLE");
-              // Pendientes de pre-pista solo aportan antes/durante el chequeo veterinario.
+              // Contador de pendientes de chequeo: solo el veterinario lo necesita en la tarjeta.
               const showVeterinaryPending =
-                item.status === "NOT_STARTED" ||
-                item.status === "PRE_RING_STARTED" ||
-                item.status === "PRE_RING_CLOSED";
+                currentUser?.role === "VETERINARIAN" &&
+                (item.status === "NOT_STARTED" ||
+                  item.status === "PRE_RING_STARTED" ||
+                  item.status === "PRE_RING_CLOSED");
 
               return (
                 <article

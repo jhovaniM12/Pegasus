@@ -9,6 +9,8 @@ import { ConfirmActionDialog } from "@/components/confirm-action-dialog";
 import { NotificationInbox } from "@/components/notification-inbox";
 import { ConnectionIndicator, SyncIndicator } from "@/components/network-status";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { StaffUserMenu } from "@/components/staff-user-menu";
+import { prepareStaffLogoutOffline } from "@/offline/retention";
 import { stagedFlowService } from "@/services/staged-flow.service";
 import { useToast } from "@/components/ui/toast";
 import { useStaffRealtimeRefresh } from "@/hooks/use-staff-realtime-refresh";
@@ -868,6 +870,23 @@ export default function StaffCategoryPage() {
       summary.status
     );
   const judgeOfficialF2 = roundsManagement ? buildOfficialF2Results(roundsManagement.rounds) : null;
+
+  const logout = async () => {
+    if (currentUser?.id) {
+      const result = await prepareStaffLogoutOffline(currentUser.id);
+      if (result.blockedByPending) {
+        const proceed = window.confirm(
+          `Tienes ${result.pendingCount} cambio(s) offline pendientes en este dispositivo. ` +
+            "Se conservarán aislados para tu usuario. ¿Cerrar sesión de todos modos?"
+        );
+        if (!proceed) return;
+      }
+    }
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login/staff");
+    router.refresh();
+  };
+
   const judgeConsolidatedF1 =
     round?.round.roundType === "F1" && round.round.status !== "OPEN"
       ? (roundsManagement?.rounds.find(
@@ -918,7 +937,7 @@ export default function StaffCategoryPage() {
             <ArrowLeft className="size-4" />
             Volver
           </Link>
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             <ThemeToggle />
             <SyncIndicator
               stageId={stageId}
@@ -932,7 +951,33 @@ export default function StaffCategoryPage() {
             />
             <NotificationInbox />
             <ConnectionIndicator />
+            <StaffUserMenu
+              currentUser={
+                currentUser
+                  ? {
+                      ...currentUser,
+                      roleLabel: summary?.judge?.label ?? currentUser.roleLabel,
+                    }
+                  : null
+              }
+              onLogout={logout}
+              className="hidden max-w-56 sm:flex"
+            />
           </div>
+        </div>
+        <div className="mx-auto mt-3 flex max-w-6xl sm:hidden">
+          <StaffUserMenu
+            currentUser={
+              currentUser
+                ? {
+                    ...currentUser,
+                    roleLabel: summary?.judge?.label ?? currentUser.roleLabel,
+                  }
+                : null
+            }
+            onLogout={logout}
+            className="w-full bg-card"
+          />
         </div>
       </header>
 

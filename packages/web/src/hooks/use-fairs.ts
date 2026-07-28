@@ -169,6 +169,7 @@ export function useFairStaff(fairId: string, params: UseFairStaffParams) {
   const [staff, setStaff] = useState<FairStaff[]>([]);
   const [meta, setMeta] = useState<PaginationMeta>({ ...emptyMeta, limit: params.limit });
   const [loadedKey, setLoadedKey] = useState("");
+  const [reloadToken, setReloadToken] = useState(0);
 
   const page = pageByFilter[filterKey] ?? 1;
   const setPage = useCallback(
@@ -178,7 +179,7 @@ export function useFairStaff(fairId: string, params: UseFairStaffParams) {
     [filterKey]
   );
 
-  const requestKey = [filterKey, params.limit, page].join(":");
+  const requestKey = [filterKey, params.limit, page, reloadToken].join(":");
 
   useEffect(() => {
     fairsService
@@ -191,7 +192,23 @@ export function useFairStaff(fairId: string, params: UseFairStaffParams) {
         setMeta(data.meta || { ...emptyMeta, limit: params.limit });
         setLoadedKey(requestKey);
       });
-  }, [fairId, filterKey, params.limit, page, requestKey]);
+  }, [fairId, filterKey, params.limit, page, requestKey, reloadToken]);
 
-  return { staff, meta, loading: loadedKey !== requestKey, page, setPage };
+  const reload = useCallback(() => {
+    setReloadToken((current) => current + 1);
+  }, []);
+
+  const replaceStaffMember = useCallback((updated: FairStaff) => {
+    setStaff((current) => current.map((row) => (row.id === updated.id ? updated : row)));
+  }, []);
+
+  return {
+    staff,
+    meta,
+    loading: loadedKey !== requestKey,
+    page,
+    setPage,
+    reload,
+    replaceStaffMember,
+  };
 }

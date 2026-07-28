@@ -102,6 +102,8 @@ function mergeIncomingAnnotations(
       status: next.status,
       disqualificationReason: next.disqualificationReason,
       disqualifiedBy: next.disqualifiedBy,
+      provisionalDisqualification: next.provisionalDisqualification,
+      repeatTrackRequest: next.repeatTrackRequest,
       horseName: next.horseName,
       riderName: next.riderName,
       registrationNumber: next.registrationNumber,
@@ -512,13 +514,13 @@ export function JudgeRoundWorkspace({
               className="bg-emerald-600 text-white hover:bg-emerald-700"
               disabled={busy}
               onClick={() =>
-                runAction("Iniciar tarjeta", ROUND_HINTS[roundType], () =>
+                runAction("Iniciar Prueba Individual", ROUND_HINTS[roundType], () =>
                   stagedFlowService.startRoundForm(stageId)
                 )
               }
             >
               <Play className="size-4" />
-              Iniciar tarjeta
+              Iniciar Prueba Individual
             </Button>
           )}
         </div>

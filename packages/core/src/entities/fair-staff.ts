@@ -1,8 +1,11 @@
-import { Column, Entity, JoinColumn, ManyToOne} from "typeorm";
+import { Column, Entity, JoinColumn, ManyToOne } from "typeorm";
 import { SyncableEntity } from "./base.entity.js";
 import { Fair } from "./fair.entity.js";
 import { Person } from "./person.entity.js";
 import { Role } from "./role.entity.js";
+
+/** Asiento fijo del juez en el panel de la feria (1–5). Solo aplica a rol juez. */
+export type JudgeSeat = 1 | 2 | 3 | 4 | 5;
 
 @Entity({ name: "fair_staff" })
 export class FairStaff extends SyncableEntity {
@@ -27,4 +30,6 @@ export class FairStaff extends SyncableEntity {
   @JoinColumn({ name: "role_id" })
   role!: Role;
 
+  @Column({ name: "judge_seat", type: "integer", nullable: true })
+  judgeSeat!: number | null;
 }

@@ -86,5 +86,7 @@ export type FairStaff = {
   };
   role: {
     name: string | null;
+    externalId: string | null;
   };
+  judgeSeat: number | null;
 };
