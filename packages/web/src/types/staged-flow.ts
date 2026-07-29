@@ -341,6 +341,7 @@ export type RoundResult = {
   tieMembership?: ResultTieMembership[];
   /** Metadato de presentación agregado al combinar el F2 con desempates consolidados. */
   resolvedByTieBreak?: boolean;
+  resolvedByTieBreakSequence?: number | null;
 };
 
 export type PositionOutcomeType =
@@ -352,7 +353,8 @@ export type PositionOutcomeType =
 export type DesertedReason =
   | "NO_ASSIGNMENTS"
   | "INSUFFICIENT_CONSIDERATION"
-  | "EXPLICIT_MAJORITY";
+  | "EXPLICIT_MAJORITY"
+  | "DISQUALIFICATION_DURING_TIE_BREAK";
 
 export type DesertedRoundResult = {
   id: string;
@@ -362,6 +364,8 @@ export type DesertedRoundResult = {
   reason?: DesertedReason | null;
   assignedVotes?: number;
   minimumRequired?: number | null;
+  disqualifiedParticipantId?: string | null;
+  sourceTieBreakId?: string | null;
   outcomeType?: "DESERTED";
   awardDistinctive: AwardDistinctiveDto | null;
 };
@@ -386,6 +390,8 @@ export type PositionOutcome = {
   reason?: DesertedReason | null;
   awardDistinctive: AwardDistinctiveDto | null;
   tieBreakReason?: TieBreakReason | null;
+  disqualifiedParticipantId?: string | null;
+  sourceTieBreakId?: string | null;
 };
 
 export type RoundManagementForm = {

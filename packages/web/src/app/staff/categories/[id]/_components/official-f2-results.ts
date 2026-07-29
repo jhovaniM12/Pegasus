@@ -36,6 +36,8 @@ function resolvePositionOutcomes(f2: RoundManagementItem): PositionOutcome[] {
       votesCount: row.desertedVotes ?? row.votesCount,
       desertedVotes: row.desertedVotes ?? row.votesCount,
       reason: row.reason ?? null,
+      disqualifiedParticipantId: row.disqualifiedParticipantId ?? null,
+      sourceTieBreakId: row.sourceTieBreakId ?? null,
       awardDistinctive: row.awardDistinctive,
       tieBreakReason: null,
     })),
@@ -50,6 +52,8 @@ function resolvePositionOutcomes(f2: RoundManagementItem): PositionOutcome[] {
         votesCount: 0,
         desertedVotes: 0,
         reason: "INSUFFICIENT_CONSIDERATION" as const,
+        disqualifiedParticipantId: null,
+        sourceTieBreakId: null,
         awardDistinctive: row.awardDistinctive,
         tieBreakReason: null,
       })),
@@ -85,9 +89,8 @@ function toOfficialAwardSlice(input: {
 
 /**
  * Lee el F2 oficial desde la API.
- * Tras el cierre, el backend ya reescribió posiciones/estados a FINAL;
- * no se fusionan desempates en el cliente (fuente de verdad = backend).
- * Antes del cierre, se proyecta el desempate consolidado solo para vista provisional.
+ * El backend entrega el F2 efectivo tanto antes como después del cierre. Esta
+ * capa solo recorta los puestos visibles; nunca vuelve a aplicar desempates.
  */
 export function buildOfficialF2Results(rounds: RoundManagementItem[]): OfficialF2Results | null {
   const f2 = latestF2(rounds);
@@ -109,46 +112,8 @@ export function buildOfficialF2Results(rounds: RoundManagementItem[]): OfficialF
     });
   }
 
-  const resolvedTieBreaks = rounds
-    .filter(
-      (round) =>
-        round.roundType === "TIE_BREAK" &&
-        round.status === "CONSOLIDATED" &&
-        round.results.length > 0 &&
-        round.results.every((result) => result.status !== "TIED")
-    )
-    .sort((a, b) => a.sequence - b.sequence);
-
-  const tieBreakResultByParticipant = new Map<string, RoundResult>();
-  for (const tieBreak of resolvedTieBreaks) {
-    for (const result of tieBreak.results) {
-      if (result.finalPosition !== null) {
-        tieBreakResultByParticipant.set(result.participantId, result);
-      }
-    }
-  }
-
-  const results = f2.results.map((result) => {
-    const resolved = tieBreakResultByParticipant.get(result.participantId);
-    if (!resolved) {
-      return { ...result, resolvedByTieBreak: false };
-    }
-
-    return {
-      ...result,
-      finalPosition: resolved.finalPosition,
-      status: "PROVISIONAL" as const,
-      awardDistinctive: resolved.awardDistinctive,
-      resolvedByTieBreak: true,
-      tieMembership: (result.tieMembership ?? []).map((block) => ({
-        ...block,
-        resolved: true,
-      })),
-    };
-  });
-
   return {
-    results,
+    results: f2.results,
     desertedResults: f2.desertedResults ?? [],
     unawardedResults: f2.unawardedResults ?? [],
     positionOutcomes: positionOutcomes.filter(

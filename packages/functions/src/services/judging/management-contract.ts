@@ -20,6 +20,8 @@ export type ManagementOutcome = {
   desertedVotes: number | null;
   reason: DesertedReason | null;
   tieBreakReason: TieBreakReason | null;
+  disqualifiedParticipantId: string | null;
+  sourceTieBreakId: string | null;
 };
 
 export type ResultTieMembership = {
@@ -65,6 +67,8 @@ export function buildPositionOutcomes(input: {
     reason: DesertedReason | null;
     assignedVotes: number;
     minimumRequired: number | null;
+    disqualifiedParticipantId?: string | null;
+    sourceTieBreakId?: string | null;
   }>;
   /** Históricos: se muestran como Desierto con causa INSUFFICIENT_CONSIDERATION. */
   unawarded: Array<{ finalPosition: number; assignedVotes: number; minimumRequired: number }>;
@@ -79,7 +83,9 @@ export function buildPositionOutcomes(input: {
     votesCount: row.desertedVotes,
     desertedVotes: row.desertedVotes,
     reason: row.reason,
-    tieBreakReason: null
+    tieBreakReason: null,
+    disqualifiedParticipantId: row.disqualifiedParticipantId ?? null,
+    sourceTieBreakId: row.sourceTieBreakId ?? null
   }));
 
   const occupied = new Set(desertedOutcomes.map((row) => row.finalPosition));
@@ -96,7 +102,9 @@ export function buildPositionOutcomes(input: {
       votesCount: 0,
       desertedVotes: 0,
       reason: "INSUFFICIENT_CONSIDERATION" as const,
-      tieBreakReason: null
+      tieBreakReason: null,
+      disqualifiedParticipantId: null,
+      sourceTieBreakId: null
     }));
 
   for (const row of legacyDesertedOutcomes) {
@@ -118,7 +126,9 @@ export function buildPositionOutcomes(input: {
           votesCount: null,
           desertedVotes: null,
           reason: null,
-          tieBreakReason: block.reason
+          tieBreakReason: block.reason,
+          disqualifiedParticipantId: null,
+          sourceTieBreakId: null
         });
       }
       return rows;

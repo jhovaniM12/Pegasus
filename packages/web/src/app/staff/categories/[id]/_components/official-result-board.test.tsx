@@ -32,7 +32,12 @@ describe("OfficialResultBoard - resultado oficial 1.º–5.º", () => {
             horseName: "CANTADOR",
             finalPosition: 1,
             status: "FINAL",
-            awardDistinctive: { id: "d1", label: "Azul", colorHex: "#2563eb" },
+            awardDistinctive: {
+              position: 1,
+              label: "Azul",
+              colorName: "Azul",
+              colorHex: "#2563eb",
+            },
           }),
           result({
             id: "r2",
@@ -54,7 +59,12 @@ describe("OfficialResultBoard - resultado oficial 1.º–5.º", () => {
             assignedVotes: 0,
             minimumRequired: 2,
             outcomeType: "DESERTED",
-            awardDistinctive: { id: "d5", label: "Verde", colorHex: "#16a34a" },
+            awardDistinctive: {
+              position: 5,
+              label: "Verde",
+              colorName: "Verde",
+              colorHex: "#16a34a",
+            },
           },
         ]}
       />
@@ -66,6 +76,31 @@ describe("OfficialResultBoard - resultado oficial 1.º–5.º", () => {
     expect(markup).toContain("Puesto desierto");
     // Cinco celdas de puesto (1..5).
     expect(markup.match(/tabular-nums text-slate-700">\d+<\/span>/g)?.length).toBe(5);
+  });
+
+  it("muestra la causa específica del desierto por descalificación en desempate", () => {
+    const markup = renderToStaticMarkup(
+      <OfficialResultBoard
+        forceOfficialStatus
+        results={[]}
+        desertedResults={[
+          {
+            id: "d3",
+            finalPosition: 3,
+            votesCount: 0,
+            reason: "DISQUALIFICATION_DURING_TIE_BREAK",
+            assignedVotes: 0,
+            minimumRequired: null,
+            disqualifiedParticipantId: "p2",
+            sourceTieBreakId: "tb1",
+            outcomeType: "DESERTED",
+            awardDistinctive: null,
+          },
+        ]}
+      />
+    );
+
+    expect(markup).toContain("Puesto desierto por descalificación durante el desempate");
   });
 });
 

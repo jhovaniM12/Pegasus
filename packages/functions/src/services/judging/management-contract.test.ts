@@ -113,8 +113,38 @@ describe("contrato API de tieBlocks / outcomes", () => {
         minimumRequired: 2,
         desertedVotes: 0,
         votesCount: 0,
-        tieBreakReason: null
+        tieBreakReason: null,
+        disqualifiedParticipantId: null,
+        sourceTieBreakId: null
       }
+    ]);
+  });
+
+  it("expone la causa y trazabilidad del puesto desierto por descalificación", () => {
+    expect(
+      buildPositionOutcomes({
+        deserted: [
+          {
+            finalPosition: 3,
+            reason: "DISQUALIFICATION_DURING_TIE_BREAK",
+            assignedVotes: 0,
+            minimumRequired: null,
+            desertedVotes: 0,
+            disqualifiedParticipantId: "participant-2",
+            sourceTieBreakId: "tie-break-1"
+          }
+        ],
+        unawarded: [],
+        tieBlocks: []
+      })
+    ).toEqual([
+      expect.objectContaining({
+        finalPosition: 3,
+        outcomeType: "DESERTED",
+        reason: "DISQUALIFICATION_DURING_TIE_BREAK",
+        disqualifiedParticipantId: "participant-2",
+        sourceTieBreakId: "tie-break-1"
+      })
     ]);
   });
 });

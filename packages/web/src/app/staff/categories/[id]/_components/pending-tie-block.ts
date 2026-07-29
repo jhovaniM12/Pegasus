@@ -1,4 +1,3 @@
-import { tieBlockKey, typedTieBlockKey } from "@pegasus/core/judging/tie-blocks";
 import type { RoundManagementItem } from "@/types/staged-flow";
 import type { TieBreakReason } from "@pegasus/core/judging/tie-blocks";
 
@@ -14,35 +13,6 @@ export type PendingTieBlockInfo = {
   }>;
 };
 
-function getResolvedTieBlockKeys(rounds: RoundManagementItem[]): {
-  typed: Set<string>;
-  legacy: Set<string>;
-} {
-  const resolved = {
-    typed: new Set<string>(),
-    legacy: new Set<string>(),
-  };
-  for (const round of rounds) {
-    if (round.roundType !== "TIE_BREAK" || round.status !== "CONSOLIDATED") continue;
-    if (round.results.some((result) => result.status === "TIED")) continue;
-
-    const participantIds = new Set<string>();
-    for (const form of round.forms) {
-      for (const entry of form.entries) {
-        participantIds.add(entry.participantId);
-      }
-    }
-    if (participantIds.size > 1) {
-      if (round.tieBreakReason) {
-        resolved.typed.add(typedTieBlockKey(round.tieBreakReason, [...participantIds]));
-      } else {
-        resolved.legacy.add(tieBlockKey([...participantIds]));
-      }
-    }
-  }
-  return resolved;
-}
-
 function latestConsolidatedF2(rounds: RoundManagementItem[]): RoundManagementItem | null {
   return (
     [...rounds]
@@ -51,21 +21,18 @@ function latestConsolidatedF2(rounds: RoundManagementItem[]): RoundManagementIte
   );
 }
 
-/** Primer bloque de empate F2 aún pendiente de resolver con desempate. */
+/**
+ * Primer bloque activo informado por el backend.
+ *
+ * La interfaz no reconstruye candidatos desde sumas, rondas históricas ni
+ * fingerprints: `tieBlocks` ya representa exclusivamente el estado operativo
+ * recalculado sobre el F2 efectivo.
+ */
 export function findPendingTieBlock(rounds: RoundManagementItem[]): PendingTieBlockInfo | null {
   const f2 = latestConsolidatedF2(rounds);
   if (!f2) return null;
 
-  const resolvedTieBlockKeys = getResolvedTieBlockKeys(rounds);
-  const pending =
-    f2.tieBlocks.find((block) => {
-      if (block.resolved === true) return false;
-      if (block.resolved === false) return true;
-      return (
-        !resolvedTieBlockKeys.typed.has(typedTieBlockKey(block.reason, block.participantIds)) &&
-        !resolvedTieBlockKeys.legacy.has(tieBlockKey(block.participantIds))
-      );
-    }) ?? null;
+  const pending = f2.tieBlocks.find((block) => block.resolved !== true) ?? null;
 
   if (!pending) return null;
 

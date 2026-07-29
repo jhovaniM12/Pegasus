@@ -76,6 +76,7 @@ import {
   AddDesertedResultReasonMetadata1717430400037,
   AddPreRingRejectionReasons1717430400038,
   AddFairStaffJudgeSeat1717430400039,
+  AddTieBreakDisqualificationOutcomes1717430400040,
   CreateFairEntriesTable1717430400004,
   CreateFairResultsTable1717430400008,
   CreateFairStaffTable1717430400007,
@@ -196,7 +197,8 @@ export const AppDataSource = new DataSource({
     AllowZeroAssignedVotesInUnawardedResults1717430400036,
     AddDesertedResultReasonMetadata1717430400037,
     AddPreRingRejectionReasons1717430400038,
-    AddFairStaffJudgeSeat1717430400039
+    AddFairStaffJudgeSeat1717430400039,
+    AddTieBreakDisqualificationOutcomes1717430400040
   ]
 });
 

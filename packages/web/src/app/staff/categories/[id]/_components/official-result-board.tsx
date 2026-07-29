@@ -47,6 +47,8 @@ function resolveOutcomes({
       votesCount: row.desertedVotes ?? row.votesCount,
       desertedVotes: row.desertedVotes ?? row.votesCount,
       reason: row.reason ?? null,
+      disqualifiedParticipantId: row.disqualifiedParticipantId ?? null,
+      sourceTieBreakId: row.sourceTieBreakId ?? null,
       awardDistinctive: row.awardDistinctive,
     })),
     // Históricos: se muestran como Desierto con causa de consideración insuficiente.
@@ -61,6 +63,8 @@ function resolveOutcomes({
         votesCount: 0,
         desertedVotes: 0,
         reason: "INSUFFICIENT_CONSIDERATION" as const,
+        disqualifiedParticipantId: null,
+        sourceTieBreakId: null,
         awardDistinctive: row.awardDistinctive,
       })),
   ].sort((a, b) => a.finalPosition - b.finalPosition);
@@ -97,6 +101,8 @@ function desertedReasonDescription(outcome: PositionOutcome): string {
       }
       return "Ningún ejemplar alcanzó la consideración mínima por tarjetas";
     }
+    case "DISQUALIFICATION_DURING_TIE_BREAK":
+      return "Puesto desierto por descalificación durante el desempate";
     default:
       return "Ningún juez asignó este puesto con consideración suficiente";
   }

@@ -194,7 +194,8 @@ export class JudgingRoundResult extends PegasusBaseEntity {
 export type DesertedReason =
   | "NO_ASSIGNMENTS"
   | "INSUFFICIENT_CONSIDERATION"
-  | "EXPLICIT_MAJORITY";
+  | "EXPLICIT_MAJORITY"
+  | "DISQUALIFICATION_DURING_TIE_BREAK";
 
 @Unique("UQ_judging_round_deserted_results_round_position", ["roundId", "finalPosition"])
 @Entity({ name: "judging_round_deserted_results" })
@@ -227,6 +228,12 @@ export class JudgingRoundDesertedResult extends PegasusBaseEntity {
   /** Umbral de consideración mínima aplicado al consolidar; null en históricos. */
   @Column({ name: "minimum_required", type: "integer", nullable: true })
   minimumRequired!: number | null;
+
+  @Column({ name: "disqualified_participant_id", type: "uuid", nullable: true })
+  disqualifiedParticipantId!: string | null;
+
+  @Column({ name: "source_tie_break_id", type: "uuid", nullable: true })
+  sourceTieBreakId!: string | null;
 }
 
 /**
