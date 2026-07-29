@@ -42,7 +42,8 @@ import {
   recordDisqualificationReport,
   requiredDisqualificationReports
 } from "./disqualification-rules.js";
-import { MAX_F1_SELECTIONS, resolveNextRoundType } from "./flow-rules.js";
+import { resolveNextRoundType } from "./flow-rules.js";
+import { getF1MaxSelections } from "../system-settings.service.js";
 import {
   buildPositionOutcomes,
   buildTieMembershipByParticipant
@@ -621,9 +622,10 @@ async function applyRoundFormEntries(
     statusByParticipant.get(participantId)?.status === "ELIGIBLE";
 
   if (round.roundType === "F1") {
+    const maxF1Selections = await getF1MaxSelections(manager);
     const selected = Array.from(new Set(input.selectedParticipantIds ?? []));
-    if (selected.length > MAX_F1_SELECTIONS) {
-      throw new BadRequestError(`En F1 solo puedes seleccionar máximo ${MAX_F1_SELECTIONS} ejemplares.`);
+    if (selected.length > maxF1Selections) {
+      throw new BadRequestError(`En F1 solo puedes seleccionar máximo ${maxF1Selections} ejemplares.`);
     }
     if (selected.some((id) => !entryByParticipant.has(id))) {
       throw new BadRequestError("La selección contiene ejemplares fuera de la ronda.");
@@ -1038,11 +1040,12 @@ export async function closeRoundForm(user: User, stageId: string, input: CloseRo
       statusByParticipant.get(participantId)?.status === "ELIGIBLE";
 
     if (round.roundType === "F1") {
+      const maxF1Selections = await getF1MaxSelections(manager);
       const selectedCount = entries.filter(
         (entry) => entry.selected && isEligible(entry.judgingParticipantId)
       ).length;
-      if (selectedCount > MAX_F1_SELECTIONS) {
-        throw new BadRequestError(`F1 permite máximo ${MAX_F1_SELECTIONS} seleccionados.`);
+      if (selectedCount > maxF1Selections) {
+        throw new BadRequestError(`F1 permite máximo ${maxF1Selections} seleccionados.`);
       }
     } else {
       const eligibleEntries = entries.filter((entry) => isEligible(entry.judgingParticipantId));
@@ -2382,6 +2385,8 @@ async function getRoundStateForJudge(
         )
       : positionBounds;
 
+  const maxF1Selections =
+    round.roundType === "F1" ? await getF1MaxSelections(manager) : null;
   const stageSummary = await buildStageSummary(manager, stage);
   const [enrichedStage] = await enrichForJudge(manager, [stageSummary], user);
   const pendingTieBreak = await resolvePendingTieBreakAnnouncement(manager, stage, round);
@@ -2415,7 +2420,7 @@ async function getRoundStateForJudge(
           ).map((row) => row.position)
         }
       : null,
-    maxSelections: round.roundType === "F1" ? MAX_F1_SELECTIONS : null,
+    maxSelections: maxF1Selections,
     positionRange:
       round.roundType === "F2" || round.roundType === "TIE_BREAK"
         ? {

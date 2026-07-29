@@ -15,6 +15,7 @@ import { peopleRoutes } from "./routes/people.routes.js";
 import { staffRoutes } from "./routes/staff.routes.js";
 import { stagedFlowRoutes } from "./routes/staged-flow.routes.js";
 import { syncRoutes } from "./routes/sync.routes.js";
+import { systemSettingsRoutes } from "./routes/system-settings.routes.js";
 
 export const app = new Hono().basePath("/api");
 
@@ -55,4 +56,5 @@ app.route("/", dashboardRoutes);
 app.route("/", awardDistinctivesRoutes);
 app.route("/", staffRoutes);
 app.route("/", stagedFlowRoutes);
+app.route("/", systemSettingsRoutes);
 app.route("/", syncRoutes);

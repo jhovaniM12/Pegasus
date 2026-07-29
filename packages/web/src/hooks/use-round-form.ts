@@ -59,6 +59,7 @@ export function useRoundForm({
   const roundRef = useRef(round);
   const syncInFlightRef = useRef(false);
   const syncRequestedRef = useRef(false);
+  const syncIdleWaitersRef = useRef<Array<() => void>>([]);
   const isClosingRef = useRef(false);
   const formVersionRef = useRef(0);
   const syncDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -121,7 +122,10 @@ export function useRoundForm({
     if (syncInFlightRef.current) {
       // No perder mutaciones encoladas mientras otra sincronización está terminando.
       syncRequestedRef.current = true;
-      return { synced: 0, conflicts: 0, failed: 0, round: null as RoundState | null };
+      await new Promise<void>((resolve) => {
+        syncIdleWaitersRef.current.push(resolve);
+      });
+      return { synced: 0, conflicts: 0, failed: 0, round: roundRef.current };
     }
     syncInFlightRef.current = true;
     setIsSyncing(true);
@@ -164,6 +168,8 @@ export function useRoundForm({
     } finally {
       syncInFlightRef.current = false;
       setIsSyncing(false);
+      const waiters = syncIdleWaitersRef.current.splice(0);
+      for (const resolve of waiters) resolve();
     }
   }, [onRoundChange, onSyncNotice, refreshPendingState, stageId, userId]);
 
@@ -183,6 +189,21 @@ export function useRoundForm({
       void syncNow();
     }, ROUND_SYNC_DEBOUNCE_MS);
   }, [connectivityState, syncNow]);
+
+  const flushPendingChanges = useCallback(async () => {
+    // Un clic reciente puede seguir esperando para entrar a IndexedDB. Sin
+    // esta barrera, cerrar o descalificar puede sincronizar una fotografía
+    // anterior y provocar un conflicto de revisión que pisa el último cambio.
+    await queueChainRef.current.catch(() => undefined);
+    const result = await syncNow();
+    if (userId && (await hasBlockingMutationsForStage(userId, stageId))) {
+      return {
+        ...result,
+        failed: Math.max(result.failed, 1),
+      };
+    }
+    return result;
+  }, [stageId, syncNow, userId]);
 
   const loadFromOfflineCache = useCallback(
     async (overrideUserId?: string): Promise<RoundState | null> => {
@@ -531,6 +552,7 @@ export function useRoundForm({
     hasBlockingPending,
     isSyncing,
     syncNow,
+    flushPendingChanges,
     queueFormSnapshot,
     queueNote,
     queueReminders,

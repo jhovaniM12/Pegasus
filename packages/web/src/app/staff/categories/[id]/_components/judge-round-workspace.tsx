@@ -143,7 +143,7 @@ export function JudgeRoundWorkspace({
   const {
     hasBlockingPending,
     isSyncing,
-    syncNow,
+    flushPendingChanges,
     queueFormSnapshot,
     queueNote,
     queueReminders,
@@ -227,6 +227,12 @@ export function JudgeRoundWorkspace({
     if (!editable) return;
     setDisqualifyBusy(true);
     try {
+      const syncResult = await flushPendingChanges();
+      if (syncResult.conflicts > 0 || syncResult.failed > 0) {
+        throw new Error(
+          "No fue posible guardar la última selección antes de descalificar."
+        );
+      }
       const response = await stagedFlowService.disqualifyRoundParticipant(stageId, participantId, reasonId);
       if (response.data) {
         latestConfirmedRoundRef.current = response.data;
@@ -409,7 +415,7 @@ export function JudgeRoundWorkspace({
 
     beginClose();
     try {
-      const syncResult = await syncNow();
+      const syncResult = await flushPendingChanges();
       const stillBlocking =
         syncResult.conflicts > 0 ||
         syncResult.failed > 0 ||

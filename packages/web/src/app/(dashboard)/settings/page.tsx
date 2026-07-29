@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { awardDistinctivesService } from "@/services/award-distinctives.service";
+import { systemSettingsService } from "@/services/system-settings.service";
 import {
   Card,
   CardContent,
@@ -32,6 +33,9 @@ export default function SettingsPage() {
   const [distinctives, setDistinctives] = useState<EditableDistinctive[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loadingDistinctives, setLoadingDistinctives] = useState(true);
+  const [f1MaxSelections, setF1MaxSelections] = useState(10);
+  const [loadingSystemSettings, setLoadingSystemSettings] = useState(true);
+  const [savingSystemSettings, setSavingSystemSettings] = useState(false);
 
   useEffect(() => {
     const loadDistinctives = async () => {
@@ -49,6 +53,25 @@ export default function SettingsPage() {
     };
 
     void loadDistinctives();
+  }, []);
+
+  useEffect(() => {
+    const loadSystemSettings = async () => {
+      try {
+        setLoadingSystemSettings(true);
+        setError(null);
+        const response = await systemSettingsService.getJudgingSettings();
+        if (response.data) {
+          setF1MaxSelections(response.data.f1MaxSelections);
+        }
+      } catch {
+        setError("No se pudieron cargar los parámetros del sistema.");
+      } finally {
+        setLoadingSystemSettings(false);
+      }
+    };
+
+    void loadSystemSettings();
   }, []);
 
   const canSave = useMemo(
@@ -89,6 +112,26 @@ export default function SettingsPage() {
     } catch {
       updateLocalDistinctive(row.id, { saving: false });
       setError(`No se pudo guardar el distintivo del puesto ${row.position}.`);
+    }
+  };
+
+  const saveSystemSettings = async () => {
+    if (!Number.isInteger(f1MaxSelections) || f1MaxSelections < 1 || f1MaxSelections > 50) {
+      setError("El límite de ejemplares de F1 debe ser un entero entre 1 y 50.");
+      return;
+    }
+
+    try {
+      setSavingSystemSettings(true);
+      setError(null);
+      const response = await systemSettingsService.updateJudgingSettings({ f1MaxSelections });
+      if (response.data) {
+        setF1MaxSelections(response.data.f1MaxSelections);
+      }
+    } catch {
+      setError("No se pudo guardar el límite de ejemplares de F1.");
+    } finally {
+      setSavingSystemSettings(false);
     }
   };
 
@@ -203,7 +246,38 @@ export default function SettingsPage() {
               <CardDescription>Configuración global de la plataforma.</CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-muted-foreground">Configuraciones en desarrollo...</p>
+              {loadingSystemSettings ? (
+                <p className="text-sm text-muted-foreground">Cargando parámetros...</p>
+              ) : (
+                <div className="max-w-xl space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="f1-max-selections">
+                      Máximo de ejemplares que cada juez puede seleccionar en F1
+                    </Label>
+                    <Input
+                      id="f1-max-selections"
+                      type="number"
+                      min={1}
+                      max={50}
+                      step={1}
+                      value={f1MaxSelections}
+                      onChange={(event) => setF1MaxSelections(Number(event.target.value))}
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      Este límite se aplica tanto en la pantalla de votación como al guardar y
+                      cerrar la tarjeta de F1. Las rondas abiertas también usan el valor vigente.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    disabled={savingSystemSettings}
+                    onClick={() => void saveSystemSettings()}
+                  >
+                    {savingSystemSettings ? "Guardando..." : "Guardar parámetro"}
+                  </Button>
+                </div>
+              )}
+              {error ? <p className="mt-4 text-sm font-medium text-red-600">{error}</p> : null}
             </CardContent>
           </Card>
         </TabsContent>

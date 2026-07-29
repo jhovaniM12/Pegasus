@@ -40,6 +40,7 @@ import {
   SyncBatch,
   SyncError,
   SyncMapping,
+  SystemSetting,
   Title,
   User,
   VeterinaryCheck,
@@ -78,6 +79,7 @@ import {
   AddFairStaffJudgeSeat1717430400039,
   AddTieBreakDisqualificationOutcomes1717430400040,
   AllowTieBreakDisqualificationDesertedReason1717430400041,
+  CreateSystemSettings1717430400042,
   CreateFairEntriesTable1717430400004,
   CreateFairResultsTable1717430400008,
   CreateFairStaffTable1717430400007,
@@ -153,6 +155,7 @@ export const AppDataSource = new DataSource({
     SyncBatch,
     SyncError,
     SyncMapping,
+    SystemSetting,
     Title,
     User,
     VeterinaryCheck,
@@ -200,7 +203,8 @@ export const AppDataSource = new DataSource({
     AddPreRingRejectionReasons1717430400038,
     AddFairStaffJudgeSeat1717430400039,
     AddTieBreakDisqualificationOutcomes1717430400040,
-    AllowTieBreakDisqualificationDesertedReason1717430400041
+    AllowTieBreakDisqualificationDesertedReason1717430400041,
+    CreateSystemSettings1717430400042
   ]
 });
 

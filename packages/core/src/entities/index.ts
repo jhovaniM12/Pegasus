@@ -14,6 +14,7 @@ export * from "./person.entity.js";
 export * from "./role.entity.js";
 export * from "./sex.entity.js";
 export * from "./staged-flow.entity.js";
+export * from "./system-setting.entity.js";
 export * from "./sync.entity.js";
 export * from "./judging-reminder.entity.js";
 export * from "./judging-round-entry-annotations.entity.js";

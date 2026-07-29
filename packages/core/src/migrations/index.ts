@@ -40,3 +40,4 @@ export { AddPreRingRejectionReasons1717430400038 } from "./1717430400038-AddPreR
 export { AddFairStaffJudgeSeat1717430400039 } from "./1717430400039-AddFairStaffJudgeSeat.js";
 export { AddTieBreakDisqualificationOutcomes1717430400040 } from "./1717430400040-AddTieBreakDisqualificationOutcomes.js";
 export { AllowTieBreakDisqualificationDesertedReason1717430400041 } from "./1717430400041-AllowTieBreakDisqualificationDesertedReason.js";
+export { CreateSystemSettings1717430400042 } from "./1717430400042-CreateSystemSettings.js";

@@ -1,7 +1,6 @@
 import type { FairCategoryStageStatus, JudgingRoundType } from "@pegasus/core";
 
 export const F1_SURVIVOR_THRESHOLD = 8;
-export const MAX_F1_SELECTIONS = 10;
 
 /**
  * Determina la ronda posterior usando únicamente el estado consolidado y la
