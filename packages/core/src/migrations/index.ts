@@ -39,3 +39,4 @@ export { AddDesertedResultReasonMetadata1717430400037 } from "./1717430400037-Ad
 export { AddPreRingRejectionReasons1717430400038 } from "./1717430400038-AddPreRingRejectionReasons.js";
 export { AddFairStaffJudgeSeat1717430400039 } from "./1717430400039-AddFairStaffJudgeSeat.js";
 export { AddTieBreakDisqualificationOutcomes1717430400040 } from "./1717430400040-AddTieBreakDisqualificationOutcomes.js";
+export { AllowTieBreakDisqualificationDesertedReason1717430400041 } from "./1717430400041-AllowTieBreakDisqualificationDesertedReason.js";

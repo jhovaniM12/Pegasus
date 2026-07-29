@@ -42,7 +42,7 @@ import {
   recordDisqualificationReport,
   requiredDisqualificationReports
 } from "./disqualification-rules.js";
-import { resolveNextRoundType } from "./flow-rules.js";
+import { MAX_F1_SELECTIONS, resolveNextRoundType } from "./flow-rules.js";
 import {
   buildPositionOutcomes,
   buildTieMembershipByParticipant
@@ -64,6 +64,7 @@ import {
   tieBlockResolutionPriority,
   validateTieBreakOpening
 } from "./workflow-guards.js";
+import { normalizeTieBreakCardAssignments } from "./tie-break-card-normalization.js";
 import {
   loadActiveReminders,
   loadReminderHistory,
@@ -84,7 +85,6 @@ import {
   toDisqualifiedByDto
 } from "./shared.js";
 
-const MAX_F1_SELECTIONS = 7;
 const MIN_AWARD_POSITION = 1;
 
 export const TIE_BREAK_TEST_LABELS: Record<TieBreakTestType, string> = {
@@ -228,6 +228,71 @@ async function clearParticipantRoundAssignments(
   return invalidated;
 }
 
+async function normalizeTieBreakRoundAssignments(
+  manager: EntityManager,
+  round: JudgingRound
+): Promise<
+  Array<{
+    entryId: string;
+    roundFormId: string;
+    participantId: string;
+    previousPosition: number;
+    normalizedPosition: number;
+  }>
+> {
+  if (round.roundType !== "TIE_BREAK") return [];
+  const bounds = await getRoundPositionBounds(manager, round);
+  const forms = await manager.getRepository(JudgingRoundForm).find({
+    where: { roundId: round.id }
+  });
+  const changes: Array<{
+    entryId: string;
+    roundFormId: string;
+    participantId: string;
+    previousPosition: number;
+    normalizedPosition: number;
+  }> = [];
+  for (const roundForm of forms) {
+    const entries = await manager.getRepository(JudgingRoundEntry).find({
+      where: { roundFormId: roundForm.id }
+    });
+    const statusByParticipant = await loadParticipantStatusMap(
+      manager,
+      entries.map((entry) => entry.judgingParticipantId)
+    );
+    const eligibleEntries = entries.filter(
+      (entry) =>
+        statusByParticipant.get(entry.judgingParticipantId)?.status === "ELIGIBLE"
+    );
+    const normalized = normalizeTieBreakCardAssignments(
+      eligibleEntries.map((entry) => ({
+        participantId: entry.judgingParticipantId,
+        position: entry.position
+      })),
+      bounds.min
+    );
+    const changedEntries = eligibleEntries.filter((entry) => {
+      const next = normalized.get(entry.judgingParticipantId);
+      return next != null && entry.position !== next;
+    });
+    for (const entry of changedEntries) {
+      const normalizedPosition = normalized.get(entry.judgingParticipantId)!;
+      changes.push({
+        entryId: entry.id,
+        roundFormId: entry.roundFormId,
+        participantId: entry.judgingParticipantId,
+        previousPosition: entry.position!,
+        normalizedPosition
+      });
+      entry.position = normalizedPosition;
+    }
+    if (changedEntries.length > 0) {
+      await manager.getRepository(JudgingRoundEntry).save(changedEntries);
+    }
+  }
+  return changes;
+}
+
 async function loadDistinctivesByPosition(manager: EntityManager): Promise<Map<number, AwardDistinctive>> {
   const rows = await manager.getRepository(AwardDistinctive).find({
     order: { position: "ASC" }
@@ -275,6 +340,19 @@ async function getRoundPositionBounds(
   }
 
   return { min: Math.min(...positions), max: Math.max(...positions) };
+}
+
+function effectiveTieBreakVotingBounds(
+  original: { min: number; max: number },
+  eligibleParticipantCount: number
+): { min: number; max: number } {
+  return {
+    min: original.min,
+    max: Math.min(
+      original.max,
+      original.min + Math.max(eligibleParticipantCount, 1) - 1
+    )
+  };
 }
 
 /** Ids de participantes que sobreviven a la ronda previa (FA o F1). */
@@ -574,11 +652,16 @@ async function applyRoundFormEntries(
       eligibleEntries.map((entry) => entry.judgingParticipantId)
     );
     const minAssignablePosition = round.roundType === "TIE_BREAK" ? positionBounds.min : MIN_AWARD_POSITION;
-    const maxAssignablePosition =
+    const inputMaxAssignablePosition =
       round.roundType === "TIE_BREAK" ? positionBounds.max : MAX_AWARD_POSITIONS;
+    const votingBounds =
+      round.roundType === "TIE_BREAK"
+        ? effectiveTieBreakVotingBounds(positionBounds, eligibleEntries.length)
+        : positionBounds;
+    const maxAssignablePosition =
+      round.roundType === "TIE_BREAK" ? votingBounds.max : MAX_AWARD_POSITIONS;
     // Desiertos solo en puestos premiables (1..5); el desempate puede asignar hasta el 6.º (nota 5.e).
     const maxDesertablePosition = Math.min(maxAssignablePosition, MAX_AWARD_POSITIONS);
-    const positionByParticipant = new Map(positions.map((p) => [p.participantId, p.position]));
     for (const { participantId, position } of positions) {
       if (!entryByParticipant.has(participantId)) {
         throw new BadRequestError("Los puestos contienen ejemplares fuera de la ronda.");
@@ -586,14 +669,19 @@ async function applyRoundFormEntries(
       if (!isEligible(participantId)) {
         throw new BadRequestError("No puedes asignar puesto a un ejemplar descalificado.");
       }
-      if (!Number.isInteger(position) || position < minAssignablePosition || position > maxAssignablePosition) {
+      if (!Number.isInteger(position) || position < minAssignablePosition || position > inputMaxAssignablePosition) {
         throw new BadRequestError("Los puestos deben ser números válidos.");
       }
     }
-    const assigned = positions.map((p) => p.position);
-    if (new Set(assigned).size !== assigned.length) {
+    const submittedPositions = positions.map((p) => p.position);
+    if (new Set(submittedPositions).size !== submittedPositions.length) {
       throw new BadRequestError("No puedes repetir un mismo puesto.");
     }
+    const positionByParticipant =
+      round.roundType === "TIE_BREAK"
+        ? normalizeTieBreakCardAssignments(positions, minAssignablePosition)
+        : new Map(positions.map((position) => [position.participantId, position.position]));
+    const assigned = [...positionByParticipant.values()];
     for (const position of desertedPositions) {
       if (!Number.isInteger(position) || position < minAssignablePosition || position > maxDesertablePosition) {
         throw new BadRequestError(
@@ -822,8 +910,23 @@ export async function disqualifyRoundParticipant(
       round.id,
       participant.id
     );
-    await manager.getRepository(JudgingRoundForm).increment({ id: form.id }, "revision", 1);
-    form.revision += 1;
+    const normalizedAssignments = await normalizeTieBreakRoundAssignments(
+      manager,
+      round
+    );
+    const affectedFormIds = new Set([
+      form.id,
+      ...invalidatedAssignments.map((assignment) => assignment.roundFormId),
+      ...normalizedAssignments.map((assignment) => assignment.roundFormId)
+    ]);
+    for (const affectedFormId of affectedFormIds) {
+      await manager
+        .getRepository(JudgingRoundForm)
+        .increment({ id: affectedFormId }, "revision", 1);
+    }
+    if (affectedFormIds.has(form.id)) {
+      form.revision += 1;
+    }
 
     await recordEvent(manager, {
       stageId: stage.id,
@@ -838,7 +941,7 @@ export async function disqualifyRoundParticipant(
         requiredReports: reportDecision.requiredReports
       }
     });
-    if (invalidatedAssignments.length > 0) {
+    if (invalidatedAssignments.length > 0 || normalizedAssignments.length > 0) {
       await recordEvent(manager, {
         stageId: stage.id,
         userId: user.id,
@@ -848,7 +951,8 @@ export async function disqualifyRoundParticipant(
           roundId: round.id,
           roundType: round.roundType,
           cause: "PARTICIPANT_DISQUALIFIED",
-          assignments: invalidatedAssignments
+          invalidatedAssignments,
+          normalizedAssignments
         }
       });
     }
@@ -951,9 +1055,13 @@ export async function closeRoundForm(user: User, stageId: string, input: CloseRo
         round,
         eligibleEntries.map((entry) => entry.judgingParticipantId)
       );
+      const votingBounds =
+        round.roundType === "TIE_BREAK"
+          ? effectiveTieBreakVotingBounds(positionBounds, eligibleCount)
+          : positionBounds;
       const minAssignablePosition = round.roundType === "TIE_BREAK" ? positionBounds.min : MIN_AWARD_POSITION;
       const maxAssignablePosition =
-        round.roundType === "TIE_BREAK" ? positionBounds.max : MAX_AWARD_POSITIONS;
+        round.roundType === "TIE_BREAK" ? votingBounds.max : MAX_AWARD_POSITIONS;
       const maxDesertablePosition = Math.min(maxAssignablePosition, MAX_AWARD_POSITIONS);
       const deserted = new Set(desertedRows.map((row) => row.position));
       const positioned = eligibleEntries.filter((entry) => entry.position !== null);
@@ -2266,6 +2374,13 @@ async function getRoundStateForJudge(
     round,
     entries.map((entry) => entry.judgingParticipantId)
   );
+  const votingBounds =
+    round.roundType === "TIE_BREAK"
+      ? effectiveTieBreakVotingBounds(
+          positionBounds,
+          roster.filter((participant) => participant.status === "ELIGIBLE").length
+        )
+      : positionBounds;
 
   const stageSummary = await buildStageSummary(manager, stage);
   const [enrichedStage] = await enrichForJudge(manager, [stageSummary], user);
@@ -2306,7 +2421,7 @@ async function getRoundStateForJudge(
         ? {
             min: round.roundType === "TIE_BREAK" ? positionBounds.min : MIN_AWARD_POSITION,
             // F2 siempre expone los 5 puestos premiables, aunque haya menos ejemplares.
-            max: round.roundType === "TIE_BREAK" ? positionBounds.max : MAX_AWARD_POSITIONS
+            max: round.roundType === "TIE_BREAK" ? votingBounds.max : MAX_AWARD_POSITIONS
           }
         : null,
     pendingTieBreak,
@@ -2383,10 +2498,16 @@ export async function getRoundsManagement(user: User, stageId: string) {
               ).map((row) => [row.participantId, row])
             )
           : null;
-      const desertedResults = await manager.getRepository(JudgingRoundDesertedResult).find({
+      let desertedResults = await manager.getRepository(JudgingRoundDesertedResult).find({
         where: { roundId: round.id },
         order: { finalPosition: "ASC" }
       });
+      if (round.roundType === "TIE_BREAK") {
+        desertedResults = await manager.getRepository(JudgingRoundDesertedResult).find({
+          where: { sourceTieBreakId: round.id },
+          order: { finalPosition: "ASC" }
+        });
+      }
       const unawardedResults = await manager.getRepository(JudgingRoundUnawardedResult).find({
         where: { roundId: round.id },
         order: { finalPosition: "ASC" }

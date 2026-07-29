@@ -82,7 +82,11 @@ export function RoundConsolidatedDetail({ round, onBack }: RoundConsolidatedDeta
             .slice()
             .sort((a, b) => a.judgeName.localeCompare(b.judgeName))
             .map((form) => {
-              const entries = isF1 ? form.entries.filter((entry) => entry.selected) : form.entries;
+              const entries = isF1
+                ? form.entries.filter((entry) => entry.selected)
+                : isTieBreak
+                  ? form.entries.filter((entry) => entry.position !== null)
+                  : form.entries;
               return (
                 <div key={form.id} className="rounded-lg border border-slate-200/70 bg-slate-50/30 p-4">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{formLabel(round)}</p>
