@@ -57,6 +57,10 @@ type JudgeRoundWorkspaceProps = {
   syncUnavailable?: boolean;
   /** Rondas de gestión para detectar empate pendiente tras consolidar F2. */
   managementRounds?: RoundManagementItem[];
+  activeTieBreak?: {
+    formStatus: "PENDING" | "STARTED";
+    onOpen: () => void;
+  } | null;
   runAction: (
     title: string,
     description: string,
@@ -123,6 +127,7 @@ export function JudgeRoundWorkspace({
   onLocalUpdate,
   syncUnavailable = false,
   managementRounds = [],
+  activeTieBreak = null,
   runAction,
 }: JudgeRoundWorkspaceProps) {
   const { toast } = useToast();
@@ -458,7 +463,30 @@ export function JudgeRoundWorkspace({
     return (
       <section className="mt-4 rounded-lg border border-slate-200 bg-white p-5">
         <h2 className="text-base font-semibold text-slate-950">{ROUND_TITLES[roundType]}</h2>
-        {roundType === "F1" ? (
+        {activeTieBreak && roundType !== "TIE_BREAK" ? (
+          <div className="mt-4 flex flex-col items-center gap-4 rounded-xl border border-violet-200 bg-violet-50/70 px-6 py-8 text-center">
+            <span className="flex size-12 items-center justify-center rounded-full bg-violet-100 text-violet-700">
+              <Play className="size-6" />
+            </span>
+            <div>
+              <p className="text-base font-semibold text-slate-900">Desempate habilitado</p>
+              <p className="mt-1 max-w-md text-sm text-slate-600">
+                El Director Técnico habilitó la ronda de desempate. Puedes{" "}
+                {activeTieBreak.formStatus === "STARTED" ? "continuar" : "iniciar"} tu tarjeta.
+              </p>
+            </div>
+            <Button
+              className="bg-violet-600 text-white hover:bg-violet-700"
+              disabled={busy}
+              onClick={activeTieBreak.onOpen}
+            >
+              <Play className="size-4" />
+              {activeTieBreak.formStatus === "STARTED"
+                ? "Continuar desempate"
+                : "Iniciar desempate"}
+            </Button>
+          </div>
+        ) : roundType === "F1" ? (
           <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/40 p-4">
             <div className="flex items-center gap-2">
               <Trophy className="size-4 text-emerald-700" />

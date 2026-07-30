@@ -791,6 +791,12 @@ export default function StaffCategoryPage() {
         ) ?? null)
       : null;
   const judgeNextRoundFormat = resolveJudgeNextRoundFormat(summary);
+  const judgeActiveTieBreak = summary?.judge?.formats.find(
+    (format) =>
+      format.key === "TIE_BREAK" &&
+      format.isActive &&
+      (format.formStatus === "PENDING" || format.formStatus === "STARTED")
+  );
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -1231,6 +1237,27 @@ export default function StaffCategoryPage() {
               onLocalUpdate={setRound}
               syncUnavailable={sessionExpired}
               managementRounds={roundsManagement?.rounds ?? []}
+              activeTieBreak={
+                judgeActiveTieBreak
+                  ? {
+                      formStatus: judgeActiveTieBreak.formStatus as "PENDING" | "STARTED",
+                      onOpen: () => {
+                        if (judgeActiveTieBreak.formStatus === "STARTED") {
+                          router.push(`/staff/categories/${stageId}?view=TIE_BREAK`);
+                          return;
+                        }
+                        runAction(
+                          "Iniciar desempate",
+                          "Se abrirá tu tarjeta para ordenar únicamente los ejemplares convocados al desempate.",
+                          () => stagedFlowService.startRoundForm(stageId),
+                          "default",
+                          "Iniciar desempate",
+                          `/staff/categories/${stageId}?view=TIE_BREAK`
+                        );
+                      },
+                    }
+                  : null
+              }
               runAction={runAction}
             />
           )
