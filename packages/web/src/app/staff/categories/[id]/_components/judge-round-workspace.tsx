@@ -104,6 +104,8 @@ function mergeIncomingAnnotations(
     if (!next) return participant;
     return {
       ...participant,
+      selected: next.status === "ELIGIBLE" ? participant.selected : false,
+      position: next.status === "ELIGIBLE" ? participant.position : null,
       privateNote: next.privateNote,
       reminders: next.reminders,
       status: next.status,
@@ -146,6 +148,7 @@ export function JudgeRoundWorkspace({
 
   const {
     hasBlockingPending,
+    hasLocalDraft,
     isSyncing,
     flushPendingChanges,
     queueFormSnapshot,
@@ -165,8 +168,8 @@ export function JudgeRoundWorkspace({
   });
 
   useEffect(() => {
-    hasLocalPendingRef.current = hasBlockingPending;
-  }, [hasBlockingPending]);
+    hasLocalPendingRef.current = hasLocalDraft;
+  }, [hasLocalDraft]);
 
   const eligibleParticipants = useMemo(
     () => localParticipants.filter((participant) => participant.status === "ELIGIBLE"),
@@ -238,13 +241,25 @@ export function JudgeRoundWorkspace({
       }
       const response = await stagedFlowService.disqualifyRoundParticipant(stageId, participantId, reasonId);
       if (response.data) {
+        const mergedParticipants = mergeIncomingAnnotations(
+          localParticipantsRef.current,
+          response.data.participants
+        );
+        const mergedRound = {
+          ...response.data,
+          participants: mergedParticipants,
+          form: response.data.form
+            ? {
+                ...response.data.form,
+                desertedPositions: localDesertedPositionsRef.current,
+              }
+            : null,
+        };
         latestConfirmedRoundRef.current = response.data;
-        localParticipantsRef.current = response.data.participants;
-        localDesertedPositionsRef.current = response.data.form?.desertedPositions ?? [];
-        setLocalParticipants(response.data.participants);
-        setLocalDesertedPositions(response.data.form?.desertedPositions ?? []);
+        localParticipantsRef.current = mergedParticipants;
+        setLocalParticipants(mergedParticipants);
         setDisqualifyTarget(null);
-        onLocalUpdate(response.data);
+        onLocalUpdate(mergedRound);
         toast({ title: "Ejemplar descalificado", variant: "success" });
       }
     } catch (error) {

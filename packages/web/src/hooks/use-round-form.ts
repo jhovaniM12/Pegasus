@@ -3,8 +3,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { stagedFlowService } from "@/services/staged-flow.service";
 import type { RoundState } from "@/types/staged-flow";
 
-const SAVE_DEBOUNCE_MS = 400;
-
 type FormPayload = {
   selectedParticipantIds?: string[];
   positions?: Array<{ participantId: string; position: number }>;
@@ -19,68 +17,67 @@ type UseRoundFormParams = {
   onSyncNotice?: (message: string) => void;
 };
 
+/**
+ * Borrador de la tarjeta de ronda exclusivamente en memoria.
+ *
+ * Las selecciones y los puestos se envían al backend únicamente al cerrar.
+ * Una recarga descarta el borrador y restaura el último estado confirmado.
+ */
 export function useRoundForm({
   stageId,
   userId,
   round,
   onRoundChange,
 }: UseRoundFormParams) {
-  const [isSaving, setIsSaving] = useState(false);
-  const [hasPendingSave, setHasPendingSave] = useState(false);
+  const [hasLocalDraft, setHasLocalDraft] = useState(false);
   const roundRef = useRef(round);
   const isClosingRef = useRef(false);
-  const pendingPayloadRef = useRef<FormPayload | null>(null);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const saveChainRef = useRef<Promise<RoundState | null>>(Promise.resolve(null));
-
-  useEffect(() => {
-    if (!pendingPayloadRef.current && !isClosingRef.current) {
-      roundRef.current = round;
-    }
-  }, [round]);
-
-  useEffect(
-    () => () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    },
-    []
+  const hasLocalDraftRef = useRef(false);
+  const formKeyRef = useRef<string | null>(
+    round.form ? `${round.round.id}:${round.form.id}` : null
   );
 
-  const savePendingForm = useCallback(async () => {
-    if (saveTimerRef.current) {
-      clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = null;
-    }
-    const payload = pendingPayloadRef.current;
-    if (!userId || !payload) return null;
-    pendingPayloadRef.current = null;
-    setHasPendingSave(false);
-    setIsSaving(true);
+  useEffect(() => {
+    const formKey = round.form ? `${round.round.id}:${round.form.id}` : null;
+    const formChanged = formKeyRef.current !== formKey;
+    const formClosed = round.form?.status === "CLOSED";
 
-    const save = saveChainRef.current
-      .catch(() => null)
-      .then(async () => {
-        const response = await stagedFlowService.updateRoundForm(stageId, payload);
-        if (!response.data) throw new Error("La API no confirmó el guardado de la tarjeta.");
-        roundRef.current = response.data;
-        onRoundChange(response.data);
-        return response.data;
-      });
-    saveChainRef.current = save;
-
-    try {
-      return await save;
-    } finally {
-      setIsSaving(false);
+    if (formChanged || formClosed) {
+      formKeyRef.current = formKey;
+      hasLocalDraftRef.current = false;
+      setHasLocalDraft(false);
+      roundRef.current = round;
+      return;
     }
-  }, [onRoundChange, stageId, userId]);
+
+    if (!hasLocalDraftRef.current && !isClosingRef.current) {
+      roundRef.current = round;
+      return;
+    }
+
+    if (hasLocalDraftRef.current) {
+      const draftById = new Map(
+        roundRef.current.participants.map((participant) => [participant.id, participant])
+      );
+      roundRef.current = {
+        ...round,
+        participants: round.participants.map((participant) => {
+          const draft = draftById.get(participant.id);
+          if (!draft || participant.status !== "ELIGIBLE") return participant;
+          return {
+            ...participant,
+            selected: draft.selected,
+            position: draft.position,
+          };
+        }),
+      };
+    }
+  }, [round]);
 
   const queueFormSnapshot = useCallback(
     (payload: FormPayload) => {
       const current = roundRef.current;
       if (!userId || !current.form || isClosingRef.current) return;
-      pendingPayloadRef.current = payload;
-      setHasPendingSave(true);
 
       const optimistic: RoundState = {
         ...current,
@@ -103,36 +100,43 @@ export function useRoundForm({
           desertedPositions: payload.desertedPositions ?? current.form.desertedPositions,
         },
       };
+
+      hasLocalDraftRef.current = true;
+      setHasLocalDraft(true);
       roundRef.current = optimistic;
       onRoundChange(optimistic);
-
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = setTimeout(() => {
-        saveTimerRef.current = null;
-        void savePendingForm().catch(() => undefined);
-      }, SAVE_DEBOUNCE_MS);
     },
-    [onRoundChange, savePendingForm, userId]
+    [onRoundChange, userId]
   );
 
-  const flushPendingChanges = useCallback(async () => {
-    try {
-      await savePendingForm();
-      await saveChainRef.current;
-      return { synced: 1, conflicts: 0, failed: 0, round: roundRef.current };
-    } catch {
-      return { synced: 0, conflicts: 0, failed: 1, round: roundRef.current };
-    }
-  }, [savePendingForm]);
+  const mergeServerMetadataWithDraft = useCallback((serverRound: RoundState): RoundState => {
+    if (!hasLocalDraftRef.current) return serverRound;
+    const draftById = new Map(
+      roundRef.current.participants.map((participant) => [participant.id, participant])
+    );
+    return {
+      ...serverRound,
+      participants: serverRound.participants.map((participant) => {
+        const draft = draftById.get(participant.id);
+        if (!draft || participant.status !== "ELIGIBLE") return participant;
+        return {
+          ...participant,
+          selected: draft.selected,
+          position: draft.position,
+        };
+      }),
+    };
+  }, []);
 
   const queueNote = useCallback(
     async (participantId: string, note: string | null) => {
       const response = await stagedFlowService.updateRoundEntryNote(stageId, participantId, note);
       if (!response.data) throw new Error("La API no confirmó el guardado de la nota.");
-      roundRef.current = response.data;
-      onRoundChange(response.data);
+      const merged = mergeServerMetadataWithDraft(response.data);
+      roundRef.current = merged;
+      onRoundChange(merged);
     },
-    [onRoundChange, stageId]
+    [mergeServerMetadataWithDraft, onRoundChange, stageId]
   );
 
   const queueReminders = useCallback(
@@ -146,10 +150,11 @@ export function useRoundForm({
         reminders
       );
       if (!response.data) throw new Error("La API no confirmó los recordatorios.");
-      roundRef.current = response.data;
-      onRoundChange(response.data);
+      const merged = mergeServerMetadataWithDraft(response.data);
+      roundRef.current = merged;
+      onRoundChange(merged);
     },
-    [onRoundChange, stageId]
+    [mergeServerMetadataWithDraft, onRoundChange, stageId]
   );
 
   const buildCloseBody = useCallback(() => {
@@ -182,10 +187,15 @@ export function useRoundForm({
 
   return {
     pendingCount: 0,
-    hasBlockingPending: hasPendingSave,
-    isSyncing: isSaving,
-    syncNow: savePendingForm,
-    flushPendingChanges,
+    hasBlockingPending: false,
+    hasLocalDraft,
+    isSyncing: false,
+    flushPendingChanges: useCallback(async () => ({
+      synced: 0,
+      conflicts: 0,
+      failed: 0,
+      round: roundRef.current,
+    }), []),
     queueFormSnapshot,
     queueNote,
     queueReminders,
