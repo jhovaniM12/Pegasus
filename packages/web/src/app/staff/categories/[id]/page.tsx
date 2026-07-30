@@ -426,7 +426,7 @@ export default function StaffCategoryPage() {
           }
 
           if (isJudgeViewStale("FA", summaryData.status)) {
-            // Antes de consolidar, la vista FA deja de ser válida si la etapa cambia.
+            // El formato aún no existe para el estado actual.
             router.replace(`/staff/categories/${stageId}`);
             return;
           }
@@ -474,9 +474,7 @@ export default function StaffCategoryPage() {
           }
 
           if (isJudgeViewStale(judgeView, summaryData.status)) {
-            // Misma idea que para "?view=FA": la ronda fijada en la URL (F1/F2/desempate)
-            // ya quedó atrás respecto al estado real de la etapa. Se limpia el parámetro
-            // para que la carga sin vista fijada muestre la fase vigente.
+            // La ronda solicitada todavía no existe para el estado actual.
             router.replace(`/staff/categories/${stageId}`);
             return;
           }

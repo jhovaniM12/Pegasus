@@ -7,14 +7,14 @@ describe("isJudgeViewStale", () => {
     expect(isJudgeViewStale("F1", "F1_CONSOLIDATED")).toBe(false);
   });
 
-  it("marca F1 obsoleta cuando el DT abre P2 o un desempate", () => {
-    expect(isJudgeViewStale("F1", "F2_IN_PROGRESS")).toBe(true);
-    expect(isJudgeViewStale("F1", "TIE_BREAK_IN_PROGRESS")).toBe(true);
+  it("permite consultar F1 después de abrir P2 o un desempate", () => {
+    expect(isJudgeViewStale("F1", "F2_IN_PROGRESS")).toBe(false);
+    expect(isJudgeViewStale("F1", "TIE_BREAK_IN_PROGRESS")).toBe(false);
   });
 
-  it("mantiene F2 durante la fase activa y la marca obsoleta al abrir desempate", () => {
+  it("permite consultar F2 durante la fase activa y durante un desempate", () => {
     expect(isJudgeViewStale("F2", "F2_IN_PROGRESS")).toBe(false);
-    expect(isJudgeViewStale("F2", "TIE_BREAK_IN_PROGRESS")).toBe(true);
+    expect(isJudgeViewStale("F2", "TIE_BREAK_IN_PROGRESS")).toBe(false);
   });
 
   it("permite consulta histórica en categorías cerradas o desiertas", () => {
@@ -23,8 +23,9 @@ describe("isJudgeViewStale", () => {
     expect(isJudgeViewStale("FA", "JUDGING_CLOSED")).toBe(false);
   });
 
-  it("marca FA obsoleta cuando arranca P1 o P2", () => {
-    expect(isJudgeViewStale("FA", "F1_IN_PROGRESS")).toBe(true);
-    expect(isJudgeViewStale("FA", "F2_IN_PROGRESS")).toBe(true);
+  it("permite consultar FA durante todas las rondas posteriores", () => {
+    expect(isJudgeViewStale("FA", "F1_IN_PROGRESS")).toBe(false);
+    expect(isJudgeViewStale("FA", "F2_IN_PROGRESS")).toBe(false);
+    expect(isJudgeViewStale("FA", "TIE_BREAK_IN_PROGRESS")).toBe(false);
   });
 });
