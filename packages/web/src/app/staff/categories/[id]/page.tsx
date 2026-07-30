@@ -791,6 +791,11 @@ export default function StaffCategoryPage() {
         ) ?? null)
       : null;
   const judgeNextRoundFormat = resolveJudgeNextRoundFormat(summary);
+  const judgeViewingCompletedTieBreak =
+    round?.round.roundType === "TIE_BREAK" &&
+    (summary?.status === "JUDGING_CLOSED" || summary?.status === "JUDGING_DESERTED");
+  const judgeShouldShowFinalOutcome =
+    !round || round.round.roundType === "F2" || round.round.roundType === "TIE_BREAK";
   const judgeActiveTieBreak = summary?.judge?.formats.find(
     (format) =>
       format.key === "TIE_BREAK" &&
@@ -1181,7 +1186,7 @@ export default function StaffCategoryPage() {
         {currentUser?.role === "JUDGE" &&
           summary.status === "JUDGING_DESERTED" &&
           !fa &&
-          !round && (
+          judgeShouldShowFinalOutcome && (
           <section className="mt-4 rounded-lg border border-slate-300 bg-white px-6 py-8 text-center">
             <p className="text-base font-semibold text-slate-900">Competencia desierta</p>
             <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
@@ -1190,7 +1195,10 @@ export default function StaffCategoryPage() {
           </section>
         )}
 
-        {currentUser?.role === "JUDGE" && summary.status === "JUDGING_CLOSED" && !fa && !round && (
+        {currentUser?.role === "JUDGE" &&
+          summary.status === "JUDGING_CLOSED" &&
+          !fa &&
+          judgeShouldShowFinalOutcome && (
           <section className="mt-4 space-y-4 rounded-lg border border-slate-200 bg-white p-5">
             {judgeOfficialF2 ? (
               <>
@@ -1223,7 +1231,7 @@ export default function StaffCategoryPage() {
         )}
 
         {/* ── JUEZ: rondas F1 / F2 / desempate ──────────────────────────── */}
-        {currentUser?.role === "JUDGE" && round && (
+        {currentUser?.role === "JUDGE" && round && !judgeViewingCompletedTieBreak && (
           judgeConsolidatedF1 ? (
             <div className="mt-4">
               <RoundConsolidatedDetail round={judgeConsolidatedF1} />
