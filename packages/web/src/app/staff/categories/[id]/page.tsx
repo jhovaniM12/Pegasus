@@ -34,6 +34,7 @@ import { DirectorRounds } from "./_components/director-rounds";
 import { OfficialResultBoard } from "./_components/official-result-board";
 import { OfficialScorecard } from "./_components/official-scorecard";
 import { buildOfficialF2Results } from "./_components/official-f2-results";
+import { resolveJudgeNextRoundFormat } from "./_components/judge-next-round";
 import { RoundConsolidatedDetail } from "./_components/round-consolidated-detail";
 import { isJudgeViewStale } from "./_components/judge-view";
 import { ClosePreRingDialog } from "./_components/close-pre-ring-dialog";
@@ -789,28 +790,7 @@ export default function StaffCategoryPage() {
           (item) => item.id === round.round.id || (item.roundType === "F1" && item.status !== "OPEN")
         ) ?? null)
       : null;
-  const judgeNextRoundFormat =
-    summary?.judge?.formats.find(
-      (format): format is JudgeFormat & { key: "F1" | "F2" } =>
-        (format.key === "F1" || format.key === "F2") &&
-        format.isActive &&
-        (format.formStatus === "PENDING" || format.formStatus === "STARTED")
-    ) ??
-    (summary?.status === "F1_IN_PROGRESS"
-      ? ({
-          key: "F1",
-          formStatus: "PENDING",
-          isActive: true,
-          participantCount: null,
-        } satisfies JudgeFormat & { key: "F1" })
-      : summary?.status === "F2_IN_PROGRESS"
-        ? ({
-            key: "F2",
-            formStatus: "PENDING",
-            isActive: true,
-            participantCount: null,
-          } satisfies JudgeFormat & { key: "F2" })
-        : null);
+  const judgeNextRoundFormat = resolveJudgeNextRoundFormat(summary);
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
