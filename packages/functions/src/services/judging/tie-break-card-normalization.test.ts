@@ -1,7 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { normalizeTieBreakCardAssignments } from "./tie-break-card-normalization.js";
+import {
+  normalizeTieBreakCardAssignments,
+  preserveTieBreakCardAssignments
+} from "./tie-break-card-normalization.js";
 
 describe("normalizeTieBreakCardAssignments", () => {
+  it("conserva un puesto parcial aunque no sea el primero del bloque", () => {
+    expect(
+      [...preserveTieBreakCardAssignments(
+        [{ participantId: "3", position: 3 }]
+      )]
+    ).toEqual([["3", 3]]);
+  });
+
   it("conserva 1.º y 2.º cuando desaparece quien tenía el 3.º", () => {
     expect(
       [...normalizeTieBreakCardAssignments(

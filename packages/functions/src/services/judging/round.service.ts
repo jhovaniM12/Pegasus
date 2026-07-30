@@ -63,7 +63,10 @@ import {
   tieBlockResolutionPriority,
   validateTieBreakOpening
 } from "./workflow-guards.js";
-import { normalizeTieBreakCardAssignments } from "./tie-break-card-normalization.js";
+import {
+  normalizeTieBreakCardAssignments,
+  preserveTieBreakCardAssignments
+} from "./tie-break-card-normalization.js";
 import { deriveTieBreakResidual } from "./tie-break-residual.js";
 import {
   loadActiveReminders,
@@ -680,7 +683,7 @@ async function applyRoundFormEntries(
     }
     const positionByParticipant =
       round.roundType === "TIE_BREAK"
-        ? normalizeTieBreakCardAssignments(positions, minAssignablePosition)
+        ? preserveTieBreakCardAssignments(positions)
         : new Map(positions.map((position) => [position.participantId, position.position]));
     const assigned = [...positionByParticipant.values()];
     for (const position of desertedPositions) {

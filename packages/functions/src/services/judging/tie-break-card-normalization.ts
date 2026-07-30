@@ -4,6 +4,23 @@ export type TieBreakCardAssignment = {
 };
 
 /**
+ * Conserva literalmente el puesto elegido mientras el juez edita su tarjeta.
+ * La compactación no debe ocurrir en snapshots parciales.
+ */
+export function preserveTieBreakCardAssignments(
+  assignments: TieBreakCardAssignment[]
+): Map<string, number> {
+  return new Map(
+    assignments
+      .filter(
+        (assignment): assignment is TieBreakCardAssignment & { position: number } =>
+          assignment.position != null
+      )
+      .map((assignment) => [assignment.participantId, assignment.position])
+  );
+}
+
+/**
  * Elimina al descalificado y comprime densamente el orden relativo de los
  * sobrevivientes. Los no asignados permanecen sin puesto.
  */
