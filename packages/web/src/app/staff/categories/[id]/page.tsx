@@ -355,6 +355,7 @@ export default function StaffCategoryPage() {
   const [closePreRingOpen, setClosePreRingOpen] = useState(false);
   const [startFaOpen, setStartFaOpen] = useState(false);
   const [closeFaOpen, setCloseFaOpen] = useState(false);
+  const [closingFa, setClosingFa] = useState(false);
   const [consolidateFaOpen, setConsolidateFaOpen] = useState(false);
   const [activateRoundTarget, setActivateRoundTarget] = useState<ActivateRoundConfig | null>(null);
   const [startRoundTarget, setStartRoundTarget] = useState<{
@@ -1442,6 +1443,8 @@ export default function StaffCategoryPage() {
           const selectedParticipantIds = [...localSelectionRef.current];
           // El snapshot enviado al cierre es la fuente definitiva.
           beginCloseFa();
+          setCloseFaOpen(false);
+          setClosingFa(true);
           setBusy(true);
           try {
             const response = await stagedFlowService.closeFa(stageId, selectedParticipantIds);
@@ -1450,7 +1453,6 @@ export default function StaffCategoryPage() {
               setSummary(response.data.stage);
             }
             toast({ title: "Formato FA cerrado", variant: "success" });
-            setCloseFaOpen(false);
           } catch (error) {
             toast({
               title: "Error",
@@ -1459,6 +1461,7 @@ export default function StaffCategoryPage() {
             });
           } finally {
             endCloseFa();
+            setClosingFa(false);
             setBusy(false);
           }
         }}
@@ -1537,6 +1540,11 @@ export default function StaffCategoryPage() {
           <PushNotificationGate />
         </div>
       </ContentReveal>
+      {closingFa && (
+        <div className="fixed inset-0 z-[100]" aria-live="polite" aria-busy="true">
+          <PageLoader label="Cerrando formato FA y guardando selecciones..." />
+        </div>
+      )}
     </PushNotificationProvider>
   );
 }
