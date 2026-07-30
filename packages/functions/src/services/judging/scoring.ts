@@ -204,7 +204,8 @@ function maxExactAssignmentVotes(
 export function computeF2(
   cards: JudgeCard[],
   judgeCount: number,
-  mode: ScoringMode = "P2"
+  mode: ScoringMode = "P2",
+  applyFirstPlaceMajority = true
 ): ScoringResult {
   const empty: ScoringResult = {
     participants: [],
@@ -249,7 +250,9 @@ export function computeF2(
   }
 
   // 4. Excepción de mayoría de primeros.
-  const majorityWinner = aggregates.find((agg) => agg.firstPlaceVotes >= threshold) ?? null;
+  const majorityWinner = applyFirstPlaceMajority
+    ? aggregates.find((agg) => agg.firstPlaceVotes >= threshold) ?? null
+    : null;
   const majorityWinnerId = majorityWinner?.participantId ?? null;
 
   if (mode === "TIE_BREAK") {

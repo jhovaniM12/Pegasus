@@ -8,6 +8,52 @@ import {
 } from "./official-f2-close.js";
 
 describe("buildEffectiveF2Result", () => {
+  it("conserva una resolución parcial y permite completar solo el empate residual", () => {
+    const effective = buildEffectiveF2Result(
+      [
+        {
+          participantId: "6",
+          scoreValue: 12,
+          firstPlaceVotes: 0,
+          finalPosition: 2,
+          status: "TIED"
+        },
+        {
+          participantId: "3",
+          scoreValue: 12,
+          firstPlaceVotes: 0,
+          finalPosition: 3,
+          status: "TIED"
+        },
+        {
+          participantId: "7",
+          scoreValue: 12,
+          firstPlaceVotes: 0,
+          finalPosition: 4,
+          status: "TIED"
+        }
+      ],
+      [
+        { participantId: "6", finalPosition: 2, sequence: 1 },
+        { participantId: "3", finalPosition: 3, sequence: 2 },
+        { participantId: "7", finalPosition: 4, sequence: 2 }
+      ]
+    );
+
+    expect(
+      effective.map((row) => [
+        row.participantId,
+        row.finalPosition,
+        row.resolvedByTieBreakSequence
+      ])
+    ).toEqual([
+      ["6", 2, 1],
+      ["3", 3, 2],
+      ["7", 4, 2]
+    ]);
+    expect(effective.every((row) => row.status === "FINAL")).toBe(true);
+  });
+
   it("aplica secuencialmente el triple desempate 4.º–6.º sin alterar las sumas F2", () => {
     const effective = buildEffectiveF2Result(
       [

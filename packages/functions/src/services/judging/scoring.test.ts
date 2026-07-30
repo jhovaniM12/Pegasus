@@ -323,6 +323,20 @@ describe("computeF2 - mayoría de primeros y empates", () => {
     expect(positionOf(result, "B")).toBe(2);
   });
 
+  it("no aplica mayoría de primeros en un desempate que no define el primer puesto oficial", () => {
+    const cards = [
+      rankingCard("j1", [["A", 1], ["B", 2]], ["A", "B"]),
+      rankingCard("j2", [["A", 1], ["B", 2]], ["A", "B"]),
+      rankingCard("j3", [["B", 1], ["A", 4]], ["A", "B"])
+    ];
+
+    const officialFirst = computeF2(cards, 3, "TIE_BREAK", true);
+    const lowerBlock = computeF2(cards, 3, "TIE_BREAK", false);
+
+    expect(officialFirst.participants[0]?.participantId).toBe("A");
+    expect(lowerBlock.participants[0]?.participantId).toBe("B");
+  });
+
   it("empate por suma entre premiables requiere desempate", () => {
     const cards = [card("j1", ["A", "B"]), card("j2", ["B", "A"])];
     const result = computeF2(cards, 2);

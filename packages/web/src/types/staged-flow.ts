@@ -431,6 +431,7 @@ export type RoundManagementItem = {
   tieBreakReason: TieBreakReason | null;
   tieBreakStartPosition: number | null;
   tieBreakEndPosition: number | null;
+  previousTieBreakRoundId?: string | null;
   tieBlocks: Array<{
     reason: TieBreakReason;
     participantIds: string[];

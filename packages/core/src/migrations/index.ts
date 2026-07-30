@@ -41,3 +41,4 @@ export { AddFairStaffJudgeSeat1717430400039 } from "./1717430400039-AddFairStaff
 export { AddTieBreakDisqualificationOutcomes1717430400040 } from "./1717430400040-AddTieBreakDisqualificationOutcomes.js";
 export { AllowTieBreakDisqualificationDesertedReason1717430400041 } from "./1717430400041-AllowTieBreakDisqualificationDesertedReason.js";
 export { CreateSystemSettings1717430400042 } from "./1717430400042-CreateSystemSettings.js";
+export { AddSuccessiveTieBreakTraceability1717430400043 } from "./1717430400043-AddSuccessiveTieBreakTraceability.js";

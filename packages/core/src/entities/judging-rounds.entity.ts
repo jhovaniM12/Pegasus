@@ -52,9 +52,13 @@ export class JudgingRound extends PegasusBaseEntity {
   @Column({ name: "status", type: "varchar" })
   status!: JudgingRoundStatus;
 
-  /** Para rondas de desempate: ronda F2 cuyo empate se está resolviendo. */
+  /** Para rondas de desempate: ronda F2 raíz cuyo resultado oficial se está resolviendo. */
   @Column({ name: "parent_round_id", type: "uuid", nullable: true })
   parentRoundId!: string | null;
+
+  /** Desempate que produjo este bloque residual; null en el primer desempate. */
+  @Column({ name: "previous_tie_break_round_id", type: "uuid", nullable: true })
+  previousTieBreakRoundId!: string | null;
 
   /** Causa explícita del bloque; evita inferir 5.e por estado o consecutividad. */
   @Column({ name: "tie_break_reason", type: "varchar", nullable: true })

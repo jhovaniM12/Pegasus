@@ -24,8 +24,6 @@ import {
   type TieBreakTestType
 } from "@pegasus/core";
 import {
-  isTieBlockResolutionCovered,
-  tieBlockKey,
   typedTieBlockKey
 } from "@pegasus/core/judging/tie-blocks";
 import type { EntityManager } from "typeorm";
@@ -66,6 +64,7 @@ import {
   validateTieBreakOpening
 } from "./workflow-guards.js";
 import { normalizeTieBreakCardAssignments } from "./tie-break-card-normalization.js";
+import { deriveTieBreakResidual } from "./tie-break-residual.js";
 import {
   loadActiveReminders,
   loadReminderHistory,
@@ -1432,9 +1431,8 @@ async function loadConsolidatedTieBreakResolutions(
     const tieResults = await manager.getRepository(JudgingRoundResult).find({
       where: { roundId: tieBreak.id }
     });
-    if (tieResults.some((row) => row.status === "TIED")) continue;
     for (const row of tieResults) {
-      if (row.finalPosition == null) continue;
+      if (row.finalPosition == null || row.status === "TIED") continue;
       resolutions.push({
         participantId: row.judgingParticipantId,
         finalPosition: row.finalPosition,
@@ -1452,55 +1450,8 @@ type PendingTieBlock = {
   startPosition: number;
   endPosition: number;
   results: JudgingRoundResult[];
+  sourceRoundId: string | null;
 };
-
-type ResolvedTieBlockKeys = {
-  typed: Set<string>;
-  participants: Set<string>;
-};
-
-async function loadResolvedTieBlockKeys(
-  manager: EntityManager,
-  stageId: string,
-  parentRoundId: string
-): Promise<ResolvedTieBlockKeys> {
-  const tieBreakRounds = await manager.getRepository(JudgingRound).find({
-    where: { fairCategoryStageId: stageId, roundType: "TIE_BREAK", parentRoundId, status: "CONSOLIDATED" }
-  });
-
-  const resolved: ResolvedTieBlockKeys = {
-    typed: new Set<string>(),
-    participants: new Set<string>()
-  };
-  for (const tieBreakRound of tieBreakRounds) {
-    const results = await manager.getRepository(JudgingRoundResult).find({
-      where: { roundId: tieBreakRound.id }
-    });
-    const stillTied = results.some((row) => row.status === "TIED");
-    if (stillTied) continue;
-
-    const participantIds = await loadTieBreakParticipantIds(manager, tieBreakRound.id);
-    if (participantIds.length > 1) {
-      // El orden consolidado resuelve cualquier causa pendiente para el mismo
-      // conjunto exacto de ejemplares. La causa tipada se conserva para auditoría.
-      resolved.participants.add(tieBlockKey(participantIds));
-      if (tieBreakRound.tieBreakReason) {
-        resolved.typed.add(typedTieBlockKey(tieBreakRound.tieBreakReason, participantIds));
-      }
-    }
-  }
-
-  return resolved;
-}
-
-function isTieBlockResolved(block: PendingTieBlock, resolved: ResolvedTieBlockKeys): boolean {
-  return isTieBlockResolutionCovered({
-    reason: block.reason,
-    participantIds: block.participantIds,
-    resolvedTypedKeys: resolved.typed,
-    resolvedParticipantKeys: resolved.participants
-  });
-}
 
 async function loadBlockingTieBlocks(
   manager: EntityManager,
@@ -1608,7 +1559,8 @@ async function loadBlockingTieBlocks(
         positionSum: group.positionSum,
         startPosition: group.startPosition,
         endPosition: group.endPosition,
-        results: blockResults
+        results: blockResults,
+        sourceRoundId: null
       };
     })
     .filter((block): block is PendingTieBlock => block !== null)
@@ -1621,11 +1573,101 @@ async function loadBlockingTieBlocks(
     });
 }
 
+async function loadResidualTieBlocks(
+  manager: EntityManager,
+  sourceRound: JudgingRound
+): Promise<PendingTieBlock[]> {
+  if (
+    sourceRound.roundType !== "TIE_BREAK" ||
+    sourceRound.status !== "CONSOLIDATED" ||
+    sourceRound.tieBreakStartPosition == null ||
+    sourceRound.tieBreakEndPosition == null
+  ) {
+    return [];
+  }
+
+  const results = await manager.getRepository(JudgingRoundResult).find({
+    where: { roundId: sourceRound.id },
+    order: { finalPosition: "ASC" }
+  });
+  const resultByParticipantId = new Map(
+    results.map((result) => [result.judgingParticipantId, result])
+  );
+  const residual = deriveTieBreakResidual({
+    startPosition: sourceRound.tieBreakStartPosition,
+    endPosition: sourceRound.tieBreakEndPosition,
+    results: results
+      .filter(
+        (result): result is JudgingRoundResult & { finalPosition: number } =>
+          result.finalPosition != null
+      )
+      .map((result) => ({
+        participantId: result.judgingParticipantId,
+        scoreValue: result.scoreValue,
+        firstPlaceVotes: result.firstPlaceVotes,
+        finalPosition: result.finalPosition,
+        status: result.status
+      }))
+  });
+
+  return residual.remainingTiedGroups.map((group) => ({
+    ...group,
+    results: group.participantIds
+      .map((participantId) => resultByParticipantId.get(participantId))
+      .filter((result): result is JudgingRoundResult => result != null),
+    sourceRoundId: sourceRound.id
+  }));
+}
+
+async function loadOpenedBlockKeys(
+  manager: EntityManager,
+  rounds: JudgingRound[]
+): Promise<Set<string>> {
+  const keys = new Set<string>();
+  for (const round of rounds) {
+    const participantIds = await loadTieBreakParticipantIds(manager, round.id);
+    if (participantIds.length > 1) {
+      keys.add(typedTieBlockKey(round.tieBreakReason ?? "SUM_EQUALITY", participantIds));
+    }
+  }
+  return keys;
+}
+
 async function getNextPendingTieBlock(manager: EntityManager, f2: JudgingRound): Promise<PendingTieBlock | null> {
-  const blocks = await loadBlockingTieBlocks(manager, f2);
-  if (blocks.length === 0) return null;
-  const resolvedKeys = await loadResolvedTieBlockKeys(manager, f2.fairCategoryStageId, f2.id);
-  return blocks.find((block) => !isTieBlockResolved(block, resolvedKeys)) ?? null;
+  const tieBreaks = await manager.getRepository(JudgingRound).find({
+    where: {
+      fairCategoryStageId: f2.fairCategoryStageId,
+      roundType: "TIE_BREAK",
+      parentRoundId: f2.id
+    },
+    order: { sequence: "DESC" }
+  });
+
+  // Los residuos siempre se derivan de la ronda que acaba de producirlos.
+  for (const sourceRound of tieBreaks.filter((round) => round.status === "CONSOLIDATED")) {
+    const residualBlocks = await loadResidualTieBlocks(manager, sourceRound);
+    if (residualBlocks.length === 0) continue;
+    const children = tieBreaks.filter(
+      (round) => round.previousTieBreakRoundId === sourceRound.id
+    );
+    const openedKeys = await loadOpenedBlockKeys(manager, children);
+    const pending = residualBlocks.find(
+      (block) => !openedKeys.has(typedTieBlockKey(block.reason, block.participantIds))
+    );
+    if (pending) return pending;
+  }
+
+  // Solo si ningún desempate previo produjo un residuo pendiente se consultan
+  // los bloques iniciales del F2 original.
+  const initialBlocks = await loadBlockingTieBlocks(manager, f2);
+  const initialRounds = tieBreaks.filter((round) => round.previousTieBreakRoundId == null);
+  const openedInitialKeys = await loadOpenedBlockKeys(manager, initialRounds);
+  return (
+    initialBlocks.find(
+      (block) =>
+        !openedInitialKeys.has(typedTieBlockKey(block.reason, block.participantIds))
+    ) ?? null
+  );
 }
 
 type PendingTieBreakAnnouncementDto = {
@@ -1787,8 +1829,13 @@ async function consolidateTieBreak(
   const stage = await getStageOrThrow(manager, round.fairCategoryStageId);
   const judges = await getActiveJudgesForStage(manager, stage);
   const cards = await loadJudgeCards(manager, round.id);
-  const scoring = computeF2(cards, judges.length, "TIE_BREAK");
   const positionBounds = await getRoundPositionBounds(manager, round);
+  const scoring = computeF2(
+    cards,
+    judges.length,
+    "TIE_BREAK",
+    positionBounds.min === MIN_AWARD_POSITION
+  );
   const blockParticipantIds = await loadTieBreakParticipantIds(manager, round.id);
   const blockParticipants = await loadParticipants(manager, blockParticipantIds);
   const disqualifiedParticipantIds = blockParticipants
@@ -1812,7 +1859,7 @@ async function consolidateTieBreak(
           scoreValue: participant.positionSum,
           firstPlaceVotes: participant.firstPlaceVotes,
           finalPosition: positionBounds.min + participant.finalPosition - 1,
-          status: (participant.tied ? "TIED" : "PROVISIONAL") as JudgingRoundResultStatus
+          status: (participant.tied ? "TIED" : "FINAL") as JudgingRoundResultStatus
         })
       )
     );
@@ -1899,6 +1946,16 @@ export async function openTieBreak(
     if (!pendingTieBlock || pendingTieBlock.results.length < 2) {
       throw new BadRequestError("No hay un empate pendiente para resolver.");
     }
+    const resolvedParticipantIds = new Set(
+      (await loadConsolidatedTieBreakResolutions(manager, f2)).map(
+        (resolution) => resolution.participantId
+      )
+    );
+    if (pendingTieBlock.participantIds.some((participantId) => resolvedParticipantIds.has(participantId))) {
+      throw new BadRequestError(
+        "El bloque residual contiene un ejemplar que ya tiene puesto oficial resuelto."
+      );
+    }
 
     const testTypes = Array.from(new Set(input.testTypes));
     const testType = testTypes[0];
@@ -1942,6 +1999,7 @@ export async function openTieBreak(
         sequence: existingTieBreaks + 1,
         status: "OPEN",
         parentRoundId: f2.id,
+        previousTieBreakRoundId: pendingTieBlock.sourceRoundId,
         tieBreakReason: pendingTieBlock.reason,
         tieBreakStartPosition: pendingTieBlock.startPosition,
         tieBreakEndPosition: pendingTieBlock.endPosition,
@@ -1984,6 +2042,7 @@ export async function openTieBreak(
       payload: {
         roundId: round.id,
         parentRoundId: f2.id,
+        previousTieBreakRoundId: pendingTieBlock.sourceRoundId,
         tieBreakReason: pendingTieBlock.reason,
         participantIds: pendingTieBlock.participantIds,
         startPosition: pendingTieBlock.startPosition,
@@ -2048,40 +2107,7 @@ export async function closeResults(user: User, stageId: string): Promise<StagedC
       throw new BadRequestError("Hay un empate sin resolver en puestos premiables. Abre un desempate antes de cerrar.");
     }
 
-    const tieBreakRounds = await manager.getRepository(JudgingRound).find({
-      where: {
-        fairCategoryStageId: stage.id,
-        roundType: "TIE_BREAK",
-        parentRoundId: f2.id,
-        status: "CONSOLIDATED"
-      },
-      order: { sequence: "ASC" }
-    });
-
-    const resolutions: Array<{
-      participantId: string;
-      finalPosition: number;
-      sequence: number;
-    }> = [];
-    for (const tieBreak of tieBreakRounds) {
-      const tieResults = await manager.getRepository(JudgingRoundResult).find({
-        where: { roundId: tieBreak.id }
-      });
-      if (tieResults.some((row) => row.status === "TIED")) {
-        throw new BadRequestError(
-          "Hay un desempate consolidado que sigue empatado. Abre otra ronda antes de cerrar."
-        );
-      }
-      for (const row of tieResults) {
-        if (row.finalPosition != null) {
-          resolutions.push({
-            participantId: row.judgingParticipantId,
-            finalPosition: row.finalPosition,
-            sequence: tieBreak.sequence
-          });
-        }
-      }
-    }
+    const resolutions = await loadConsolidatedTieBreakResolutions(manager, f2);
 
     const snapshotBeforeClose = results.map((row) => ({
       participantId: row.judgingParticipantId,
@@ -2159,7 +2185,7 @@ export async function closeResults(user: User, stageId: string): Promise<StagedC
         roundId: f2.id,
         snapshotBeforeClose,
         officialResults: merged,
-        resolvedTieBreakSequences: tieBreakRounds.map((round) => round.sequence)
+        resolvedTieBreakSequences: [...new Set(resolutions.map((resolution) => resolution.sequence))]
       }
     });
     const notification = stageNotificationContext(stage);
@@ -2526,23 +2552,18 @@ export async function getRoundsManagement(user: User, stageId: string) {
         where: { roundId: round.id },
         order: { testOrder: "ASC" }
       });
-      const tieBlocks =
+      const pendingTieBlock =
         round.roundType === "F2" && round.status !== "OPEN"
-          ? await loadBlockingTieBlocks(manager, round)
-          : [];
-      const resolvedKeys =
-        round.roundType === "F2" && round.status !== "OPEN"
-          ? await loadResolvedTieBlockKeys(manager, stage.id, round.id)
-          : { typed: new Set<string>(), participants: new Set<string>() };
-      const tieBlocksDto = tieBlocks.map((block) => {
-        const resolved = isTieBlockResolved(block, resolvedKeys);
+          ? await getNextPendingTieBlock(manager, round)
+          : null;
+      const tieBlocksDto = (pendingTieBlock ? [pendingTieBlock] : []).map((block) => {
         return {
           reason: block.reason,
           participantIds: block.participantIds,
           positionSum: block.positionSum,
           startPosition: block.startPosition,
           endPosition: block.endPosition,
-          resolved
+          resolved: false
         };
       });
       const membershipByParticipant = buildTieMembershipByParticipant(tieBlocksDto);
@@ -2580,6 +2601,7 @@ export async function getRoundsManagement(user: User, stageId: string) {
         tieBreakReason: round.tieBreakReason,
         tieBreakStartPosition: round.tieBreakStartPosition,
         tieBreakEndPosition: round.tieBreakEndPosition,
+        previousTieBreakRoundId: round.previousTieBreakRoundId,
         tieBlocks: tieBlocksDto,
         forms: forms.map((form) => ({
           id: form.id,
