@@ -5,7 +5,6 @@ import { CheckCircle2, Loader2, Lock, Play, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { useRoundForm } from "@/hooks/use-round-form";
-import { hasBlockingMutationsForStage } from "@/offline/offline-repository";
 import { stagedFlowService } from "@/services/staged-flow.service";
 import type { RoundManagementItem, RoundParticipant, RoundState, RoundType } from "@/types/staged-flow";
 import { F2PositionBoard } from "./f2-position-board";
@@ -147,7 +146,6 @@ export function JudgeRoundWorkspace({
     queueFormSnapshot,
     queueNote,
     queueReminders,
-    rememberServerRound,
     beginClose,
     endClose,
     buildCloseBody,
@@ -242,7 +240,6 @@ export function JudgeRoundWorkspace({
         setLocalDesertedPositions(response.data.form?.desertedPositions ?? []);
         setDisqualifyTarget(null);
         onLocalUpdate(response.data);
-        void rememberServerRound(response.data);
         toast({ title: "Ejemplar descalificado", variant: "success" });
       }
     } catch (error) {
@@ -275,8 +272,7 @@ export function JudgeRoundWorkspace({
   }, [round]);
 
   useEffect(() => {
-    void rememberServerRound(latestConfirmedRoundRef.current);
-  }, [rememberServerRound, round.round.id, round.form?.id]);
+  }, [round.round.id, round.form?.id]);
 
   const saveNote = async (participantId: string, note: string | null) => {
     const next = localParticipantsRef.current.map((participant) =>
@@ -418,8 +414,7 @@ export function JudgeRoundWorkspace({
       const syncResult = await flushPendingChanges();
       const stillBlocking =
         syncResult.conflicts > 0 ||
-        syncResult.failed > 0 ||
-        (userId ? await hasBlockingMutationsForStage(userId, stageId) : false);
+        syncResult.failed > 0;
       if (stillBlocking) {
         throw new Error(
           "No fue posible sincronizar la tarjeta. Revisa la conexión e intenta nuevamente antes de cerrar."
@@ -434,7 +429,6 @@ export function JudgeRoundWorkspace({
       const response = await stagedFlowService.closeRoundForm(stageId, refreshedBody);
       if (response.data) {
         onLocalUpdate(response.data);
-        void rememberServerRound(response.data);
       }
     } finally {
       endClose();

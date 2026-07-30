@@ -13,7 +13,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { ConnectionIndicator, SyncIndicator } from "@/components/network-status";
+import { ConnectionIndicator } from "@/components/network-status";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Fragment } from "react";
 
@@ -81,7 +81,6 @@ export function SiteHeader() {
       </div>
       <div className="flex shrink-0 items-center gap-2">
         <ThemeToggle />
-        <SyncIndicator />
         <ConnectionIndicator />
       </div>
     </header>

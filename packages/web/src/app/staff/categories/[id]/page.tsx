@@ -7,10 +7,9 @@ import { ArrowLeft, Gavel, Lock, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmActionDialog } from "@/components/confirm-action-dialog";
 import { NotificationInbox } from "@/components/notification-inbox";
-import { ConnectionIndicator, SyncIndicator } from "@/components/network-status";
+import { ConnectionIndicator } from "@/components/network-status";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { StaffUserMenu } from "@/components/staff-user-menu";
-import { prepareStaffLogoutOffline } from "@/offline/retention";
 import { stagedFlowService } from "@/services/staged-flow.service";
 import { useToast } from "@/components/ui/toast";
 import { useStaffRealtimeRefresh } from "@/hooks/use-staff-realtime-refresh";
@@ -20,8 +19,6 @@ import { useFaSelection } from "@/hooks/use-fa-selection";
 import { useVeterinaryChecks } from "@/hooks/use-veterinary-checks";
 import { ContentReveal, PageLoader } from "@/components/loaders";
 import { ApiError, isUnauthorizedError } from "@/services/api.service";
-import { getTrustedOfflineDevice, hasBlockingMutationsForStage } from "@/offline/offline-repository";
-import { readRoundStageSnapshot } from "@/offline/round-cache";
 import { SummaryHeader } from "./_components/summary-header";
 import { VetCheckCard } from "./_components/vet-check-card";
 import { VetRejectDialog, type VetRejectTarget } from "./_components/vet-reject-dialog";
@@ -311,7 +308,6 @@ export default function StaffCategoryPage() {
     hasBlockingPending: vetHasBlockingPending,
     isSyncing: vetIsSyncing,
     syncNow: syncVeterinaryNow,
-    loadFromOfflineCache,
   } = useVeterinaryChecks({
     stageId,
     userId: currentUser?.id ?? null,
@@ -348,8 +344,6 @@ export default function StaffCategoryPage() {
     isSyncing: faIsSyncing,
     toggleSelection: toggleFaSelection,
     syncNow: syncFaNow,
-    loadFromOfflineCache: loadFaFromOfflineCache,
-    rememberServerFa,
     beginClose: beginCloseFa,
     endClose: endCloseFa,
   } = useFaSelection({
@@ -442,33 +436,11 @@ export default function StaffCategoryPage() {
             : null;
           setSummary(summaryData);
           setFa(faData);
-          if (faData) {
-            void rememberServerFa(faData);
-          }
           setRound(null);
           setRoundsManagement(null);
           setManagement(faManagement);
           return;
         } catch (error) {
-          if (isUnauthorizedError(error)) throw error;
-
-          const offlineSnapshot = await loadFaFromOfflineCache(user.id);
-          if (offlineSnapshot) {
-            setSummary(offlineSnapshot.fa.stage);
-            setFa(offlineSnapshot.fa);
-            setRound(null);
-            setRoundsManagement(null);
-            setManagement(null);
-            if (!silent) {
-              toast({
-                title: "Modo offline",
-                description: "Mostrando el FA preparado en este dispositivo.",
-                variant: "success",
-              });
-            }
-            return;
-          }
-
           throw error;
         }
       }
@@ -517,29 +489,6 @@ export default function StaffCategoryPage() {
           return;
         } catch (error) {
           if (isUnauthorizedError(error)) throw error;
-
-          const trusted = await getTrustedOfflineDevice();
-          if (trusted?.userId === user.id) {
-            const offlineSnapshot = await readRoundStageSnapshot(user.id, stageId);
-            if (
-              offlineSnapshot?.round &&
-              offlineSnapshot.round.round.roundType === judgeView
-            ) {
-              setSummary(offlineSnapshot.round.stage);
-              setFa(null);
-              setRound(offlineSnapshot.round);
-              setRoundsManagement(null);
-              setManagement(null);
-              if (!silent) {
-                toast({
-                  title: "Modo offline",
-                  description: "Mostrando la tarjeta de ronda preparada en este dispositivo.",
-                  variant: "success",
-                });
-              }
-              return;
-            }
-          }
 
           throw error;
         }
@@ -629,25 +578,6 @@ export default function StaffCategoryPage() {
           setManagement(null);
           return;
         } catch (error) {
-          if (isUnauthorizedError(error)) throw error;
-
-          const offlineSnapshot = await loadFromOfflineCache();
-          if (offlineSnapshot) {
-            setSummary(offlineSnapshot.summary);
-            setFa(null);
-            setRound(null);
-            setRoundsManagement(null);
-            setManagement(null);
-            if (!silent) {
-              toast({
-                title: "Modo offline",
-                description: "Mostrando la pre-pista preparada en este dispositivo.",
-                variant: "success",
-              });
-            }
-            return;
-          }
-
           throw error;
         }
       }
@@ -673,31 +603,10 @@ export default function StaffCategoryPage() {
           const workspace = await loadJudgeWorkspace(stageId, current, viewParam);
           setSummary(workspace.summary);
           setFa(workspace.fa);
-          if (workspace.fa) {
-            void rememberServerFa(workspace.fa);
-          }
           setRound(workspace.round);
           setRoundsManagement(workspace.roundsManagement);
           setManagement(workspace.management);
         } catch (error) {
-          if (isUnauthorizedError(error)) throw error;
-
-          const offlineSnapshot = await loadFaFromOfflineCache(user.id);
-          if (offlineSnapshot) {
-            setSummary(offlineSnapshot.fa.stage);
-            setFa(offlineSnapshot.fa);
-            setRound(null);
-            setRoundsManagement(null);
-            if (!silent) {
-              toast({
-                title: "Modo offline",
-                description: "Mostrando el FA preparado en este dispositivo.",
-                variant: "success",
-              });
-            }
-            return;
-          }
-
           throw error;
         }
       }
@@ -724,10 +633,7 @@ export default function StaffCategoryPage() {
       }
     }
   }, [
-    loadFaFromOfflineCache,
-    loadFromOfflineCache,
     markSessionExpired,
-    rememberServerFa,
     router,
     setChecks,
     staffLoginPath,
@@ -797,7 +703,6 @@ export default function StaffCategoryPage() {
         if (response.data) {
           setFa(response.data);
           setSummary(response.data.stage);
-          void rememberServerFa(response.data);
           setDisqualifyTarget(null);
           toast({ title: "Ejemplar descalificado", variant: "success" });
         }
@@ -812,7 +717,7 @@ export default function StaffCategoryPage() {
         setDisqualifyBusy(false);
       }
     },
-    [fa, rememberServerFa, stageId, summary?.status, toast]
+    [fa, stageId, summary?.status, toast]
   );
 
   const openFaRepeatTrack = useCallback(
@@ -835,7 +740,6 @@ export default function StaffCategoryPage() {
         if (response.data) {
           setFa(response.data);
           setSummary(response.data.stage);
-          void rememberServerFa(response.data);
           setRepeatTrackTarget(null);
           toast({ title: "Solicitud enviada", variant: "success" });
         }
@@ -850,7 +754,7 @@ export default function StaffCategoryPage() {
         setRepeatTrackBusy(false);
       }
     },
-    [fa, rememberServerFa, stageId, summary?.status, toast]
+    [fa, stageId, summary?.status, toast]
   );
 
   const executeFaRepeatTrack = useCallback(
@@ -900,16 +804,6 @@ export default function StaffCategoryPage() {
   const judgeOfficialF2 = roundsManagement ? buildOfficialF2Results(roundsManagement.rounds) : null;
 
   const logout = async () => {
-    if (currentUser?.id) {
-      const result = await prepareStaffLogoutOffline(currentUser.id);
-      if (result.blockedByPending) {
-        const proceed = window.confirm(
-          `Tienes ${result.pendingCount} cambio(s) offline pendientes en este dispositivo. ` +
-            "Se conservarán aislados para tu usuario. ¿Cerrar sesión de todos modos?"
-        );
-        if (!proceed) return;
-      }
-    }
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/login/staff");
     router.refresh();
@@ -967,16 +861,6 @@ export default function StaffCategoryPage() {
           </Link>
           <div className="flex min-w-0 items-center gap-2">
             <ThemeToggle />
-            <SyncIndicator
-              stageId={stageId}
-              onAfterSync={
-                currentUser
-                  ? async () => {
-                      await load({ silent: true });
-                    }
-                  : undefined
-              }
-            />
             <NotificationInbox />
             <ConnectionIndicator />
             <StaffUserMenu
@@ -1590,10 +1474,7 @@ export default function StaffCategoryPage() {
             const syncResult = await syncFaNow();
             const stillBlocking =
               syncResult.conflicts > 0 ||
-              syncResult.failed > 0 ||
-              (currentUser
-                ? await hasBlockingMutationsForStage(currentUser.id, stageId)
-                : false);
+              syncResult.failed > 0;
             if (stillBlocking) {
               toast({
                 title: "Sincronización pendiente",
@@ -1608,7 +1489,6 @@ export default function StaffCategoryPage() {
             if (response.data) {
               setFa(response.data);
               setSummary(response.data.stage);
-              void rememberServerFa(response.data);
             }
             toast({ title: "Formato FA cerrado", variant: "success" });
             setCloseFaOpen(false);
@@ -1670,10 +1550,7 @@ export default function StaffCategoryPage() {
             const syncResult = await syncVeterinaryNow();
             const stillBlocking =
               syncResult.conflicts > 0 ||
-              syncResult.failed > 0 ||
-              (currentUser
-                ? await hasBlockingMutationsForStage(currentUser.id, stageId)
-                : false);
+              syncResult.failed > 0;
             if (stillBlocking) {
               toast({
                 title: "No se pudo sincronizar",

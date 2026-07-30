@@ -299,9 +299,9 @@ export async function queueRoleNotifications(
 }
 
 export function stageNotificationContext(stage: FairCategoryStage) {
-  const categoryName = stage.category.name ?? "Categoria sin nombre";
-  const fairName = stage.fair.name ?? "Feria sin nombre";
-  const gaitName = stage.category.gait?.name ?? "Sin andar";
+  const categoryName = stage.category?.name ?? "Categoria sin nombre";
+  const fairName = stage.fair?.name ?? "Feria sin nombre";
+  const gaitName = stage.category?.gait?.name ?? "Sin andar";
   const titleSuffix = categoryName;
   const detail = `${categoryName} - ${gaitName} en ${fairName}`;
 

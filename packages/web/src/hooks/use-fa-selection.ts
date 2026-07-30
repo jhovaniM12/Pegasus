@@ -1,18 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { useNetworkStatus } from "@/components/network-status";
 import { ApiError } from "@/services/api.service";
+import { stagedFlowService } from "@/services/staged-flow.service";
 import type { FaState, StagedCategory } from "@/types/staged-flow";
-import { cacheFaStageSnapshot, readFaStageSnapshot } from "@/offline/fa-cache";
-import {
-  countBlockingMutationsForStage,
-  getTrustedOfflineDevice,
-  hasBlockingMutationsForStage,
-  queueOfflineMutation,
-} from "@/offline/offline-repository";
-import { syncFaStage, type FaSelectionMutationPayload } from "@/offline/sync-engine";
 
-const FA_SYNC_DEBOUNCE_MS = 400;
+const SAVE_DEBOUNCE_MS = 400;
 
 type UseFaSelectionParams = {
   stageId: string;
@@ -24,7 +16,7 @@ type UseFaSelectionParams = {
   onSyncNotice?: (message: string) => void;
 };
 
-function extractSelectedParticipantIds(state: FaState): string[] {
+function selectedParticipantIds(state: FaState): string[] {
   return state.participants
     .filter((participant) => participant.decision?.decision === "SELECTED")
     .map((participant) => participant.id);
@@ -37,49 +29,14 @@ export function useFaSelection({
   summaryStatus,
   onFaChange,
   onUpdateError,
-  onSyncNotice,
 }: UseFaSelectionParams) {
-  const { connectivityState } = useNetworkStatus();
   const [selectedIdsLocal, setSelectedIdsLocal] = useState<string[]>([]);
-  const [pendingCount, setPendingCount] = useState(0);
-  const [hasBlockingPending, setHasBlockingPending] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
-
+  const [isSaving, setIsSaving] = useState(false);
   const localSelectionRef = useRef<string[]>([]);
   const faRef = useRef<FaState | null>(fa);
   const isClosingFaRef = useRef(false);
-  const syncInFlightRef = useRef(false);
-  const syncRequestedRef = useRef(false);
-  const selectionVersionRef = useRef(0);
-  const syncDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    faRef.current = fa;
-  }, [fa]);
-
-  useEffect(
-    () => () => {
-      if (syncDebounceTimerRef.current) {
-        clearTimeout(syncDebounceTimerRef.current);
-      }
-    },
-    []
-  );
-
-  const refreshPendingState = useCallback(async () => {
-    if (!userId) {
-      setPendingCount(0);
-      setHasBlockingPending(false);
-      return;
-    }
-
-    const [count, blocking] = await Promise.all([
-      countBlockingMutationsForStage(userId, stageId),
-      hasBlockingMutationsForStage(userId, stageId),
-    ]);
-    setPendingCount(count);
-    setHasBlockingPending(blocking);
-  }, [stageId, userId]);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveChainRef = useRef<Promise<FaState | null>>(Promise.resolve(null));
 
   const adoptSelection = useCallback((ids: string[]) => {
     localSelectionRef.current = ids;
@@ -87,130 +44,64 @@ export function useFaSelection({
   }, []);
 
   useEffect(() => {
-    if (!fa) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- limpia selección local al cerrar FA
+    faRef.current = fa;
+    if (fa && !isClosingFaRef.current) {
+      adoptSelection(selectedParticipantIds(fa));
+    } else if (!fa) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- limpia el estado al salir del formato FA
       adoptSelection([]);
       isClosingFaRef.current = false;
-      return;
+    }
+  }, [adoptSelection, fa]);
+
+  useEffect(
+    () => () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    },
+    []
+  );
+
+  const saveSelection = useCallback(async () => {
+    if (!userId || !faRef.current) {
+      return { synced: 0, conflicts: 0, failed: 0, fa: null as FaState | null };
+    }
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
     }
 
-    void (async () => {
-      const hasPending =
-        userId != null ? await hasBlockingMutationsForStage(userId, stageId) : false;
-      if (hasPending || isClosingFaRef.current) {
-        await refreshPendingState();
-        return;
-      }
-
-      adoptSelection(extractSelectedParticipantIds(fa));
-      await refreshPendingState();
-    })();
-  }, [adoptSelection, fa, refreshPendingState, stageId, userId]);
-
-  const cacheCurrentSnapshot = useCallback(
-    async (nextFa: FaState, selectedParticipantIds: string[]) => {
-      if (!userId) return;
-      await cacheFaStageSnapshot({
-        userId,
-        fa: nextFa,
-        selectedParticipantIds,
+    const ids = [...localSelectionRef.current];
+    setIsSaving(true);
+    const save = saveChainRef.current
+      .catch(() => null)
+      .then(async () => {
+        const response = await stagedFlowService.updateFaDecisions(stageId, ids);
+        if (!response.data) throw new Error("La API no confirmó la selección FA.");
+        faRef.current = response.data;
+        onFaChange(response.data);
+        if (!isClosingFaRef.current && localSelectionRef.current.join("|") === ids.join("|")) {
+          adoptSelection(selectedParticipantIds(response.data));
+        }
+        return response.data;
       });
-    },
-    [userId]
-  );
+    saveChainRef.current = save;
 
-  const syncNow = useCallback(async () => {
-    if (!userId) {
-      return { synced: 0, conflicts: 0, failed: 0, fa: null as FaState | null };
-    }
-    if (syncInFlightRef.current) {
-      // No perder la selección encolada mientras otra sincronización está terminando.
-      syncRequestedRef.current = true;
-      return { synced: 0, conflicts: 0, failed: 0, fa: null as FaState | null };
-    }
-
-    syncInFlightRef.current = true;
-    setIsSyncing(true);
-    let latestResult = {
-      synced: 0,
-      conflicts: 0,
-      failed: 0,
-      fa: null as FaState | null,
-    };
     try {
-      do {
-        syncRequestedRef.current = false;
-        const selectionVersionAtStart = selectionVersionRef.current;
-        latestResult = await syncFaStage(userId, stageId);
-        if (latestResult.fa) {
-          faRef.current = latestResult.fa;
-          onFaChange(latestResult.fa);
-          const confirmed = extractSelectedParticipantIds(latestResult.fa);
-          if (
-            !isClosingFaRef.current &&
-            selectionVersionRef.current === selectionVersionAtStart
-          ) {
-            adoptSelection(confirmed);
-          }
-          await cacheCurrentSnapshot(
-            latestResult.fa,
-            selectionVersionRef.current === selectionVersionAtStart
-              ? confirmed
-              : localSelectionRef.current
-          );
-        }
-        await refreshPendingState();
-
-        if (latestResult.conflicts > 0) {
-          onSyncNotice?.(
-            "Hay conflictos de sincronización en el FA. Revisa la selección antes de cerrar."
-          );
-        }
-      } while (syncRequestedRef.current);
-
-      return latestResult;
+      const saved = await save;
+      return { synced: 1, conflicts: 0, failed: 0, fa: saved };
+    } catch (error) {
+      const message =
+        error instanceof ApiError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : "No se pudo guardar la selección FA.";
+      onUpdateError?.(message);
+      throw error;
     } finally {
-      syncInFlightRef.current = false;
-      setIsSyncing(false);
+      setIsSaving(false);
     }
-  }, [adoptSelection, cacheCurrentSnapshot, onFaChange, onSyncNotice, refreshPendingState, stageId, userId]);
-
-  useEffect(() => {
-    if (connectivityState !== "ONLINE" || !userId || pendingCount === 0) return;
-    void syncNow();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo al recuperar ONLINE
-  }, [connectivityState]);
-
-  const rememberServerFa = useCallback(
-    async (nextFa: FaState) => {
-      const selectedParticipantIds = extractSelectedParticipantIds(nextFa);
-      await cacheCurrentSnapshot(nextFa, selectedParticipantIds);
-      await refreshPendingState();
-    },
-    [cacheCurrentSnapshot, refreshPendingState]
-  );
-
-  const loadFromOfflineCache = useCallback(
-    async (
-      overrideUserId?: string
-    ): Promise<{
-      fa: FaState;
-      selectedParticipantIds: string[];
-    } | null> => {
-      const effectiveUserId = overrideUserId ?? userId;
-      if (!effectiveUserId) return null;
-      const trusted = await getTrustedOfflineDevice();
-      if (!trusted || trusted.userId !== effectiveUserId) return null;
-
-      const snapshot = await readFaStageSnapshot(effectiveUserId, stageId);
-      if (!snapshot) return null;
-
-      adoptSelection(snapshot.selectedParticipantIds);
-      await refreshPendingState();
-      return snapshot;
-    },
-    [adoptSelection, refreshPendingState, stageId, userId]
-  );
+  }, [adoptSelection, onFaChange, onUpdateError, stageId, userId]);
 
   const toggleSelection = useCallback(
     (participantId: string) => {
@@ -221,109 +112,42 @@ export function useFaSelection({
         isClosingFaRef.current ||
         summaryStatus !== "JUDGING_STARTED" ||
         currentFa.form.status !== "STARTED"
-      ) {
-        return;
-      }
+      ) return;
 
       const current = localSelectionRef.current;
-      const isSelected = current.includes(participantId);
-      const next = isSelected
+      const next = current.includes(participantId)
         ? current.filter((id) => id !== participantId)
         : [...current, participantId];
-
       if (next.length > 10) return;
 
-      const version = selectionVersionRef.current + 1;
-      selectionVersionRef.current = version;
       adoptSelection(next);
-
-      void (async () => {
-        try {
-          const payload: FaSelectionMutationPayload = {
-            selectedParticipantIds: next,
-            selectedTrackPositions: currentFa.participants
-              .filter((participant) => next.includes(participant.id))
-              .map((participant) => participant.trackPosition)
-              .sort((left, right) => left - right),
-          };
-
-          await queueOfflineMutation({
-            deduplicationKey: `FA_FORM:${stageId}:${currentFa.form.id}`,
-            userId,
-            stageId,
-            aggregateType: "FA_FORM",
-            aggregateId: currentFa.form.id,
-            operationType: "UPDATE_FA_SELECTION",
-            baseRevision: currentFa.form.revision,
-            payload,
-          });
-          await cacheCurrentSnapshot(currentFa, next);
-          await refreshPendingState();
-
-          if (connectivityState === "ONLINE") {
-            if (syncDebounceTimerRef.current) {
-              clearTimeout(syncDebounceTimerRef.current);
-            }
-            syncDebounceTimerRef.current = setTimeout(() => {
-              syncDebounceTimerRef.current = null;
-              void syncNow();
-            }, FA_SYNC_DEBOUNCE_MS);
-          }
-        } catch (error) {
-          if (selectionVersionRef.current !== version) return;
-
-          const message =
-            error instanceof ApiError
-              ? error.message
-              : error instanceof Error
-                ? error.message
-                : "No se pudo guardar la selección FA.";
-          onUpdateError?.(message);
-        }
-      })();
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => {
+        saveTimerRef.current = null;
+        void saveSelection().catch(() => undefined);
+      }, SAVE_DEBOUNCE_MS);
     },
-    [
-      adoptSelection,
-      cacheCurrentSnapshot,
-      connectivityState,
-      onUpdateError,
-      refreshPendingState,
-      stageId,
-      summaryStatus,
-      syncNow,
-      userId,
-    ]
+    [adoptSelection, saveSelection, summaryStatus, userId]
   );
 
-  const beginClose = useCallback(() => {
-    isClosingFaRef.current = true;
-  }, []);
-
-  const endClose = useCallback(() => {
-    isClosingFaRef.current = false;
-  }, []);
-
   const selectedIds = useMemo(() => new Set(selectedIdsLocal), [selectedIdsLocal]);
-  const selectedCount = useMemo(() => {
-    if (!fa) return 0;
-    return fa.form.status === "STARTED" ? selectedIds.size : fa.form.selectedCount;
-  }, [fa, selectedIds]);
-
+  const selectedCount = fa?.form.status === "STARTED" ? selectedIds.size : fa?.form.selectedCount ?? 0;
   return {
     selectedIds,
     selectedIdsLocal,
     selectedCount,
     localSelectionRef,
-    pendingCount,
-    hasBlockingPending,
-    isSyncing,
+    pendingCount: 0,
+    hasBlockingPending: false,
+    isSyncing: isSaving,
     isClosingFaRef,
     toggleSelection,
-    syncNow,
-    loadFromOfflineCache,
-    rememberServerFa,
-    beginClose,
-    endClose,
-    refreshPendingState,
+    syncNow: saveSelection,
+    beginClose: useCallback(() => {
+      isClosingFaRef.current = true;
+    }, []),
+    endClose: useCallback(() => {
+      isClosingFaRef.current = false;
+    }, []),
   };
 }

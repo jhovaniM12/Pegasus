@@ -3,7 +3,6 @@ import Script from "next/script";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { NetworkStatusProvider } from "@/components/network-status";
-import { ServiceWorkerUpdateBanner } from "@/components/service-worker-update-banner";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ToastProvider } from "@/components/ui/toast";
@@ -63,7 +62,6 @@ export default function RootLayout({
           <TooltipProvider>
             <ToastProvider>
               <NetworkStatusProvider>
-                <ServiceWorkerUpdateBanner />
                 {children}
               </NetworkStatusProvider>
             </ToastProvider>

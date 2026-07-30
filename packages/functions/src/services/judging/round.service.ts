@@ -1213,6 +1213,11 @@ export async function consolidateRound(user: User, stageId: string): Promise<Sta
     if (!stage) {
       throw new NotFoundError("No se encontró la categoría de juzgamiento.");
     }
+    // La consulta bloqueada solo carga las columnas de fair_category_stages.
+    // Conserva las relaciones obtenidas antes del bloqueo para las notificaciones
+    // y para la representación que se devuelve al finalizar la transacción.
+    stage.fair = stageForAccess.fair;
+    stage.category = stageForAccess.category;
     const activeRound = await manager.getRepository(JudgingRound).findOne({
       where: { fairCategoryStageId: stage.id, status: "OPEN" },
       order: { createdAt: "DESC" },

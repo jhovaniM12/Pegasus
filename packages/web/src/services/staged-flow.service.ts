@@ -1,5 +1,4 @@
 import { ApiService } from "@/services/api.service";
-import type { OfflineMutationEnvelope } from "@/offline/mutation-types";
 import type {
   ApiResponse,
   FaState,
@@ -51,13 +50,7 @@ class StagedFlowService extends ApiService {
   async updateVeterinaryCheck(
     stageId: string,
     fairEntryId: string,
-    body:
-      | { status: VeterinaryCheckStatus; notes?: string | null; rejectionReasonId?: string | null }
-      | OfflineMutationEnvelope<{
-          status: VeterinaryCheckStatus;
-          notes?: string | null;
-          rejectionReasonId?: string | null;
-        }>
+    body: { status: VeterinaryCheckStatus; notes?: string | null; rejectionReasonId?: string | null }
   ): Promise<ApiResponse<VeterinaryCheck[]>> {
     return this.patch<ApiResponse<VeterinaryCheck[]>>(
       `/api/staff/fair-categories/${stageId}/veterinary-checks/${fairEntryId}`,
@@ -83,13 +76,9 @@ class StagedFlowService extends ApiService {
 
   async updateFaDecisions(
     stageId: string,
-    selectedParticipantIdsOrEnvelope:
-      | string[]
-      | OfflineMutationEnvelope<{ selectedParticipantIds: string[] }>
+    selectedParticipantIds: string[]
   ): Promise<ApiResponse<FaState>> {
-    const body = Array.isArray(selectedParticipantIdsOrEnvelope)
-      ? { selectedParticipantIds: selectedParticipantIdsOrEnvelope }
-      : selectedParticipantIdsOrEnvelope;
+    const body = { selectedParticipantIds };
     return this.put<ApiResponse<FaState>>(`/api/staff/fair-categories/${stageId}/fa/decisions`, body);
   }
 
@@ -150,19 +139,11 @@ class StagedFlowService extends ApiService {
 
   async updateRoundForm(
     stageId: string,
-    body:
-      | {
-          selectedParticipantIds?: string[];
-          positions?: Array<{ participantId: string; position: number }>;
-          desertedPositions?: number[];
-        }
-      | OfflineMutationEnvelope<{
-          roundId: string;
-          tieBlockIdentity: string;
-          selectedParticipantIds?: string[];
-          positions?: Array<{ participantId: string; position: number }>;
-          desertedPositions?: number[];
-        }>
+    body: {
+      selectedParticipantIds?: string[];
+      positions?: Array<{ participantId: string; position: number }>;
+      desertedPositions?: number[];
+    }
   ): Promise<ApiResponse<RoundState>> {
     return this.put<ApiResponse<RoundState>>(`/api/staff/fair-categories/${stageId}/rounds/form/entries`, body);
   }
@@ -170,17 +151,9 @@ class StagedFlowService extends ApiService {
   async updateRoundEntryReminders(
     stageId: string,
     participantId: string,
-    remindersOrEnvelope:
-      | Array<{ reminderId: string; effect: "SUMA" | "RESTA" }>
-      | OfflineMutationEnvelope<{
-          reminders: Array<{ reminderId: string; effect: "SUMA" | "RESTA" }>;
-          roundId: string;
-          tieBlockIdentity: string;
-        }>
+    reminders: Array<{ reminderId: string; effect: "SUMA" | "RESTA" }>
   ): Promise<ApiResponse<RoundState>> {
-    const body = Array.isArray(remindersOrEnvelope)
-      ? { reminders: remindersOrEnvelope }
-      : remindersOrEnvelope;
+    const body = { reminders };
     return this.put<ApiResponse<RoundState>>(
       `/api/staff/fair-categories/${stageId}/rounds/form/entries/${participantId}/reminders`,
       body
@@ -190,19 +163,9 @@ class StagedFlowService extends ApiService {
   async updateRoundEntryNote(
     stageId: string,
     participantId: string,
-    noteOrEnvelope:
-      | string
-      | null
-      | OfflineMutationEnvelope<{
-          note: string | null;
-          roundId: string;
-          tieBlockIdentity: string;
-        }>
+    note: string | null
   ): Promise<ApiResponse<RoundState>> {
-    const body =
-      noteOrEnvelope !== null && typeof noteOrEnvelope === "object" && "operationId" in noteOrEnvelope
-        ? noteOrEnvelope
-        : { note: noteOrEnvelope as string | null };
+    const body = { note };
     return this.put<ApiResponse<RoundState>>(
       `/api/staff/fair-categories/${stageId}/rounds/form/entries/${participantId}/note`,
       body

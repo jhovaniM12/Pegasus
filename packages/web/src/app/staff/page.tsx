@@ -16,8 +16,7 @@ import {
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { ConnectionIndicator, SyncIndicator } from "@/components/network-status";
-import { prepareStaffLogoutOffline } from "@/offline/retention";
+import { ConnectionIndicator } from "@/components/network-status";
 import { StageStatusBadge, stageStatusLabels } from "@/components/stage-status-badge";
 import { ConfirmActionDialog } from "@/components/confirm-action-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -622,16 +621,6 @@ export default function StaffPage() {
   );
 
   const logout = async () => {
-    if (currentUser?.id) {
-      const result = await prepareStaffLogoutOffline(currentUser.id);
-      if (result.blockedByPending) {
-        const proceed = window.confirm(
-          `Tienes ${result.pendingCount} cambio(s) offline pendientes en este dispositivo. ` +
-            "Se conservarán aislados para tu usuario. ¿Cerrar sesión de todos modos?"
-        );
-        if (!proceed) return;
-      }
-    }
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/login/staff");
     router.refresh();
@@ -677,7 +666,6 @@ export default function StaffPage() {
           <div className="hidden items-center gap-3 sm:flex">
             <PushNotificationPrompt />
             <ThemeToggle />
-            <SyncIndicator />
             <NotificationInbox />
             <ConnectionIndicator />
             <StaffUserMenu currentUser={menuUser} onLogout={logout} className="max-w-72" />
@@ -690,7 +678,6 @@ export default function StaffPage() {
           <PushNotificationPrompt className="flex-wrap" />
           <div className="flex items-center gap-3">
             <ThemeToggle />
-            <SyncIndicator className="shrink-0" />
             <NotificationInbox />
             <ConnectionIndicator className="shrink-0" />
             <StaffUserMenu currentUser={menuUser} onLogout={logout} className="w-full bg-card" />

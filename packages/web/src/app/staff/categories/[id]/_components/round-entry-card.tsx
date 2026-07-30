@@ -149,14 +149,6 @@ export function RoundEntryCard(props: RoundEntryCardProps) {
           >
             {participant.trackPosition}
           </span>
-          <span
-            className={cn(
-              "mt-2 w-full px-1 text-center text-xs font-semibold leading-snug break-words whitespace-normal",
-              disqualified ? "text-slate-400" : "text-slate-500"
-            )}
-          >
-            {participant.horseName || "Sin nombre"}
-          </span>
         </div>
 
         {/* Reminders row */}
@@ -325,18 +317,6 @@ export function RoundEntryCard(props: RoundEntryCardProps) {
           )}
         >
           {participant.trackPosition}
-        </span>
-        <span
-          className={cn(
-            "mt-2 w-full px-1 text-center text-xs font-semibold leading-snug break-words whitespace-normal",
-            disqualified
-              ? "text-slate-400"
-              : selected
-                ? "text-white/85"
-                : "text-slate-500"
-          )}
-        >
-          {participant.horseName || "Sin nombre"}
         </span>
         <span
           className={cn(
