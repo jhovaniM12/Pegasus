@@ -1,19 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { ApiError } from "@/services/api.service";
-import { stagedFlowService } from "@/services/staged-flow.service";
 import type { FaState, StagedCategory } from "@/types/staged-flow";
 
-const SAVE_DEBOUNCE_MS = 400;
-
 type UseFaSelectionParams = {
-  stageId: string;
   userId: string | null;
   fa: FaState | null;
   summaryStatus: StagedCategory["status"] | undefined;
-  onFaChange: (fa: FaState) => void;
-  onUpdateError?: (message?: string) => void;
-  onSyncNotice?: (message: string) => void;
 };
 
 function selectedParticipantIds(state: FaState): string[] {
@@ -22,21 +14,24 @@ function selectedParticipantIds(state: FaState): string[] {
     .map((participant) => participant.id);
 }
 
+/**
+ * Borrador de selección FA exclusivamente en memoria.
+ *
+ * Los clics no escriben en el servidor. La página entrega `localSelectionRef`
+ * al endpoint de cierre como fotografía definitiva. Una recarga crea un hook
+ * nuevo y vuelve a la selección confirmada por el backend.
+ */
 export function useFaSelection({
-  stageId,
   userId,
   fa,
   summaryStatus,
-  onFaChange,
-  onUpdateError,
 }: UseFaSelectionParams) {
   const [selectedIdsLocal, setSelectedIdsLocal] = useState<string[]>([]);
-  const [isSaving, setIsSaving] = useState(false);
   const localSelectionRef = useRef<string[]>([]);
   const faRef = useRef<FaState | null>(fa);
   const isClosingFaRef = useRef(false);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const saveChainRef = useRef<Promise<FaState | null>>(Promise.resolve(null));
+  const isDirtyRef = useRef(false);
+  const formKeyRef = useRef<string | null>(null);
 
   const adoptSelection = useCallback((ids: string[]) => {
     localSelectionRef.current = ids;
@@ -45,63 +40,37 @@ export function useFaSelection({
 
   useEffect(() => {
     faRef.current = fa;
-    if (fa && !isClosingFaRef.current) {
-      adoptSelection(selectedParticipantIds(fa));
-    } else if (!fa) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- limpia el estado al salir del formato FA
-      adoptSelection([]);
+    if (!fa) {
+      formKeyRef.current = null;
+      isDirtyRef.current = false;
       isClosingFaRef.current = false;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- limpia el borrador al salir de FA
+      adoptSelection([]);
+      return;
+    }
+
+    const formKey = `${fa.form.id}:${fa.form.status}`;
+    if (formKeyRef.current !== formKey) {
+      formKeyRef.current = formKey;
+      isDirtyRef.current = false;
+      adoptSelection(selectedParticipantIds(fa));
+      return;
+    }
+
+    if (isDirtyRef.current) {
+      // Una actualización externa puede descalificar un ejemplar mientras el juez
+      // conserva su borrador. Se retiran únicamente selecciones que dejaron de ser válidas.
+      const eligibleIds = new Set(
+        fa.participants
+          .filter((participant) => participant.status === "ELIGIBLE")
+          .map((participant) => participant.id)
+      );
+      const validSelection = localSelectionRef.current.filter((id) => eligibleIds.has(id));
+      if (validSelection.length !== localSelectionRef.current.length) {
+        adoptSelection(validSelection);
+      }
     }
   }, [adoptSelection, fa]);
-
-  useEffect(
-    () => () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    },
-    []
-  );
-
-  const saveSelection = useCallback(async () => {
-    if (!userId || !faRef.current) {
-      return { synced: 0, conflicts: 0, failed: 0, fa: null as FaState | null };
-    }
-    if (saveTimerRef.current) {
-      clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = null;
-    }
-
-    const ids = [...localSelectionRef.current];
-    setIsSaving(true);
-    const save = saveChainRef.current
-      .catch(() => null)
-      .then(async () => {
-        const response = await stagedFlowService.updateFaDecisions(stageId, ids);
-        if (!response.data) throw new Error("La API no confirmó la selección FA.");
-        faRef.current = response.data;
-        onFaChange(response.data);
-        if (!isClosingFaRef.current && localSelectionRef.current.join("|") === ids.join("|")) {
-          adoptSelection(selectedParticipantIds(response.data));
-        }
-        return response.data;
-      });
-    saveChainRef.current = save;
-
-    try {
-      const saved = await save;
-      return { synced: 1, conflicts: 0, failed: 0, fa: saved };
-    } catch (error) {
-      const message =
-        error instanceof ApiError
-          ? error.message
-          : error instanceof Error
-            ? error.message
-            : "No se pudo guardar la selección FA.";
-      onUpdateError?.(message);
-      throw error;
-    } finally {
-      setIsSaving(false);
-    }
-  }, [adoptSelection, onFaChange, onUpdateError, stageId, userId]);
 
   const toggleSelection = useCallback(
     (participantId: string) => {
@@ -120,18 +89,15 @@ export function useFaSelection({
         : [...current, participantId];
       if (next.length > 10) return;
 
+      isDirtyRef.current = true;
       adoptSelection(next);
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = setTimeout(() => {
-        saveTimerRef.current = null;
-        void saveSelection().catch(() => undefined);
-      }, SAVE_DEBOUNCE_MS);
     },
-    [adoptSelection, saveSelection, summaryStatus, userId]
+    [adoptSelection, summaryStatus, userId]
   );
 
   const selectedIds = useMemo(() => new Set(selectedIdsLocal), [selectedIdsLocal]);
   const selectedCount = fa?.form.status === "STARTED" ? selectedIds.size : fa?.form.selectedCount ?? 0;
+
   return {
     selectedIds,
     selectedIdsLocal,
@@ -139,10 +105,9 @@ export function useFaSelection({
     localSelectionRef,
     pendingCount: 0,
     hasBlockingPending: false,
-    isSyncing: isSaving,
+    isSyncing: false,
     isClosingFaRef,
     toggleSelection,
-    syncNow: saveSelection,
     beginClose: useCallback(() => {
       isClosingFaRef.current = true;
     }, []),

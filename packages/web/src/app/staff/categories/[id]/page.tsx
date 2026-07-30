@@ -328,14 +328,6 @@ export default function StaffCategoryPage() {
     },
   });
 
-  const handleFaChange = useCallback(
-    (nextFa: FaState) => {
-      setFa(nextFa);
-      setSummary(nextFa.stage);
-    },
-    []
-  );
-
   const {
     selectedIds,
     selectedCount: faSelectedCount,
@@ -343,29 +335,12 @@ export default function StaffCategoryPage() {
     hasBlockingPending: faHasBlockingPending,
     isSyncing: faIsSyncing,
     toggleSelection: toggleFaSelection,
-    syncNow: syncFaNow,
     beginClose: beginCloseFa,
     endClose: endCloseFa,
   } = useFaSelection({
-    stageId,
     userId: currentUser?.id ?? null,
     fa,
     summaryStatus: summary?.status,
-    onFaChange: handleFaChange,
-    onUpdateError: (message) => {
-      toast({
-        title: "No se pudo guardar la selección",
-        description: message ?? "Se mantuvo el borrador local. Intenta nuevamente.",
-        variant: "error",
-      });
-    },
-    onSyncNotice: (message) => {
-      toast({
-        title: "Conflicto de sincronización",
-        description: message,
-        variant: "error",
-      });
-    },
   });
 
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -1469,20 +1444,6 @@ export default function StaffCategoryPage() {
           beginCloseFa();
           setBusy(true);
           try {
-            const syncResult = await syncFaNow();
-            const stillBlocking =
-              syncResult.conflicts > 0 ||
-              syncResult.failed > 0;
-            if (stillBlocking) {
-              toast({
-                title: "Sincronización pendiente",
-                description:
-                  "No fue posible sincronizar la selección FA. Revisa la conexión e intenta nuevamente antes de cerrar.",
-                variant: "error",
-              });
-              return;
-            }
-
             const response = await stagedFlowService.closeFa(stageId, selectedParticipantIds);
             if (response.data) {
               setFa(response.data);
