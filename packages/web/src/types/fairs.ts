@@ -34,7 +34,6 @@ export type FairEntry = {
   riderDocumentNumber: string | null;
   receipt: string | null;
   participate: boolean;
-  fairSequence: number;
   isChild: boolean | null;
   category: {
     id: string;

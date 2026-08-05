@@ -27,11 +27,11 @@ export const FEDEQUINAS_HEADERS: Record<FedequinasFileKind, readonly string[]> =
     "INSCRITOS"
   ],
   FEH_PERSONAL_FERIA: [
-    "ID_PERSONAL_FERIA",
-    "ID_FERIA",
     "ID_PERSONAL",
-    "ID_ROL",
-    "NOMBRE"
+    "ID_FERIA",
+    "NOMBRE",
+    "NOMBRE_ROL",
+    "ID_ROL"
   ],
   FEH_INSCRIPCIONES_FERIA: [
     "ID_FERIA",

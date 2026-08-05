@@ -59,7 +59,7 @@ const busyImportStatuses = new Set<FedequinasImportStatus>([
   "APPLYING",
 ]);
 
-const fileKindLabels = new Map(
+const fileKindLabels = new Map<string, string>(
   IMPORT_STEP_DEFINITIONS.map((definition) => [definition.fileKind, definition.title])
 );
 

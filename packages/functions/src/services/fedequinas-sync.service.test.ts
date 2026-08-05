@@ -324,9 +324,9 @@ describe("sincronización Fedequinas preview/apply", () => {
 
     const staff = await buildFile("FEH_PERSONAL_FERIA", [
       {
-        ID_PERSONAL_FERIA: "PF-1",
         ID_FERIA: "FERIA-1",
         ID_PERSONAL: "CC-1",
+        NOMBRE_ROL: "Juez",
         ID_ROL: "ROL-1",
         NOMBRE: "Persona"
       }
@@ -339,9 +339,9 @@ describe("sincronización Fedequinas preview/apply", () => {
   it("aplica Personal atómicamente y revierte persona si falla el staff", async () => {
     const file = await buildFile("FEH_PERSONAL_FERIA", [
       {
-        ID_PERSONAL_FERIA: "PF-1",
         ID_FERIA: "FERIA-1",
         ID_PERSONAL: "CC.001-2",
+        NOMBRE_ROL: "Juez",
         ID_ROL: "ROL-1",
         NOMBRE: "Ana Pérez"
       }
@@ -500,6 +500,7 @@ describe("sincronización Fedequinas preview/apply", () => {
     const file = await buildFile("FEH_INSCRIPCIONES_FERIA_PADRES", rows);
     const memory = memoryDataSource([
       [Fair, [fairSeed]],
+      [Category, [{ id: "category-id", externalId: "CAT-1", sourceSystem: "FEDEQUINAS" }]],
       [
         FairEntry,
         [
@@ -530,7 +531,7 @@ describe("sincronización Fedequinas preview/apply", () => {
           }
         ]
       ],
-      [SyncBatch, [completedBatch("FEH_INSCRIPCIONES_FERIA")]]
+      [SyncBatch, [completedBatch("FEH_PERSONAL_FERIA")]]
     ]);
     const preview = await previewFedequinasImport(
       "FEH_INSCRIPCIONES_FERIA_PADRES",
@@ -538,10 +539,7 @@ describe("sincronización Fedequinas preview/apply", () => {
       memory.source
     );
 
-    expect(preview.counts).toMatchObject({ inserts: 1, updates: 1, skips: 1, errors: 0 });
-    expect(preview.issues).toContainEqual(
-      expect.objectContaining({ code: "ENTRY_NOT_FOUND", row: 4 })
-    );
+    expect(preview.counts).toMatchObject({ inserts: 2, updates: 1, skips: 0, errors: 0 });
 
     await applyFedequinasImport(
       "FEH_INSCRIPCIONES_FERIA_PADRES",
@@ -565,7 +563,7 @@ describe("sincronización Fedequinas preview/apply", () => {
     expect(memory.records(FairEntry).find((entry) => entry.id === "entry-2")?.horseId).toBe(
       createdHorse?.id
     );
-    expect(memory.records(Horse).some((horse) => horse.registrationNumber === "REG-3")).toBe(false);
+    expect(memory.records(Horse).some((horse) => horse.registrationNumber === "REG-3")).toBe(true);
   });
 
   it("segunda carga queda skipped y una actualización segura preserva datos operativos", async () => {
@@ -762,6 +760,8 @@ describe("sincronización Fedequinas preview/apply", () => {
     } as unknown as DataSource;
 
     const result = await getFedequinasFairStatus("999992078", source);
+
+    expect(result.steps).toHaveLength(3);
 
     expect(findOne).toHaveBeenCalledWith({
       where: {

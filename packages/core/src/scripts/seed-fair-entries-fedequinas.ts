@@ -113,7 +113,6 @@ function mapInscripcionRow(
     riderDocumentNumber: row.ID_MONTADOR.trim(),
     receipt: row.RECIBO.trim(),
     participate: parseFlag(row.PARTICIPA),
-    fairSequence: Number.parseInt(row.CONSECUTIVO_FERIA, 10),
     isChild: parseFlag(row.ES_HIJO)
   };
 }

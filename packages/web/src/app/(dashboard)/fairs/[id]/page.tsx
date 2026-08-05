@@ -489,7 +489,6 @@ export default function FairDetailPage({ params }: { params: Promise<{ id: strin
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Secuencia</TableHead>
                         <TableHead>Registro</TableHead>
                         <TableHead>Montador</TableHead>
                         <TableHead>Documento</TableHead>
@@ -500,15 +499,14 @@ export default function FairDetailPage({ params }: { params: Promise<{ id: strin
                     </TableHeader>
                     <TableBody>
                       {entriesLoading ? (
-                        <TableRowsSkeleton columns={7} />
+                        <TableRowsSkeleton columns={6} />
                       ) : entries.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={7} className="text-center">No hay inscritos</TableCell>
+                          <TableCell colSpan={6} className="text-center">No hay inscritos</TableCell>
                         </TableRow>
                       ) : (
                         entries.map((entry) => (
                           <TableRow key={entry.id}>
-                            <TableCell>{entry.fairSequence}</TableCell>
                             <TableCell className="font-medium">{entry.registrationNumber}</TableCell>
                             <TableCell>{entry.riderName || "—"}</TableCell>
                             <TableCell>{entry.riderDocumentNumber || "—"}</TableCell>

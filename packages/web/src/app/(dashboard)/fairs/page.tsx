@@ -20,7 +20,19 @@ import { Badge } from "@/components/ui/badge";
 
 const dateFormatter = new Intl.DateTimeFormat("es-CO", {
   dateStyle: "medium",
+  timeZone: "UTC",
 });
+
+function todayInBogota(): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Bogota",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${value.year}-${value.month}-${value.day}`;
+}
 
 function formatDateRange(start: string | null | undefined, end: string | null | undefined) {
   if (!start && !end) return "—";
@@ -42,7 +54,7 @@ function formatDateRange(start: string | null | undefined, end: string | null | 
 export default function FairsPage() {
   const { fairs, loading } = useFairs();
 
-  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const today = useMemo(todayInBogota, []);
 
   const pendingFairs = useMemo(() => {
     return fairs.filter((fair) => !fair.endDate || fair.endDate >= today);

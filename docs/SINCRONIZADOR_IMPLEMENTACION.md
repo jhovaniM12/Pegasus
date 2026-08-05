@@ -44,8 +44,7 @@ Los nombres lógicos y el orden son:
 
 1. `FEH_FERIAS.xlsx`
 2. `FEH_PERSONAL_FERIA.xlsx`
-3. `FEH_INSCRIPCIONES_FERIA.xlsx`
-4. `FEH_INSCRIPCIONES_FERIA_PADRES.xlsx`
+3. `FEH_INSCRIPCIONES_FERIA_PADRES.xlsx`
 
 El backend identifica el tipo mediante `:fileKind` y exige extensión `.xlsx`; no compara el nombre físico del archivo con el nombre lógico. Cada paso, salvo el primero, exige un lote `COMPLETED` del paso anterior para la misma feria.
 
@@ -67,24 +66,15 @@ Los encabezados no pueden faltar, sobrar, estar vacíos ni repetirse. El orden m
 
 #### 2. `FEH_PERSONAL_FERIA`
 
-1. `ID_PERSONAL_FERIA`
+1. `ID_PERSONAL`
 2. `ID_FERIA`
-3. `ID_PERSONAL`
-4. `ID_ROL`
-5. `NOMBRE`
+3. `NOMBRE`
+4. `NOMBRE_ROL`
+5. `ID_ROL`
 
-#### 3. `FEH_INSCRIPCIONES_FERIA`
+Pegasus genera el identificador de la asignación concatenando `ID_FERIA:ID_PERSONAL`.
 
-1. `ID_FERIA`
-2. `NUMERO_INSCRIPCION`
-3. `NUMERO_REGISTRO`
-4. `CODIGO_CATEGORIA`
-5. `POSICION_PISTA`
-6. `MONTADOR`
-7. `ID_MONTADOR`
-8. `CONSECUTIVO_FERIA`
-
-#### 4. `FEH_INSCRIPCIONES_FERIA_PADRES`
+#### 3. `FEH_INSCRIPCIONES_FERIA_PADRES`
 
 1. `ID_FERIA`
 2. `NUMERO_INSCRIPCION`
@@ -119,11 +109,12 @@ Los encabezados no pueden faltar, sobrar, estar vacíos ni repetirse. El orden m
 
 | XLSX | Destino | Regla |
 | --- | --- | --- |
-| `ID_PERSONAL_FERIA` | `fair_staff.external_id` | Obligatorio. |
+| `ID_FERIA` + `ID_PERSONAL` | `fair_staff.external_id` | Clave compuesta generada por Pegasus. |
 | `ID_FERIA` | `fair_staff.fair_id` | Obligatorio; resuelve la feria importada. |
 | `ID_PERSONAL` | `people.external_id` | Obligatorio; crea o reutiliza la persona. |
 | `ID_ROL` | `fair_staff.role_id` | Obligatorio; resuelve `roles.external_id`. |
 | `NOMBRE` | `people.name` | Obligatorio. |
+| `NOMBRE_ROL` | No se persiste | Descriptivo; la relación se resuelve con `ID_ROL`. |
 
 Los atributos de persona no incluidos por Fedequinas permanecen nulos o conservan su valor anterior; no se derivan apellidos, teléfonos, correo ni dirección desde `NOMBRE`.
 
@@ -138,7 +129,6 @@ Los atributos de persona no incluidos por Fedequinas permanecen nulos o conserva
 | `POSICION_PISTA` | `fair_entries.track_position` | Obligatorio; entero. |
 | `MONTADOR` | `fair_entries.rider_name` | Obligatorio. |
 | `ID_MONTADOR` | `fair_entries.rider_document_number` | Opcional. |
-| `CONSECUTIVO_FERIA` | `fair_entries.fair_sequence` | Obligatorio; entero. |
 
 La identidad externa y la restricción de negocio usan la clave compuesta:
 
@@ -146,21 +136,19 @@ La identidad externa y la restricción de negocio usan la clave compuesta:
 ID_FERIA:NUMERO_INSCRIPCION:NUMERO_REGISTRO
 ```
 
-No se puede usar solo `NUMERO_INSCRIPCION`: en el archivo de aceptación hay números repetidos. Como compatibilidad con datos previos, una inscripción también puede localizarse por `fair_id + fair_sequence` y entonces adopta la clave compuesta.
+No se usa `CONSECUTIVO_FERIA`. La identidad combina feria, inscripción y registro porque los números de inscripción pueden repetirse.
 
 Si el caballo todavía no existe, la inscripción se importa con `horse_id = null` y una advertencia. `ID_MONTADOR` vacío conserva el documento existente o queda `null` en una fila nueva. Los campos que este archivo no trae (`receipt` e `is_child`) se conservan al actualizar y quedan nulos al crear. `participate` se conserva al actualizar; para una inscripción nueva mantiene el valor operativo vigente del modelo, `true`.
 
-### Ejemplares y padres
+### Inscripciones, ejemplares y padres
 
-La fila se cruza con la inscripción por la misma clave compuesta. Si la inscripción existe:
+Cada fila crea o actualiza la inscripción y el ejemplar en una sola operación:
 
 - Se busca o crea el caballo por `NUMERO_REGISTRO`.
 - `NOMBRE_EJEMPLAR`, `PADRE` y `MADRE` enriquecen `name`, `father_name` y `mother_name`.
-- La inscripción queda enlazada mediante `horse_id`.
+- La inscripción queda enlazada mediante `horse_id` y recibe categoría, posición y montador.
 
-`NOMBRE_EJEMPLAR`, `PADRE` y `MADRE` son opcionales. Un vacío no se convierte en una cadena inventada ni borra un dato existente; al crear, el atributo sin valor queda nulo. `CODIGO_CATEGORIA`, `POSICION_PISTA`, `ID_MONTADOR` y `MONTADOR` forman parte del encabezado exacto de este archivo, pero no modifican la inscripción durante este paso.
-
-Si no existe la inscripción correspondiente, la fila produce `ENTRY_NOT_FOUND`, se omite y no crea un caballo huérfano.
+`NOMBRE_EJEMPLAR`, `PADRE` y `MADRE` son opcionales. Un vacío no borra un dato existente; al crear, el atributo sin valor queda nulo.
 
 ## Vista previa, checksum y token
 

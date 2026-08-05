@@ -103,8 +103,8 @@ export default function HorsesPage() {
                   <TableCell>{horse.colorCode || "—"}</TableCell>
                   <TableCell>{horse.microchipNumber || "—"}</TableCell>
                   <TableCell>{horse.associationCode || "—"}</TableCell>
-                  <TableCell>{horse.fatherRegistrationNumber || "—"}</TableCell>
-                  <TableCell>{horse.motherRegistrationNumber || "—"}</TableCell>
+                  <TableCell>{horse.fatherName || horse.fatherRegistrationNumber || "—"}</TableCell>
+                  <TableCell>{horse.motherName || horse.motherRegistrationNumber || "—"}</TableCell>
                 </TableRow>
               ))
             )}

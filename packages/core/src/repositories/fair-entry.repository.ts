@@ -85,7 +85,7 @@ export async function findFairEntriesByFairId(
   const [items, total] = await dataSource.getRepository(FairEntry).findAndCount({
     where: buildFairEntryWhere(fairId, params.search, params.categoryId),
     relations: { category: CATEGORY_RELATIONS },
-    order: { fairSequence: "ASC", trackPosition: "ASC" },
+    order: { trackPosition: "ASC", registrationNumber: "ASC" },
     skip: (params.page - 1) * params.limit,
     take: params.limit
   });

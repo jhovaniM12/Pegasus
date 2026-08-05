@@ -80,6 +80,7 @@ import {
   AddTieBreakDisqualificationOutcomes1717430400040,
   AllowTieBreakDisqualificationDesertedReason1717430400041,
   AddSuccessiveTieBreakTraceability1717430400043,
+  RemoveFairEntrySequence1717430400044,
   CreateSystemSettings1717430400042,
   CreateFairEntriesTable1717430400004,
   CreateFairResultsTable1717430400008,
@@ -206,7 +207,8 @@ export const AppDataSource = new DataSource({
     AddTieBreakDisqualificationOutcomes1717430400040,
     AllowTieBreakDisqualificationDesertedReason1717430400041,
     CreateSystemSettings1717430400042,
-    AddSuccessiveTieBreakTraceability1717430400043
+    AddSuccessiveTieBreakTraceability1717430400043,
+    RemoveFairEntrySequence1717430400044
   ]
 });
 

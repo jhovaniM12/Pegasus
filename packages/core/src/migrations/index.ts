@@ -42,3 +42,4 @@ export { AddTieBreakDisqualificationOutcomes1717430400040 } from "./171743040004
 export { AllowTieBreakDisqualificationDesertedReason1717430400041 } from "./1717430400041-AllowTieBreakDisqualificationDesertedReason.js";
 export { CreateSystemSettings1717430400042 } from "./1717430400042-CreateSystemSettings.js";
 export { AddSuccessiveTieBreakTraceability1717430400043 } from "./1717430400043-AddSuccessiveTieBreakTraceability.js";
+export { RemoveFairEntrySequence1717430400044 } from "./1717430400044-RemoveFairEntrySequence.js";

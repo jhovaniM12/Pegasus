@@ -12,7 +12,6 @@ export type FairEntryDto = SyncableDto & {
   riderDocumentNumber: string | null;
   receipt: string | null;
   participate: boolean;
-  fairSequence: number;
   isChild: boolean | null;
   category: CategoryDto;
 };
@@ -29,7 +28,6 @@ export function toFairEntryDto(entry: FairEntry): FairEntryDto {
     riderDocumentNumber: entry.riderDocumentNumber,
     receipt: entry.receipt,
     participate: entry.participate,
-    fairSequence: entry.fairSequence,
     isChild: entry.isChild,
     category: toCategoryDto(entry.category)
   };

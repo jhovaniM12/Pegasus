@@ -563,7 +563,6 @@ async function normalizeFairEntryRow(
     riderDocumentNumber: requireValue(row, "ID_MONTADOR"),
     receipt: requireValue(row, "RECIBO"),
     participate: parseBooleanFlag(requireValue(row, "PARTICIPA")),
-    fairSequence: parseInteger(requireValue(row, "CONSECUTIVO_FERIA"), "CONSECUTIVO_FERIA"),
     isChild: parseBooleanFlag(requireValue(row, "ES_HIJO"))
   };
 

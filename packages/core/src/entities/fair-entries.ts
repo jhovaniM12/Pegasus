@@ -11,7 +11,6 @@ import { Horse } from "./horse.entity.js";
   { unique: true }
 )
 @Index("IDX_fair_entries_fair_category", ["fairId", "categoryId"])
-@Index("IDX_fair_entries_fair_sequence", ["fairId", "fairSequence"])
 export class FairEntry extends SyncableEntity {
   @Column({ name: "fair_id", type: "uuid" })
   fairId!: string;
@@ -54,9 +53,6 @@ export class FairEntry extends SyncableEntity {
 
   @Column({ name: "participate", type: "boolean", default: true })
   participate!: boolean;
-
-  @Column({ name: "fair_sequence", type: "integer" })
-  fairSequence!: number;
 
   @Column({ name: "is_child", type: "boolean", nullable: true })
   isChild!: boolean | null;

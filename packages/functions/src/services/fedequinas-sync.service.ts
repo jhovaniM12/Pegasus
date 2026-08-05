@@ -19,7 +19,6 @@ import type { DataSource, EntityManager, ObjectLiteral, Repository } from "typeo
 import { BadRequestError } from "../lib/errors.js";
 import {
   excelSerialDateToIso,
-  FEDEQUINAS_FILE_KINDS,
   parseFedequinasXlsx,
   type FedequinasFileKind,
   type FedequinasRow,
@@ -80,7 +79,6 @@ type EntryPreviewCache = {
   categoriesByExternalId: Map<string, Category>;
   horsesByRegistration: Map<string, Horse>;
   entriesByExternalId: Map<string, FairEntry>;
-  entriesBySequence: Map<number, FairEntry>;
   mappingsByExternalId: Map<string, SyncMapping>;
   lockedCategoryIds: Set<string>;
 };
@@ -133,7 +131,7 @@ function mappingEntityName(fileKind: FedequinasFileKind): string {
     case "FEH_INSCRIPCIONES_FERIA":
       return "fair_entries";
     case "FEH_INSCRIPCIONES_FERIA_PADRES":
-      return "horses";
+      return "fair_entries";
   }
 }
 
@@ -146,7 +144,7 @@ function previousFileKind(fileKind: FedequinasFileKind): FedequinasFileKind | nu
     case "FEH_INSCRIPCIONES_FERIA":
       return "FEH_PERSONAL_FERIA";
     case "FEH_INSCRIPCIONES_FERIA_PADRES":
-      return "FEH_INSCRIPCIONES_FERIA";
+      return "FEH_PERSONAL_FERIA";
   }
 }
 
@@ -213,7 +211,7 @@ function rowExternalId(fileKind: FedequinasFileKind, row: FedequinasRow): string
     case "FEH_FERIAS":
       return required(row, "ID_FERIA");
     case "FEH_PERSONAL_FERIA":
-      return required(row, "ID_PERSONAL_FERIA");
+      return [required(row, "ID_FERIA"), required(row, "ID_PERSONAL")].join(":");
     case "FEH_INSCRIPCIONES_FERIA":
     case "FEH_INSCRIPCIONES_FERIA_PADRES":
       return [
@@ -240,7 +238,7 @@ function rowHashPayload(fileKind: FedequinasFileKind, row: FedequinasRow): Recor
       };
     case "FEH_PERSONAL_FERIA":
       return {
-        staffId: required(row, "ID_PERSONAL_FERIA"),
+        staffId: rowExternalId(fileKind, row),
         fairId: required(row, "ID_FERIA"),
         personId: required(row, "ID_PERSONAL"),
         roleId: required(row, "ID_ROL"),
@@ -264,7 +262,11 @@ function rowHashPayload(fileKind: FedequinasFileKind, row: FedequinasRow): Recor
         registration: required(row, "NUMERO_REGISTRO"),
         horseName: optional(row, "NOMBRE_EJEMPLAR"),
         fatherName: optional(row, "PADRE"),
-        motherName: optional(row, "MADRE")
+        motherName: optional(row, "MADRE"),
+        category: required(row, "CODIGO_CATEGORIA"),
+        position: integer(required(row, "POSICION_PISTA"), "POSICION_PISTA"),
+        riderDocument: optional(row, "ID_MONTADOR"),
+        riderName: required(row, "MONTADOR")
       };
   }
 }
@@ -318,9 +320,7 @@ async function targetExists(
       if (entryCache) {
         return Boolean(
           entryCache.entriesByExternalId.get(externalId) ??
-            entryCache.entriesBySequence.get(
-              integer(required(row, "CONSECUTIVO_FERIA"), "CONSECUTIVO_FERIA")
-            )
+            undefined
         );
       }
       const repository = manager.getRepository(FairEntry);
@@ -332,7 +332,7 @@ async function targetExists(
           (await repository.findOne({
             where: {
               fairId: fair.id,
-              fairSequence: integer(required(row, "CONSECUTIVO_FERIA"), "CONSECUTIVO_FERIA")
+              externalId
             }
           }))
       );
@@ -404,13 +404,11 @@ async function validateReferences(
         const candidate =
           exact ??
           (entryCache
-            ? entryCache.entriesBySequence.get(
-                integer(required(row, "CONSECUTIVO_FERIA"), "CONSECUTIVO_FERIA")
-              )
+            ? undefined
             : await repository.findOne({
                 where: {
                   fairId: fair.id,
-                  fairSequence: integer(required(row, "CONSECUTIVO_FERIA"), "CONSECUTIVO_FERIA")
+                  externalId
                 }
               }));
         if (candidate) {
@@ -473,21 +471,12 @@ async function validateReferences(
         issues.push(issue("error", rowNumber, "FAIR_NOT_FOUND", "La feria no existe."));
         break;
       }
-      const externalId = rowExternalId(fileKind, row);
-      const entry =
-        entryCache?.entriesByExternalId.get(externalId) ??
-        (entryCache
-          ? null
-          : await lookupByExternalId(manager.getRepository(FairEntry), externalId));
-      if (!entry) {
-        issues.push(
-          issue(
-            "warning",
-            rowNumber,
-            "ENTRY_NOT_FOUND",
-            "No existe la inscripción; la fila queda pendiente sin afectar las demás."
-          )
-        );
+      const category = entryCache?.categoriesByExternalId.get(required(row, "CODIGO_CATEGORIA"));
+      if (!category) {
+        issues.push(issue("error", rowNumber, "CATEGORY_NOT_FOUND", "La categoría no existe."));
+      }
+      if (!optional(row, "ID_MONTADOR")) {
+        issues.push(issue("warning", rowNumber, "RIDER_DOCUMENT_MISSING", "Falta el documento del montador."));
       }
       if (!optional(row, "NOMBRE_EJEMPLAR")) {
         issues.push(issue("warning", rowNumber, "HORSE_NAME_MISSING", "Falta el nombre del caballo."));
@@ -578,7 +567,6 @@ async function loadEntryPreviewCache(
     entriesByExternalId: new Map(
       entries.flatMap((entry) => (entry.externalId ? [[entry.externalId, entry] as const] : []))
     ),
-    entriesBySequence: new Map(entries.map((entry) => [entry.fairSequence, entry])),
     mappingsByExternalId: new Map(mappings.map((mapping) => [mapping.externalId, mapping])),
     lockedCategoryIds: new Set(
       stages.filter((stage) => isImportIdentityLocked(stage.status)).map((stage) => stage.categoryId)
@@ -636,10 +624,7 @@ async function analyze(
                 externalId
               }
             }));
-      const hasMissingParentEntry = rowIssues.some((entry) => entry.code === "ENTRY_NOT_FOUND");
-      const action: PreviewAction = hasMissingParentEntry
-        ? "skip"
-        : mapping?.rowHash === rowHash
+      const action: PreviewAction = mapping?.rowHash === rowHash
           ? "skip"
           : (mapping || (await targetExists(manager, fileKind, externalId, values, entryCache)))
             ? "update"
@@ -861,10 +846,8 @@ async function applyEntry(manager: EntityManager, row: PreparedRow, batch: SyncB
   const registrationNumber = required(values, "NUMERO_REGISTRO");
   const horse = await manager.getRepository(Horse).findOne({ where: { registrationNumber } });
   const position = integer(required(values, "POSICION_PISTA"), "POSICION_PISTA");
-  const fairSequence = integer(required(values, "CONSECUTIVO_FERIA"), "CONSECUTIVO_FERIA");
   const repository = manager.getRepository(FairEntry);
   let entry = await lookupByExternalId(repository, row.externalId);
-  entry ??= await repository.findOne({ where: { fairId: fair.id, fairSequence } });
   if (entry) {
     await assertEntryMutable(
       manager,
@@ -897,7 +880,6 @@ async function applyEntry(manager: EntityManager, row: PreparedRow, batch: SyncB
     riderDocumentNumber: optional(values, "ID_MONTADOR") ?? entry.riderDocumentNumber ?? null,
     receipt: entry.receipt ?? null,
     participate: entry.participate ?? true,
-    fairSequence,
     isChild: entry.isChild ?? null
   });
   entry = await repository.save(entry);
@@ -1010,19 +992,13 @@ async function applyEntriesBulk(
 
     const registrationNumber = required(values, "NUMERO_REGISTRO");
     const position = integer(required(values, "POSICION_PISTA"), "POSICION_PISTA");
-    const fairSequence = integer(
-      required(values, "CONSECUTIVO_FERIA"),
-      "CONSECUTIVO_FERIA"
-    );
     const next = {
       categoryId: category.id,
       trackPosition: position,
       inscriptionNumber: required(values, "NUMERO_INSCRIPCION"),
       registrationNumber
     };
-    let entry =
-      cache.entriesByExternalId.get(row.externalId) ??
-      cache.entriesBySequence.get(fairSequence);
+    let entry = cache.entriesByExternalId.get(row.externalId);
 
     if (entry) {
       assertEntryMutableFromCache(entry, next, cache.lockedCategoryIds);
@@ -1050,7 +1026,6 @@ async function applyEntriesBulk(
       riderDocumentNumber: optional(values, "ID_MONTADOR") ?? entry.riderDocumentNumber ?? null,
       receipt: entry.receipt ?? null,
       participate: entry.participate ?? true,
-      fairSequence,
       isChild: entry.isChild ?? null
     });
     entriesToSave.push(entry);
@@ -1167,19 +1142,45 @@ async function applyParentsBulk(
   const entriesToSave: FairEntry[] = [];
   for (const row of analysis.preparedRows) {
     if (row.action === "skip") continue;
-    const entry = cache.entriesByExternalId.get(row.externalId);
+    const category = cache.categoriesByExternalId.get(required(row.values, "CODIGO_CATEGORIA"));
     const horse = horsesByRegistration.get(required(row.values, "NUMERO_REGISTRO"));
-    if (!entry || !horse?.id) {
+    if (!category || !horse?.id) {
       throw new Error(`No se pudo enlazar el ejemplar de la inscripción ${row.externalId}.`);
     }
-    if (entry.horseId !== horse.id) {
-      entry.horseId = horse.id;
-      entriesToSave.push(entry);
+    const next = {
+      categoryId: category.id,
+      trackPosition: integer(required(row.values, "POSICION_PISTA"), "POSICION_PISTA"),
+      inscriptionNumber: required(row.values, "NUMERO_INSCRIPCION"),
+      registrationNumber: required(row.values, "NUMERO_REGISTRO")
+    };
+    let entry = cache.entriesByExternalId.get(row.externalId);
+    if (entry) {
+      assertEntryMutableFromCache(entry, next, cache.lockedCategoryIds);
+    } else {
+      entry = manager.getRepository(FairEntry).create({
+        externalId: row.externalId,
+        sourceSystem: SOURCE_SYSTEM,
+        fairId: cache.fair.id
+      });
     }
+    Object.assign(entry, {
+      ...next,
+      horseId: horse.id,
+      riderName: required(row.values, "MONTADOR"),
+      riderDocumentNumber: optional(row.values, "ID_MONTADOR") ?? entry.riderDocumentNumber ?? null,
+      receipt: entry.receipt ?? null,
+      participate: entry.participate ?? true,
+      isChild: entry.isChild ?? null
+    });
+    entriesToSave.push(entry);
   }
+  let savedEntries: FairEntry[] = [];
   if (entriesToSave.length) {
-    await manager.getRepository(FairEntry).save(entriesToSave, { chunk: 100 });
+    savedEntries = await manager.getRepository(FairEntry).save(entriesToSave, { chunk: 100 });
   }
+  const savedByExternalId = new Map(savedEntries.flatMap((entry) =>
+    entry.externalId ? [[entry.externalId, entry] as const] : []
+  ));
 
   const mappingRepository = manager.getRepository(SyncMapping);
   const mappingsToSave: SyncMapping[] = [];
@@ -1192,19 +1193,19 @@ async function applyParentsBulk(
       }
       continue;
     }
-    const horse = horsesByRegistration.get(required(row.values, "NUMERO_REGISTRO"));
-    if (!horse?.id) throw new Error(`No se persistió el ejemplar ${row.externalId}.`);
+    const entry = savedByExternalId.get(row.externalId);
+    if (!entry?.id) throw new Error(`No se persistió la inscripción ${row.externalId}.`);
     const nextMapping =
       mapping ??
       mappingRepository.create({
         sourceSystem: SOURCE_SYSTEM,
         entityName: mappingEntityName("FEH_INSCRIPCIONES_FERIA_PADRES"),
         externalId: row.externalId,
-        internalId: horse.id,
+        internalId: entry.id,
         rowHash: row.rowHash,
         lastSeenBatchId: batch.id
       });
-    nextMapping.internalId = horse.id;
+    nextMapping.internalId = entry.id;
     nextMapping.rowHash = row.rowHash;
     nextMapping.lastSeenBatchId = batch.id;
     mappingsToSave.push(nextMapping);
@@ -1348,7 +1349,13 @@ export async function getFedequinasFairStatus(
   const steps: FedequinasStepStatus[] = [];
   let previousCompleted = true;
 
-  for (const fileKind of FEDEQUINAS_FILE_KINDS) {
+  const activeFileKinds: FedequinasFileKind[] = [
+    "FEH_FERIAS",
+    "FEH_PERSONAL_FERIA",
+    "FEH_INSCRIPCIONES_FERIA_PADRES"
+  ];
+
+  for (const fileKind of activeFileKinds) {
     const batch = await source.getRepository(SyncBatch).findOne({
       where: { sourceSystem: SOURCE_SYSTEM, fileKind, fairExternalId },
       order: { startedAt: "DESC" }
