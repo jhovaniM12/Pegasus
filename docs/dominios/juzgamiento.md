@@ -10,4 +10,4 @@ El flujo de competencia se expone bajo `/api/staff/fair-categories/:id` en `pack
 - `staged-flow.schema.ts` y `staged-flow.routes.ts`: contratos y rutas.
 - `packages/core/src/domains/judging/`: entidades y persistencia.
 
-Antes de modificar una regla, localiza su fundamento en el [Reglamento FEDEQUINAS](../REGLAMENTO-FEDEQUINAS.md), revisa los tests vecinos y ejecuta `pnpm verify:regulatory`. Contrasta los análisis históricos de `docs/trash/` con el comportamiento actual.
+Antes de modificar una regla, localiza su fundamento en el [Reglamento FEDEQUINAS](../REGLAMENTO-FEDEQUINAS.md), revisa los tests vecinos y ejecuta `pnpm verify:regulatory`.

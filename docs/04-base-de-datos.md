@@ -21,4 +21,4 @@ Revisa el archivo generado antes de aplicarlo. Al crear una migración, expórta
 
 `pnpm db:seed` ejecuta solo la semilla de roles. Los demás comandos `db:seed:*` cargan conjuntos concretos de datos. `pnpm db:seed:root` crea la cuenta inicial con `ROOT_EMAIL` y `ROOT_PASSWORD`; usa credenciales exclusivas del entorno de desarrollo.
 
-Para entender relaciones exactas, consulta entidades y migraciones. Los modelos en `docs/trash/` son antecedentes históricos.
+Para entender relaciones exactas, consulta entidades y migraciones.

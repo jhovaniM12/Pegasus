@@ -12,4 +12,4 @@
 
 Para hacer un cambio, ubica primero el dominio en `packages/functions/src/domains` y `packages/core/src/domains`. Revisa rutas, esquemas, servicios y pruebas cercanas. Si cambia el esquema persistido, crea una migración y regístrala en el `data-source.ts`. Ajusta la web y actualiza el documento del dominio cuando cambie una regla o contrato observable.
 
-Las pruebas están junto al código (`*.test.ts`). El flujo reglamentario de CI está en `.github/workflows/regulatory-gate.yml`. Contrasta cualquier documento de `docs/trash/` con el código actual.
+Las pruebas están junto al código (`*.test.ts`). El flujo reglamentario de CI está en `.github/workflows/regulatory-gate.yml`.

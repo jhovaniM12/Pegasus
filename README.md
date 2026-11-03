@@ -22,5 +22,3 @@ Aplicación para administrar ferias equinas y su juzgamiento. Monorepo `pnpm` co
 - [Sincronización](docs/dominios/sincronizacion.md)
 - [Soporte para operaciones sin conexión](docs/dominios/offline.md)
 - [Reglamento FEDEQUINAS](docs/REGLAMENTO-FEDEQUINAS.md)
-
-`docs/trash/` contiene documentos históricos pendientes de revisión. No es una especificación vigente.
