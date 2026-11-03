@@ -5,13 +5,24 @@ export class AddCategoryAgeCheck1717430400005 implements MigrationInterface {
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
-      ALTER TABLE "categories"
-      ADD CONSTRAINT "chk_category_age"
-      CHECK (min_age_months <= max_age_months)
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM pg_constraint
+          WHERE conname = 'chk_category_age'
+            AND conrelid = 'public.categories'::regclass
+        ) THEN
+          ALTER TABLE "categories"
+            ADD CONSTRAINT "chk_category_age"
+            CHECK (min_age_months <= max_age_months);
+        END IF;
+      END
+      $$;
     `);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`ALTER TABLE "categories" DROP CONSTRAINT "chk_category_age"`);
+    await queryRunner.query(`ALTER TABLE "categories" DROP CONSTRAINT IF EXISTS "chk_category_age"`);
   }
 }

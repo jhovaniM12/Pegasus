@@ -140,7 +140,7 @@ export default function SettingsPage() {
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl font-bold tracking-tight">Configuración</h1>
         <p className="text-muted-foreground">
-          Administra los parámetros del sistema, roles y usuarios.
+          Administra los parámetros del sistema.
         </p>
       </div>
 
@@ -148,8 +148,6 @@ export default function SettingsPage() {
         <TabsList>
           <TabsTrigger value="distinctives">Distintivos</TabsTrigger>
           <TabsTrigger value="system">Sistema</TabsTrigger>
-          <TabsTrigger value="users">Usuarios</TabsTrigger>
-          <TabsTrigger value="roles">Roles</TabsTrigger>
         </TabsList>
         <TabsContent value="distinctives" className="mt-4">
           <Card>
@@ -278,28 +276,6 @@ export default function SettingsPage() {
                 </div>
               )}
               {error ? <p className="mt-4 text-sm font-medium text-red-600">{error}</p> : null}
-            </CardContent>
-          </Card>
-        </TabsContent>
-        <TabsContent value="users" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Usuarios del Sistema</CardTitle>
-              <CardDescription>Gestión de accesos y cuentas.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">Módulo en desarrollo...</p>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        <TabsContent value="roles" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Roles y Permisos</CardTitle>
-              <CardDescription>Definición de capacidades por rol.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">Módulo en desarrollo...</p>
             </CardContent>
           </Card>
         </TabsContent>

@@ -1,4 +1,4 @@
-import { MAX_AWARD_POSITIONS } from "../entities/judging-rounds.entity.js";
+import { MAX_AWARD_POSITIONS } from "../domains/judging/judging-rounds.entity.js";
 
 export type TieBreakReason = "SUM_EQUALITY" | "FIFTH_PLACE_EXCEPTION_5E";
 

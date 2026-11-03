@@ -178,7 +178,7 @@ export class CreateInitialSchema1717430400000 implements MigrationInterface {
     await queryRunner.query(`ALTER TABLE "categories" DROP CONSTRAINT "FK_categories_equine_type_id"`);
     await queryRunner.query(`ALTER TABLE "categories" DROP CONSTRAINT "FK_categories_gait_id"`);
     await queryRunner.query(`ALTER TABLE "categories" DROP CONSTRAINT "FK_categories_sex_id"`);
-    await queryRunner.query(`ALTER TABLE "categories" DROP CONSTRAINT "chk_category_age"`);
+    await queryRunner.query(`ALTER TABLE "categories" DROP CONSTRAINT IF EXISTS "chk_category_age"`);
     await queryRunner.query(`DROP TABLE "fairs"`);
     await queryRunner.query(`DROP TABLE "people"`);
     await queryRunner.query(`DROP TABLE "categories"`);

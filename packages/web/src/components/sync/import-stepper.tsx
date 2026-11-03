@@ -25,13 +25,7 @@ export const IMPORT_STEP_DEFINITIONS = [
     fileKind: "FEH_PERSONAL_FERIA",
     title: "Personal",
     description: "Vincula personas y roles operativos a la feria activa.",
-    expectedHeaders: [
-      "ID_PERSONAL",
-      "ID_FERIA",
-      "NOMBRE",
-      "NOMBRE_ROL",
-      "ID_ROL",
-    ],
+    expectedHeaders: ["ID_PERSONAL", "ID_FERIA", "NOMBRE", "ID_ROL"],
   },
   {
     fileKind: "FEH_INSCRIPCIONES_FERIA_PADRES",

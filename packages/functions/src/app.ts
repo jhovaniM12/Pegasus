@@ -1,21 +1,21 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { databaseMiddleware } from "./middlewares/database.middleware.js";
-import { errorHandler } from "./middlewares/error-handler.middleware.js";
-import { requireRootSession, requireStaffSession } from "./middlewares/auth.middleware.js";
-import { awardDistinctivesRoutes } from "./routes/award-distinctives.routes.js";
-import { authRoutes } from "./routes/auth.routes.js";
-import { categoriesRoutes } from "./routes/categories.routes.js";
-import { dashboardRoutes } from "./routes/dashboard.routes.js";
-import { fairsRoutes } from "./routes/fairs.routes.js";
-import { healthRoutes } from "./routes/health.routes.js";
-import { horsesRoutes } from "./routes/horses.routes.js";
-import { judgingRemindersRoutes } from "./routes/judging-reminders.routes.js";
-import { peopleRoutes } from "./routes/people.routes.js";
-import { staffRoutes } from "./routes/staff.routes.js";
-import { stagedFlowRoutes } from "./routes/staged-flow.routes.js";
-import { syncRoutes } from "./routes/sync.routes.js";
-import { systemSettingsRoutes } from "./routes/system-settings.routes.js";
+import { databaseMiddleware } from "./http/middlewares/database.middleware.js";
+import { errorHandler } from "./http/middlewares/error-handler.middleware.js";
+import { requireRootSession, requireStaffSession } from "./http/middlewares/auth.middleware.js";
+import { awardDistinctivesRoutes } from "./domains/judging/award-distinctives.routes.js";
+import { authRoutes } from "./domains/auth/auth.routes.js";
+import { categoriesRoutes } from "./domains/categories/categories.routes.js";
+import { dashboardRoutes } from "./domains/dashboard/dashboard.routes.js";
+import { fairsRoutes } from "./domains/fairs/fairs.routes.js";
+import { healthRoutes } from "./domains/health/health.routes.js";
+import { horsesRoutes } from "./domains/horses/horses.routes.js";
+import { judgingRemindersRoutes } from "./domains/judging/judging-reminders.routes.js";
+import { peopleRoutes } from "./domains/people/people.routes.js";
+import { staffRoutes } from "./domains/staff/staff.routes.js";
+import { stagedFlowRoutes } from "./domains/judging/staged-flow.routes.js";
+import { syncRoutes } from "./domains/sync/sync.routes.js";
+import { systemSettingsRoutes } from "./domains/system/system-settings.routes.js";
 
 export const app = new Hono().basePath("/api");
 

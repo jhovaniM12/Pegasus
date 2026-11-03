@@ -1,0 +1,26 @@
+import type { Context } from "hono";
+import { success } from "../../http/lib/http.js";
+import { getSessionFromCookie } from "../../http/lib/session.js";
+import { uuidParamSchema } from "../../shared/common.schema.js";
+import { updateAwardDistinctiveSchema } from "./award-distinctives.schema.js";
+import { getActiveRootUser } from "../auth/auth.service.js";
+import {
+  listAwardDistinctives,
+  updateAwardDistinctive
+} from "./award-distinctives.service.js";
+
+export async function listAwardDistinctivesController(c: Context) {
+  // Lectura para cualquier staff autenticado (juez, DT, veterinario, ROOT).
+  // El middleware requireStaffSession ya validó la sesión en /staff/*.
+  const distinctives = await listAwardDistinctives();
+  return c.json(success(distinctives));
+}
+
+export async function updateAwardDistinctiveController(c: Context) {
+  const session = getSessionFromCookie(c);
+  await getActiveRootUser(session.userId);
+  const { id } = uuidParamSchema.parse(c.req.param());
+  const payload = updateAwardDistinctiveSchema.parse(await c.req.json());
+  const row = await updateAwardDistinctive(id, payload);
+  return c.json(success(row));
+}
